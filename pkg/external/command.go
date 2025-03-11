@@ -9,7 +9,7 @@ import (
 
 // Command define command
 type Command struct {
-	run RunCommandFunc
+	runner RunInterface
 
 	cmdName string
 	args    []string
@@ -31,11 +31,11 @@ func (cmd *Command) AppendArgs(args ...any) {
 }
 
 // Execute execute the command
-func (cmd *Command) Execute(ctx context.Context) (out *bytes.Buffer, err RunError) {
+func (cmd *Command) Execute(ctx context.Context) (out *bytes.Buffer, err error) {
 	if cmd.cmdName == "" {
-		return nil, NewRunError(-1, "No command")
+		return nil, fmt.Errorf("No command")
 	}
-	return cmd.run(ctx, cmd.cmdName, cmd.args...)
+	return cmd.runner.Run(ctx, cmd.cmdName, cmd.args...)
 }
 
 func (cmd *Command) String() string {
