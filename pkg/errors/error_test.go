@@ -50,6 +50,7 @@ func (s *baseErrorSuite) TestAnnotateNormalError() {
 	r.Equal(err1, Cause(err3))
 }
 
+//nolint:dupl
 func (s *baseErrorSuite) TestStackTrace() {
 	r := s.R()
 
@@ -140,6 +141,7 @@ func (s *customErrorSuite) Test() {
 	r.Nil(err.(Underlying).Underlie())
 }
 
+//nolint:dupl
 func (s *customErrorSuite) TestStackTrace() {
 	r := s.R()
 
@@ -155,15 +157,16 @@ func (s *customErrorSuite) TestStackTrace() {
 	r.Equal(err1, Cause(err4))
 
 	// StackTrace
-	err1Line := err1.(*TestError).frame.line
-	r.NotEmpty(err1Line)
-	err2Line := err1Line + 1
-	err3Line := err1Line + 2
-	err4Line := err1Line + 3
+	errLine := err1.(*TestError).frame.line
+	r.NotEmpty(errLine)
+	err2Line := errLine + 1
+	err3Line := errLine + 2
+	err4Line := errLine + 3
 	result := StackTrace(err4)
 	lines := strings.Split(result, "\n")
 	r.Len(lines, 4)
-	r.Equal(fmt.Sprintf("%s:%d:(*customErrorSuite).TestStackTrace: [TestError] test message field", thisFile, err1Line), lines[0])
+	r.Equal(fmt.Sprintf("%s:%d:(*customErrorSuite).TestStackTrace: [TestError] test message field",
+		thisFile, errLine), lines[0])
 	r.Equal(fmt.Sprintf("%s:%d:(*customErrorSuite).TestStackTrace: ", thisFile, err2Line), lines[1])
 	r.Equal(fmt.Sprintf("%s:%d:(*customErrorSuite).TestStackTrace: err3", thisFile, err3Line), lines[2])
 	r.Equal(fmt.Sprintf("%s:%d:(*customErrorSuite).TestStackTrace: err4", thisFile, err4Line), lines[3])

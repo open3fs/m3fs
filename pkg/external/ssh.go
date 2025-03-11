@@ -1,8 +1,14 @@
 package external
 
+import (
+	"context"
+
+	"github.com/open3fs/m3fs/pkg/errors"
+)
+
 // SSHInterface provides interface about ssh.
 type SSHInterface interface {
-	ExecCommand(cmd string) (string, error)
+	ExecCommand(context.Context, string, string) (string, error)
 }
 
 type sshExternal struct {
@@ -14,9 +20,12 @@ func (se *sshExternal) init(em *Manager) {
 	em.SSH = se
 }
 
-func (se *sshExternal) ExecCommand(cmd string) (string, error) {
-	// TODO: implement ssh command execution
-	return "", nil
+func (se *sshExternal) ExecCommand(ctx context.Context, host, cmd string) (string, error) {
+	out, err := se.run(ctx, "ssh", host, cmd)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return out.String(), nil
 }
 
 func init() {

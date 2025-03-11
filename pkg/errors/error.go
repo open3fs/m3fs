@@ -56,8 +56,6 @@ func (f *frame) caller(callDepth int) {
 
 // Err is an error that has a message, a stack
 type Err struct {
-	error
-
 	// underlying is the error under current error in error stack
 	underlying error
 
@@ -90,12 +88,18 @@ func (err *Err) Format(f fmt.State, verb rune) {
 	switch verb {
 	case 'v':
 		if f.Flag('+') {
-			fmt.Fprint(f, err.Stack())
+			_, err := fmt.Fprint(f, err.Stack())
+			if err != nil {
+				return
+			}
 			return
 		}
 		fallthrough
 	default:
-		fmt.Fprint(f, err.Error())
+		_, err := fmt.Fprint(f, err.Error())
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -181,7 +185,7 @@ func Trace(err error) error {
 	return newErr
 }
 
-// Cause retuns the innermost error in error stack.
+// Cause returns the innermost error in error stack.
 // Cause returns the top error with error code set in error stack.
 func Cause(err error) error {
 	for {

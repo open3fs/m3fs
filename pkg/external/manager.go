@@ -37,7 +37,7 @@ func (eb *externalBase) runWithAny(ctx context.Context, cmdName string, args ...
 func (eb *externalBase) run(ctx context.Context, cmdName string, args ...string) (
 	*bytes.Buffer, error) {
 
-	var anyArgs []any
+	anyArgs := []any{}
 	for _, arg := range args {
 		anyArgs = append(anyArgs, arg)
 	}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 )
 
 // Command define command
@@ -14,7 +13,6 @@ type Command struct {
 
 	cmdName string
 	args    []string
-	timeout time.Duration
 }
 
 // Command gets the command

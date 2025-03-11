@@ -9,6 +9,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // Split splits the camelcase word and returns a list of words. It also
@@ -121,9 +124,10 @@ func CamelToSnake(camel string) string {
 
 // SnakeToCamel cast snake case to camel case
 func SnakeToCamel(snake string) string {
+	caser := cases.Title(language.English)
 	return strings.Join(
 		strings.Split(
-			strings.Title(
+			caser.String(
 				strings.Join(
 					strings.Split(snake, "_"),
 					" "),

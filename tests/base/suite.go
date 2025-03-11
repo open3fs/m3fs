@@ -9,7 +9,6 @@ import (
 
 	"github.com/bitly/go-simplejson"
 	guuid "github.com/google/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v3"
@@ -67,7 +66,7 @@ func (s *Suite) R() *require.Assertions {
 // NoError require no error
 func (s *Suite) NoError(err error, args ...any) {
 	if err != nil {
-		err = fmt.Errorf(errors.StackTrace(err))
+		err = fmt.Errorf("%s", errors.StackTrace(err))
 	}
 	s.R().NoError(err, args...)
 }
@@ -219,36 +218,6 @@ func (s *Suite) NewPciAddress() string {
 		value>>4&0xff,
 		value&0xf,
 	)
-}
-
-// AnythingOfType return an AnythingOfTypeArgument used in mock
-func (s *Suite) AnythingOfType(t string) mock.AnythingOfTypeArgument {
-	return mock.AnythingOfType(t)
-}
-
-// AnyString return an interchangeable string used in mock
-func (s *Suite) AnyString() mock.AnythingOfTypeArgument {
-	return s.AnythingOfType("string")
-}
-
-// AnyID return an interchangeable int64 used in mock
-func (s *Suite) AnyID() mock.AnythingOfTypeArgument {
-	return s.AnyInt64()
-}
-
-// AnyInt64 return an interchangeable int64 used in mock
-func (s *Suite) AnyInt64() mock.AnythingOfTypeArgument {
-	return s.AnythingOfType("int64")
-}
-
-// AnyInt64s return an interchangeable []int64 used in mock
-func (s *Suite) AnyInt64s() mock.AnythingOfTypeArgument {
-	return s.AnythingOfType("[]int64")
-}
-
-// AnyFileMode return an interchangeable int64 used in mock
-func (s *Suite) AnyFileMode() mock.AnythingOfTypeArgument {
-	return s.AnythingOfType("FileMode")
 }
 
 // JsonToString convert json to string

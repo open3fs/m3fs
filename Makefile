@@ -56,13 +56,16 @@ test:
 	go test -timeout 1h `go list ./...`
 
 .PHONY: validate
-validate: checkfmt lint
+validate: 
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.6
+	@echo "Lint code with golangci-lint"
+	PATH=$(shell go env GOPATH)/bin:$(PATH) golangci-lint run
 
 .PHONY: lint
 lint:
 	go install github.com/mgechev/revive@v1.7.0
 	@echo "Lint code with revive"
-	PATH=$(shell go env GOPATH)/bin:$(PATH) revive -config revive.toml -exclude ./.../*.pb.go --formatter default ./...
+	PATH=$(shell go env GOPATH)/bin:$(PATH) revive -config revive.toml --formatter default ./...
 
 .PHONY: checkfmt
 # Use lazy assignment until called by SET_GOFILES to fetch file list.

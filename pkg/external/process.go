@@ -43,7 +43,7 @@ func realRun(ctx context.Context, command string, args ...string) (*bytes.Buffer
 
 			if msg, ok := err.(*exec.ExitError); ok {
 				return &runErrorImpl{
-					code: int(msg.Sys().(syscall.WaitStatus).ExitStatus()),
+					code: msg.Sys().(syscall.WaitStatus).ExitStatus(),
 					msg:  fmt.Sprintf("%s\n%s", err, errOut),
 				}
 			}
@@ -94,7 +94,7 @@ func runCtx(ctx context.Context, cmd *exec.Cmd) (err error) {
 
 	select {
 	case <-ctx.Done():
-		d := time.Now().Sub(startTime)
+		d := time.Since(startTime)
 		if err = cmd.Process.Kill(); err != nil {
 			return err
 		}
