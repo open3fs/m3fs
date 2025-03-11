@@ -30,11 +30,13 @@ func (de *dockerExternal) GetContainer(name string) string {
 
 // RunArgs defines args for docker run command.
 type RunArgs struct {
-	Image   string
-	Name    *string
-	Detach  *bool
-	Publish []*PublishArgs
-	Volumes []*VolumeArgs
+	Image       string
+	HostNetwork bool
+	Name        *string
+	Detach      *bool
+	Publish     []*PublishArgs
+	Volumes     []*VolumeArgs
+	Envs        map[string]string
 }
 
 // PublishArgs defines args for publishing a container port.
@@ -58,6 +60,12 @@ func (de *dockerExternal) Run(ctx context.Context, args *RunArgs) (out *bytes.Bu
 	}
 	if args.Detach != nil && *args.Detach {
 		params = append(params, "--detach")
+	}
+	if args.HostNetwork {
+		params = append(params, "--network", "host")
+	}
+	for key, val := range args.Envs {
+		params = append(params, "-e", fmt.Sprintf("%s=%s", key, val))
 	}
 	for _, publishArg := range args.Publish {
 		publishInfo := fmt.Sprintf("%d:%d", publishArg.HostPort, publishArg.ContainerPort)

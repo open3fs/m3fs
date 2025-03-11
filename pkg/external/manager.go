@@ -7,6 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 )
 
@@ -66,6 +67,7 @@ type Manager struct {
 	Docker DockerInterface
 	Disk   DiskInterface
 	SSH    SSHInterface
+	OS     OSInterface
 }
 
 // NewManagerFunc type of new manager func.
@@ -80,4 +82,26 @@ func NewManager(runner RunInterface) (em *Manager) {
 		newExternal().init(em)
 	}
 	return em
+}
+
+var remoteManagerCache sync.Map
+
+// NewRemoteRunnerManager create a new remote runner manager
+func NewRemoteRunnerManager(node *config.Node) (*Manager, error) {
+	mgr, ok := remoteManagerCache.Load(node)
+	if ok {
+		return mgr.(*Manager), nil
+	}
+	runner, err := NewRemoteRunner(&RemoteRunnerCfg{
+		Username:   node.Username,
+		Password:   node.Password,
+		TargetHost: node.Host,
+		TargetPort: node.Port,
+		// TODO: add timeout config
+	})
+	if err != nil {
+		return nil, errors.Annotatef(err, "create remote runner for node [%s]", node.Name)
+	}
+
+	return NewManager(runner), nil
 }

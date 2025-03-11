@@ -23,6 +23,10 @@ func (s *dockerRunSuite) Test() {
 		Image:  "clickhouse/clickhouse-server:latest",
 		Name:   &containerName,
 		Detach: &detach,
+		Envs: map[string]string{
+			"A": "B",
+		},
+		HostNetwork: true,
 		Publish: []*external.PublishArgs{
 			{
 				HostAddress:   &hostAddress,
@@ -38,7 +42,7 @@ func (s *dockerRunSuite) Test() {
 			},
 		},
 	}
-	mockCmd := "docker run --name 3fs-clickhouse --detach -p 127.0.0.1:9000:9000/tcp " +
+	mockCmd := "docker run --name 3fs-clickhouse --detach --network host -e A=B -p 127.0.0.1:9000:9000/tcp " +
 		"--volume /path/to/data:/clickhouse/data clickhouse/clickhouse-server:latest"
 	s.mc.Mock(mockCmd, "", nil)
 	_, err := s.em.Docker.Run(s.Ctx(), args)

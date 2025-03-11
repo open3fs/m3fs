@@ -1,12 +1,14 @@
 package config
 
+import "time"
+
 // NetworkType is the type of network definition
 type NetworkType string
 
 // defines network types
 const (
-	NetworkTypeRoce NetworkType = "RoCE"
-	NetworkTypeRXE  NetworkType = "rxe"
+	NetworkTypeRDMA NetworkType = "RDMA"
+	NetworkTypeRXE  NetworkType = "RXE"
 )
 
 // DiskType is the type of disk definition
@@ -21,16 +23,19 @@ const (
 // Node is the node config definition
 type Node struct {
 	Name          string
-	Address       string
+	Host          string
+	Port          int
 	Username      string
-	Password      string
-	RDMAAddresses []string `yaml:"rdmaAddresses"`
+	Password      *string  `yaml:",omitempty"`
+	RDMAAddresses []string `yaml:"rdmaAddresses,omitempty"`
 }
 
 // Fdb is the fdb config definition
 type Fdb struct {
-	Nodes   []string
-	DataDir string
+	Nodes              []string
+	Port               int
+	DataDir            string
+	WaitClusterTimeout time.Duration
 }
 
 // Clickhouse is the clickhouse config definition
@@ -77,6 +82,7 @@ type Registry struct {
 
 // Config is the 3fs cluster config definition
 type Config struct {
+	Name        string
 	NetworkType NetworkType
 	Nodes       []Node
 	Services    Services

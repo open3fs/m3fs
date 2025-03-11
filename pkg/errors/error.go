@@ -31,7 +31,6 @@ func (f *frame) valid() bool {
 }
 
 func (f *frame) cleanFuncName(callName string) string {
-	fmt.Println(callName, 1111)
 	if i := strings.IndexByte(callName, '.'); i != -1 {
 		callName = callName[i+1:]
 		if i := strings.IndexByte(callName, '.'); i != -1 {
@@ -41,7 +40,6 @@ func (f *frame) cleanFuncName(callName string) string {
 			callName = callName[i+1:]
 		}
 	}
-	fmt.Println(callName, 2222)
 	return callName
 }
 
