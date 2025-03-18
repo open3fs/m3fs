@@ -30,9 +30,10 @@ var artifactCmd = &cli.Command{
 	Usage:   "Manage 3fs artifact",
 	Subcommands: []*cli.Command{
 		{
-			Name:   "export",
-			Usage:  "Export a 3fs offline artifact",
-			Action: exportArtifact,
+			Name:    "export",
+			Aliases: []string{"download", "d", "e"},
+			Usage:   "Export a 3fs offline artifact",
+			Action:  exportArtifact,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:        "config",

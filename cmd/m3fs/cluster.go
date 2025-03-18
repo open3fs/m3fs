@@ -63,9 +63,10 @@ var clusterCmd = &cli.Command{
 			},
 		},
 		{
-			Name:   "delete",
-			Usage:  "delete a 3fs cluster",
-			Action: deleteCluster,
+			Name:    "delete",
+			Aliases: []string{"destroy"},
+			Usage:   "Destroy a 3fs cluster",
+			Action:  deleteCluster,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:        "config",
@@ -90,7 +91,7 @@ var clusterCmd = &cli.Command{
 		},
 		{
 			Name:   "prepare",
-			Usage:  "prepare to deploy a 3fs cluster",
+			Usage:  "Prepare to deploy a 3fs cluster",
 			Action: prepareCluster,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
