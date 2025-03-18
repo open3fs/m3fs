@@ -111,7 +111,7 @@ function clear_nvme_disk() {
         echo "All NVMe disks have been processed."
 }
 
-if [[ "${DISK_TYPE}" == "NVMe" ]]; then
+if [[ "${DISK_TYPE}" == "nvme" ]]; then
         if [[ "${ACTION}" == "prepare" ]]; then
                 prepare_nvme_disk
         elif [[ "${ACTION}" == "clear" ]]; then
