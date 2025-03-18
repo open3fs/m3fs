@@ -16,6 +16,7 @@ package main
 
 import (
 	"os"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
@@ -27,6 +28,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/fdb"
+	"github.com/open3fs/m3fs/pkg/log"
 	"github.com/open3fs/m3fs/pkg/meta"
 	"github.com/open3fs/m3fs/pkg/mgmtd"
 	"github.com/open3fs/m3fs/pkg/monitor"
@@ -147,6 +149,8 @@ func createCluster(ctx *cli.Context) error {
 	if err = runner.Run(ctx.Context); err != nil {
 		return errors.Annotate(err, "create cluster")
 	}
+	log.Logger.Infof("3FS is mounted at %s on node %s",
+		cfg.Services.Client.HostMountpoint, strings.Join(cfg.Services.Client.Nodes, ","))
 
 	return nil
 }

@@ -41,16 +41,16 @@ var configCmd = &cli.Command{
 				&cli.StringFlag{
 					Name:        "name",
 					Aliases:     []string{"n"},
-					Usage:       "3FS cluster name",
-					Value:       "3fs",
+					Usage:       "3FS cluster name(default:\"open3fs\")",
+					Value:       "open3fs",
 					Destination: &clusterName,
 				},
 				&cli.StringFlag{
 					Name:        "file",
 					Aliases:     []string{"f"},
-					Usage:       "Specify a configuration file path",
+					Usage:       "Specify a configuration file path(default:\"cluster.yml\")",
 					Destination: &sampleConfigPath,
-					Value:       "cluster_sample.yml",
+					Value:       "cluster.yml",
 				},
 			},
 		},
@@ -59,51 +59,48 @@ var configCmd = &cli.Command{
 
 var sampleConfigTemplate = `name: "{{.name}}"
 workDir: "/opt/3fs"
+# networkType configure the network type of the cluster, can be one of the following:
+# - RDMA: use RDMA network protocol
+# - ERDMA: use aliyun ERDMA as RDMA network protocol
+# - RXE: use linux rxe kernel module to mock RDMA network protocol
 networkType: "RDMA"
 nodes:
   - name: node1
     host: "192.168.1.1"
     username: "root"
     password: "password"
-    rdmaAddresses:
-      - "10.0.0.1"
   - name: node2
     host: "192.168.1.2"
     username: "root"
     password: "password"
-    rdmaAddresses:
-      - "10.0.0.2"
-  - name: node3
-    host: "192.168.1.3"
-    username: "root"
-    password: "password"
-    rdmaAddresses:
-      - "10.0.0.3"
 services:
-  fdb:
+  client:
     nodes: 
       - node1
-  clickhouse:
+    hostMountpoint: /mnt/3fs
+  storage:
     nodes: 
       - node1
-  monitor:
-    nodes:
-      - node1
+      - node2
+    # diskType configure the disk type of the storage node to use, can be one of the following:
+    # - nvme: NVMe SSD
+    # - dir: use a directory on the filesystem
+    diskType: "nvme"
   mgmtd:
     nodes: 
       - node1
   meta:
     nodes: 
       - node1
-  storage:
-    nodes: 
-      - node2
-      - node3
-    diskType: "NVMe"
-  client:
+  monitor:
+    nodes:
+      - node1
+  fdb:
     nodes: 
       - node1
-    hostMountpoint: /mnt/3fs
+  clickhouse:
+    nodes: 
+      - node1
 images:
   registry: "{{ .registry }}"
   3fs:
@@ -132,7 +129,7 @@ func createSampleConfig(ctx *cli.Context) error {
 		return errors.New("cluster name is required")
 	}
 	if sampleConfigPath == "" {
-		sampleConfigPath = "cluster_sample.yml"
+		sampleConfigPath = "cluster.yml"
 	}
 
 	file, err := os.OpenFile(sampleConfigPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)

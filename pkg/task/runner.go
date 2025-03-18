@@ -71,7 +71,7 @@ func (r *Runtime) LoadInt(key any) (int, bool) {
 
 // Runner is a task runner.
 type Runner struct {
-	runtime *Runtime
+	Runtime *Runtime
 	tasks   []Interface
 	cfg     *config.Config
 	init    bool
@@ -79,31 +79,31 @@ type Runner struct {
 
 // Init initializes all tasks.
 func (r *Runner) Init() {
-	r.runtime = &Runtime{Cfg: r.cfg, WorkDir: r.cfg.WorkDir}
-	r.runtime.Nodes = make(map[string]config.Node, len(r.cfg.Nodes))
+	r.Runtime = &Runtime{Cfg: r.cfg, WorkDir: r.cfg.WorkDir}
+	r.Runtime.Nodes = make(map[string]config.Node, len(r.cfg.Nodes))
 	for _, node := range r.cfg.Nodes {
-		r.runtime.Nodes[node.Name] = node
+		r.Runtime.Nodes[node.Name] = node
 	}
-	r.runtime.Services = &r.cfg.Services
+	r.Runtime.Services = &r.cfg.Services
 	logger := log.Logger.Subscribe(log.FieldKeyNode, "<LOCAL>")
 	em := external.NewManager(external.NewLocalRunner(&external.LocalRunnerCfg{
 		Logger:         logger,
 		MaxExitTimeout: r.cfg.CmdMaxExitTimeout,
 	}), logger)
-	r.runtime.LocalEm = em
+	r.Runtime.LocalEm = em
 
 	for _, task := range r.tasks {
-		task.Init(r.runtime, log.Logger.Subscribe(log.FieldKeyTask, task.Name()))
+		task.Init(r.Runtime, log.Logger.Subscribe(log.FieldKeyTask, task.Name()))
 	}
 	r.init = true
 }
 
 // Store sets the value for a key.
 func (r *Runner) Store(key, value any) error {
-	if r.runtime == nil {
+	if r.Runtime == nil {
 		return errors.Errorf("Runtime hasn't been initialized")
 	}
-	r.runtime.Store(key, value)
+	r.Runtime.Store(key, value)
 	return nil
 }
 

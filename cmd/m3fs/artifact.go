@@ -15,6 +15,8 @@
 package main
 
 import (
+	"os"
+
 	"github.com/urfave/cli/v2"
 
 	"github.com/open3fs/m3fs/pkg/artifact"
@@ -65,6 +67,12 @@ func exportArtifact(ctx *cli.Context) error {
 	}
 	if tmpDir == "" {
 		tmpDir = "/tmp/3fs"
+	}
+
+	if _, err := os.Stat(outputPath); err == nil {
+		return errors.Errorf("output path %s already exists", outputPath)
+	} else if !os.IsNotExist(err) {
+		return errors.Trace(err)
 	}
 
 	runner := task.NewRunner(cfg, new(artifact.ExportArtifactTask))

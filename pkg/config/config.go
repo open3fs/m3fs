@@ -16,6 +16,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"time"
 
 	"github.com/open3fs/m3fs/pkg/errors"
@@ -39,8 +40,8 @@ type DiskType string
 
 // defines disk types
 const (
-	DiskTypeDirectory DiskType = "directory"
-	DiskTypeNvme      DiskType = "NVMe"
+	DiskTypeDirectory DiskType = "dir"
+	DiskTypeNvme      DiskType = "nvme"
 )
 
 var diskTypes = utils.NewSet(DiskTypeDirectory, DiskTypeNvme)
@@ -156,9 +157,11 @@ func (c *Config) SetValidate(workDir string) error {
 			return errors.Trace(err)
 		}
 	}
-	if !networkTypes.Contains(c.NetworkType) {
+	upperNetwork := NetworkType(strings.ToUpper(string(c.NetworkType)))
+	if !networkTypes.Contains(upperNetwork) {
 		return errors.Errorf("invalid network type: %s", c.NetworkType)
 	}
+	c.NetworkType = upperNetwork
 	if len(c.Nodes) == 0 {
 		return errors.New("nodes is required")
 	}
