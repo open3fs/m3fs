@@ -75,8 +75,18 @@ type genAdminCliConfigStep struct {
 }
 
 func (s *genAdminCliConfigStep) Execute(ctx context.Context) error {
+	mgmtdServerAddresses := make([]string, len(s.Runtime.Services.Mgmtd.Nodes))
+	port := strconv.Itoa(s.Runtime.Services.Mgmtd.RDMAListenPort)
+	for i, nodeName := range s.Runtime.Services.Mgmtd.Nodes {
+		node := s.Runtime.Nodes[nodeName]
+		mgmtdServerAddresses[i] = fmt.Sprintf(`"RDMA://%s"`, net.JoinHostPort(node.Host, port))
+	}
+	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey,
+		fmt.Sprintf(`[%s]`, strings.Join(mgmtdServerAddresses, ",")))
+
 	adminCliData := map[string]any{
-		"ClusterID": s.Runtime.Cfg.Name,
+		"ClusterID":            s.Runtime.Cfg.Name,
+		"MgmtdServerAddresses": mgmtdServerAddresses,
 	}
 	s.Logger.Debugf("Admin cli config template data: %v", adminCliData)
 	t, err := template.New("admin_cli.toml").Parse(string(AdminCliTomlTmpl))
@@ -145,15 +155,6 @@ func (s *initClusterStep) Execute(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	address := make([]string, len(s.Runtime.Services.Mgmtd.Nodes))
-	port := strconv.Itoa(s.Runtime.Services.Mgmtd.RDMAListenPort)
-	for i, nodeName := range s.Runtime.Services.Mgmtd.Nodes {
-		node := s.Runtime.Nodes[nodeName]
-		address[i] = fmt.Sprintf(`"RDMA://%s"`, net.JoinHostPort(node.Host, port))
-	}
-	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey,
-		fmt.Sprintf(`[%s]`, strings.Join(address, ",")))
 
 	s.Logger.Infof("Cluster initialization success")
 	return nil
