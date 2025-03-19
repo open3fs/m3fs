@@ -36,7 +36,12 @@ if [ -z "$1" ]; then
 fi
 
 targetDir=$1
-cat > $targetDir/ibdev2netdev <<EOF
+targetScript="$targetDir/ibdev2netdev"
+if [ -d "$targetScript" ]; then
+	rm -fr "$targetScript"
+fi
+
+cat > "$targetScript" <<EOF
 #!/bin/bash
 EOF
 
@@ -51,13 +56,13 @@ do
         state=Down
     fi
     if [ -n "$netdev" ]; then
-		cat <<EOF >> $targetDir/ibdev2netdev
+		cat <<EOF >> $targetScript
 echo "$ibdev port $ibport ==> $netdev ($state)"
 EOF
     fi
 done
 
-chmod +x $targetDir/ibdev2netdev
+chmod +x $targetScript
 `
 	createRdmaLinkScript = `#!/bin/bash
 
