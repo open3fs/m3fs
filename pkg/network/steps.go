@@ -16,6 +16,7 @@ package network
 
 import (
 	"context"
+	"os"
 	"path"
 	"strings"
 
@@ -106,7 +107,7 @@ type genIbdev2netdevScriptStep struct {
 func (s *genIbdev2netdevScriptStep) Execute(ctx context.Context) error {
 	s.Logger.Debugf("Generating ibdev2netdev script for %s", s.Node.Host)
 	localEm := s.Runtime.LocalEm
-	tmpDir, err := localEm.FS.MkdirTemp(ctx, "/tmp", "m3fs-prepare-network")
+	tmpDir, err := localEm.FS.MkdirTemp(ctx, os.TempDir(), "m3fs-prepare-network")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -191,7 +192,7 @@ type createRdmaRxeLinkStep struct {
 func (s *createRdmaRxeLinkStep) Execute(ctx context.Context) error {
 	s.Logger.Debugf("Creating rdma link for %s", s.Node.Host)
 	localEm := s.Runtime.LocalEm
-	tmpDir, err := localEm.FS.MkdirTemp(ctx, "/tmp", "m3fs-prepare-network")
+	tmpDir, err := localEm.FS.MkdirTemp(ctx, os.TempDir(), "m3fs-prepare-network")
 	if err != nil {
 		return errors.Trace(err)
 	}
