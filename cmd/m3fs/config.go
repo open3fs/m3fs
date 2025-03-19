@@ -115,12 +115,6 @@ images:
 `
 
 func createSampleConfig(ctx *cli.Context) error {
-	registry := ""
-	if os.Getenv("M3FS_ZONE") == "CN" {
-		// TODO: set to cn registry
-		registry = ""
-	}
-
 	tmpl, err := template.New("sampleConfig").Parse(sampleConfigTemplate)
 	if err != nil {
 		return errors.Annotate(err, "parse sample config template")
@@ -137,8 +131,7 @@ func createSampleConfig(ctx *cli.Context) error {
 		return errors.Annotate(err, "create sample config file")
 	}
 	err = tmpl.Execute(file, map[string]string{
-		"name":     clusterName,
-		"registry": registry,
+		"name": clusterName,
 	})
 	if err != nil {
 		return errors.Annotate(err, "write sample config file")

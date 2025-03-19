@@ -494,7 +494,7 @@ SupplementaryGids`, nil)
 		"-ql", "-relax", "-type", "CR",
 		"--num_nodes", strconv.Itoa(len(s.Runtime.Services.Storage.Nodes)),
 		"--replication_factor", strconv.Itoa(s.Runtime.Services.Storage.ReplicationFactor),
-		"--min_targets_per_disk", strconv.Itoa(s.Runtime.Services.Storage.MinTargetNumPerDisk),
+		"--min_targets_per_disk", strconv.Itoa(s.Runtime.Services.Storage.TargetNumPerDisk),
 	}).Return(`2025-03-15 08:34:31.409 | INFO     | __main__:check_solution:332`+
 		`- total_traffic=64.0 max_total_traffic=64
 		2025-03-15 08:34:31.640 | SUCCESS  | __main__:run:148 - `+

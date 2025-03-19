@@ -229,7 +229,7 @@ func (s *initUserAndChainStep) initChainFiles(ctx context.Context) error {
 		"-ql", "-relax", "-type", "CR",
 		"--num_nodes", strconv.Itoa(len(s.Runtime.Services.Storage.Nodes)),
 		"--replication_factor", strconv.Itoa(s.Runtime.Services.Storage.ReplicationFactor),
-		"--min_targets_per_disk", strconv.Itoa(s.Runtime.Services.Storage.MinTargetNumPerDisk),
+		"--min_targets_per_disk", strconv.Itoa(s.Runtime.Services.Storage.TargetNumPerDisk),
 	)
 	if err != nil {
 		return errors.Annotatef(err, "run data_placement.py")

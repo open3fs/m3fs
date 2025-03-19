@@ -1,0 +1,127 @@
+# -----------------------------
+# 3fs configuration file
+# -----------------------------
+#
+# name is the name of 3fs cluster.
+name: "open3fs"
+# workDir is the work dir for all 3fs services
+workDir: "/opt/3fs"
+# networkType configure the network type of the cluster, can be one of the following:
+# - RDMA: use RDMA network protocol
+# - ERDMA: use aliyun ERDMA as RDMA network protocol
+# - RXE: use linux rxe kernel module to mock RDMA network protocol
+networkType: "RDMA"
+nodes:
+  - name: node1
+    # host is the ip of a 3fs node. 
+    host: "192.168.1.1"
+    # Username is used for ssh authentication.
+    username: "root"
+    # Password is used for ssh authentication.
+    # Default value is empty string, and the public key will be used.
+    password: "password"
+  - name: node2
+    host: "192.168.1.2"
+    username: "root"
+    password: "password"
+services:
+  client:
+    # containerName defines the container name of 3fs client.
+    # Default value is 3fs-client.
+    containerName: 3fs-client
+    nodes: 
+      - node1
+    # hostMountpoint defines the mount point for 3fs on the client node.
+    # Default value is "/mnt/3fs"
+    hostMountpoint: /mnt/3fs
+  storage:
+    # containerName defines the container name of 3fs storage.
+    # Default value is 3fs-storage.
+    containerName: 3fs-storage
+    nodes: 
+      - node1
+      - node2
+    # diskType configure the disk type of the storage node to use, can be one of the following:
+    # - nvme: NVMe SSD
+    # - dir: use a directory on the filesystem
+    # Default value is "nvme".
+    diskType: "nvme"
+    # diskNumPerNode defines the num of disks for each storage node. Default value is 1.
+    diskNumPerNode: 1
+    # rdmaListenPort is the RDMA listen port of storage service. Default value is 8002.
+    rdmaListenPort: 8002
+    # tcpListenPort is the RDMA listen port of meta service. Default value is 9002.
+    tcpListenPort: 9002
+    # replicationFactor defines the num of replicas for 3fs storage redundancy. Default value is 2.
+    replicationFactor: 2
+    # targetNumPerDisk defines the minimum num of targets on each disk. Default value is 32.
+    targetNumPerDisk: 32
+    # targetIDPrefix defines the prefix of target ID. Default value is 1.
+    targetIDPrefix: 1
+    # chainIDPrefix defines the prefix of chain ID. Default value is 1.
+    chainIDPrefix: 1
+  mgmtd:
+    # containerName defines the container name of 3fs mgmtd.
+    # Default value is 3fs-mgmtd.
+    containerName: 3fs-mgmtd
+    nodes: 
+      - node1
+    # chunkSize is in kbyte. Default value is 1048576.
+    chunkSize: 1048576
+    # stripSize is the size of strip. Default value is 16.
+    stripSize: 16
+    # rdmaListenPort is the RDMA listen port of mgmtd service. Default value is 8000.
+    rdmaListenPort: 8000
+    # tcpListenPort is the RDMA listen port of mgmtd service. Default value is 9000.
+    tcpListenPort: 9000
+  meta:
+    # containerName defines the container name of 3fs meta service.
+    # Default value is 3fs-meta.
+    containerName: 3fs-meta
+    nodes: 
+      - node1
+    # rdmaListenPort is the RDMA listen port of meta service. Default value is 8001.
+    rdmaListenPort: 8001
+    # tcpListenPort is the RDMA listen port of meta service. Default value is 9001.
+    tcpListenPort: 9001
+  monitor:
+    # containerName defines the container name of 3fs monitor service.
+    # Default value is 3fs-monitor.
+    containerName: 3fs-monitor
+    nodes:
+      - node1
+    # port defaines the listen port of 3fs monitor service.
+    # Default value is 10000.
+    port: 10000
+  fdb:
+    # containerName defines the container name of foundation db service.
+    # Default value is 3fs-fdb.
+    containerName: 3fs-fdb
+    # port defines the listen port of foundation db service.
+    # Default value is 4500.
+    port: 4500
+    nodes: 
+      - node1
+  clickhouse:
+    # containerName defines the container name of clickhouse.
+    # Default value is 3fs-clickhouse.
+    containerName: 3fs-clickhouse
+    # port defines the tcp listen port of clienthouse.
+    # Default value is 8999.
+    tcpPort: 8999
+    nodes: 
+      - node1
+images:
+  # registry is the domain of image registry.
+  registry: ""
+  3fs:
+    # repo contains the namespace and name of the image.
+    repo: "open3fs/3fs"
+    # tag is the image tag.
+    tag: "20250315"
+  fdb: 
+    repo: "open3fs/foundationdb"
+    tag: "7.3.63"
+  clickhouse:
+    repo: "open3fs/clickhouse"
+    tag: "25.1-jammy"
