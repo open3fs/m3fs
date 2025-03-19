@@ -9,8 +9,8 @@ You can test 3FS with m3fs on many different environments.
 
 For research and function test purpose, using low-cost virtual machines with directory storage type are enough. For example:
 
-1. Public cloud virtual machines with ethernet nic. E.g. Google Cloud **N2** instance.
-1. Aliyun virtual machines with eRDMA nic. E.g. Aliyun g8i instance.
+1. Public cloud virtual machines with ethernet nic and at least 16GB RAM. E.g. Google Cloud **N2** instance.
+1. Aliyun virtual machines with eRDMA nic and at least 16GB RAM. E.g. Aliyun g8i instance.
 
 For performance testing, recommendation configuration are Aliyun eRDMA instances equipped with NVMe disks. E.g. i4 instances.
 
@@ -33,10 +33,12 @@ For running 3FS with virtual machine only has ethernet nic, you need to install 
 ```
 mkdir m3fs
 cd m3fs
-curl -sfL https://artifactory.open3fs.com/m3fs/getm3fs | sh -
+curl -sfL https://artifactory.open3fs.com/m3fs/getm3fs | sh
 ```
 
-### Offline Installation
+### Install From Cloud Storage
+
+> If you can not visit  Docker Hub directly.
 
 ```
 ./m3fs config create
@@ -110,13 +112,24 @@ hf3fs.open3fs on /mnt/3fs type fuse.hf3fs (rw,nosuid,nodev,relatime,user_id=0,gr
 
 Now, you can use the mount point.
 
+You can use **admin_cli.sh** to interact with mgmtd service:
+
+```
+$ /opt/3fs/admin_cli.sh list-nodes
+Id     Type     Status               Hostname   Pid  Tags  LastHeartbeatTime    ConfigVersion  ReleaseVersion
+1      MGMTD    PRIMARY_MGMTD        open3fs-1  1    []    N/A                  1(UPTODATE)    250228-dev-1-999999-cd564a23
+100    META     HEARTBEAT_CONNECTED  open3fs-1  1    []    2025-03-19 14:39:19  1(UPTODATE)    250228-dev-1-999999-cd564a23
+10001  STORAGE  HEARTBEAT_CONNECTED  open3fs-1  1    []    2025-03-19 14:39:19  1(UPTODATE)    250228-dev-1-999999-cd564a23
+10002  STORAGE  HEARTBEAT_CONNECTED  open3fs-2  1    []    2025-03-19 14:39:20  1(UPTODATE)    250228-dev-1-999999-cd564a23
+```
+
 Destroy the cluster:
 
 ```
 ./m3fs cluster destroy -c ./cluster.yml
 ```
 
-### Online Installation
+### Install From Docker Hub
 
 This method pulling images from docker hub.
 
@@ -138,7 +151,7 @@ Create cluster:
 ./m3fs cluster create -c ./cluster.yml
 ```
 
-### Online Installation With Private Registry
+### Install From Private Registry
 
 This method pulling images from your private registry.
 
