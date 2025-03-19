@@ -88,7 +88,7 @@ func (s *configSuite) TestValidateConfig() {
 	cfg.Nodes[0].Port = 123
 	cfgExp := *cfg
 
-	s.NoError(cfg.SetValidate("/root/3fs"))
+	s.NoError(cfg.SetValidate("/root/3fs", ""))
 
 	s.Equal(&cfgExp, cfg)
 }
@@ -96,7 +96,7 @@ func (s *configSuite) TestValidateConfig() {
 func (s *configSuite) TestSetConfigDefaults() {
 	cfg := s.newConfig()
 
-	s.NoError(cfg.SetValidate("/root"))
+	s.NoError(cfg.SetValidate("/root", ""))
 
 	s.Equal(cfg.Services.Mgmtd.RDMAListenPort, 8000)
 	s.Equal(cfg.Services.Mgmtd.TCPListenPort, 9000)
@@ -104,46 +104,54 @@ func (s *configSuite) TestSetConfigDefaults() {
 	s.Equal(cfg.Nodes[0].Port, 22)
 }
 
+func (s *configSuite) TestSetConfigWithRegistry() {
+	cfg := s.newConfig()
+
+	s.NoError(cfg.SetValidate("/root", "harbor.open3fs.com"))
+
+	s.Equal(cfg.Images.Registry, "harbor.open3fs.com")
+}
+
 func (s *configSuite) TestValidWithNoName() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Nodes[0].Name = ""
 
-	s.Error(cfg.SetValidate(""), "name is required")
+	s.Error(cfg.SetValidate("", ""), "name is required")
 }
 
 func (s *configSuite) TestValidWithInvalidNetworkType() {
 	cfg := s.newConfigWithDefaults()
 	cfg.NetworkType = "invalid"
 
-	s.Error(cfg.SetValidate(""), "invalid network type: invalid")
+	s.Error(cfg.SetValidate("", ""), "invalid network type: invalid")
 }
 
 func (s *configSuite) TestValidWithNoNodes() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Nodes = nil
 
-	s.Error(cfg.SetValidate(""), "nodes is required")
+	s.Error(cfg.SetValidate("", ""), "nodes is required")
 }
 
 func (s *configSuite) TestValidWithNoNodeName() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Nodes[0].Name = ""
 
-	s.Error(cfg.SetValidate(""), "nodes[0].name is required")
+	s.Error(cfg.SetValidate("", ""), "nodes[0].name is required")
 }
 
 func (s *configSuite) TestValidWithDupNodeName() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Nodes = append(cfg.Nodes, cfg.Nodes[0])
 
-	s.Error(cfg.SetValidate(""), "duplicate node name: node1")
+	s.Error(cfg.SetValidate("", ""), "duplicate node name: node1")
 }
 
 func (s *configSuite) TestValidWithNoNodeHost() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Nodes[0].Host = ""
 
-	s.Error(cfg.SetValidate(""), "nodes[0].host is required")
+	s.Error(cfg.SetValidate("", ""), "nodes[0].host is required")
 }
 
 func (s *configSuite) TestValidWithDupNodeHost() {
@@ -154,54 +162,54 @@ func (s *configSuite) TestValidWithDupNodeHost() {
 		Port: 1234,
 	})
 
-	s.Error(cfg.SetValidate(""), "duplicate node host: localhost")
+	s.Error(cfg.SetValidate("", ""), "duplicate node host: localhost")
 }
 
 func (s *configSuite) TestValidWithNoServiceNode() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Services.Fdb.Nodes = nil
 
-	s.Error(cfg.SetValidate(""), "nodes of fdb service is required")
+	s.Error(cfg.SetValidate("", ""), "nodes of fdb service is required")
 }
 
 func (s *configSuite) TestValidWithServiceNodeNotExists() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Services.Fdb.Nodes = []string{"node2"}
 
-	s.Error(cfg.SetValidate(""), "node node2 of fdb service not exists in node list")
+	s.Error(cfg.SetValidate("", ""), "node node2 of fdb service not exists in node list")
 }
 
 func (s *configSuite) TestValidWithNoServiceNodeSup() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Services.Fdb.Nodes = []string{"node1", "node1"}
 
-	s.Error(cfg.SetValidate(""), "duplicate node node1 in fdb service")
+	s.Error(cfg.SetValidate("", ""), "duplicate node node1 in fdb service")
 }
 
 func (s *configSuite) TestValidWithInvalidStorageDiskType() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Services.Storage.DiskType = "invalid"
 
-	s.Error(cfg.SetValidate(""), "invalid disk type of storage service: invalid")
+	s.Error(cfg.SetValidate("", ""), "invalid disk type of storage service: invalid")
 }
 
 func (s *configSuite) TestValidWithNoClientMountPoint() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Services.Client.HostMountpoint = ""
 
-	s.Error(cfg.SetValidate(""), "services.client.hostMountpoint is required")
+	s.Error(cfg.SetValidate("", ""), "services.client.hostMountpoint is required")
 }
 
 func (s *configSuite) TestWithImageNoTag() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Images.Fdb.Tag = ""
 
-	s.Error(cfg.SetValidate(""), "images.fdb.tag is required")
+	s.Error(cfg.SetValidate("", ""), "images.fdb.tag is required")
 }
 
 func (s *configSuite) TestWithImageNoRepo() {
 	cfg := s.newConfigWithDefaults()
 	cfg.Images.Fdb.Repo = ""
 
-	s.Error(cfg.SetValidate(""), "images.fdb.repo is required")
+	s.Error(cfg.SetValidate("", ""), "images.fdb.repo is required")
 }

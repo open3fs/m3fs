@@ -60,6 +60,12 @@ var clusterCmd = &cli.Command{
 					Usage:       "Path to the working directory(default is current directory)",
 					Destination: &workDir,
 				},
+				&cli.StringFlag{
+					Name:        "registry",
+					Aliases:     []string{"r"},
+					Usage:       "Image registry(default is null)",
+					Destination: &registry,
+				},
 			},
 		},
 		{
@@ -122,7 +128,7 @@ func loadClusterConfig() (*config.Config, error) {
 	if err = yaml.NewDecoder(file).Decode(cfg); err != nil {
 		return nil, errors.Annotate(err, "load cluster config")
 	}
-	if err = cfg.SetValidate(workDir); err != nil {
+	if err = cfg.SetValidate(workDir, registry); err != nil {
 		return nil, errors.Annotate(err, "validate cluster config")
 	}
 	logrus.Debugf("Cluster config: %+v", cfg)

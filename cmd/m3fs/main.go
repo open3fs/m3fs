@@ -32,6 +32,7 @@ var (
 	outputPath       string
 	tmpDir           string
 	workDir          string
+	registry         string
 	clusterDeleteAll bool
 )
 

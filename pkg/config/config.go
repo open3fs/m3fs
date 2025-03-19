@@ -144,7 +144,7 @@ type Config struct {
 }
 
 // SetValidate validates the config and set default values if some fields are missing
-func (c *Config) SetValidate(workDir string) error {
+func (c *Config) SetValidate(workDir, registry string) error {
 	if c.Name == "" {
 		return errors.New("name is required")
 	}
@@ -156,6 +156,9 @@ func (c *Config) SetValidate(workDir string) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+	if registry != "" {
+		c.Images.Registry = registry
 	}
 	upperNetwork := NetworkType(strings.ToUpper(string(c.NetworkType)))
 	if !networkTypes.Contains(upperNetwork) {
