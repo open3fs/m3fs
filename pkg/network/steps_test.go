@@ -64,7 +64,7 @@ func (s *genIbdev2netdevScriptStepSuite) TestGenIbdev2netdevScript() {
 	remoteGenScriptPath := "/tmp/gen-ibdev2netdev"
 	s.MockRunner.On("Scp", scriptPath, remoteGenScriptPath).Return(nil)
 	s.MockRunner.On("Exec", "bash", []string{remoteGenScriptPath, binDir}).Return("", nil)
-	s.MockLocalFS.On("RemoveAll", tmpDir).Return(nil)
+	s.MockLocalFS.On("RemoveAll", s.Ctx(), tmpDir).Return(nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
 
@@ -196,7 +196,7 @@ func (s *createRdmaRxeLinkStepSuite) TestCreateRdmaRxeLinkStep() {
 	s.MockRunner.On("Exec", "chmod", []string{"+x", remoteScriptPath}).Return("", nil)
 	s.MockRunner.On("Exec", "bash", []string{remoteScriptPath}).Return("", nil)
 
-	s.MockLocalFS.On("RemoveAll", tmpDir).Return(nil)
+	s.MockLocalFS.On("RemoveAll", s.Ctx(), tmpDir).Return(nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
 

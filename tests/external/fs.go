@@ -47,8 +47,8 @@ func (m *MockFS) MkdirAll(ctx context.Context, path string) error {
 }
 
 // RemoveAll mock.
-func (m *MockFS) RemoveAll(path string) error {
-	return m.Called(path).Error(0)
+func (m *MockFS) RemoveAll(ctx context.Context, path string) error {
+	return m.Called(ctx, path).Error(0)
 }
 
 // WriteFile mock.
