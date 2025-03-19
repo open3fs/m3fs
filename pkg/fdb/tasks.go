@@ -27,7 +27,7 @@ type CreateFdbClusterTask struct {
 
 // Init initializes the task.
 func (t *CreateFdbClusterTask) Init(r *task.Runtime, logger log.Interface) {
-	t.BaseTask.SetName("CreatedbClusterTask")
+	t.BaseTask.SetName("CreateFdbClusterTask")
 	t.BaseTask.Init(r, logger)
 	nodes := make([]config.Node, len(r.Cfg.Services.Fdb.Nodes))
 	for i, node := range r.Cfg.Services.Fdb.Nodes {
