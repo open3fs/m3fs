@@ -117,7 +117,7 @@ func (s *prepare3FSConfigStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	defer func() {
-		if err := localEm.FS.RemoveAll(tmpDir); err != nil {
+		if err := localEm.FS.RemoveAll(ctx, tmpDir); err != nil {
 			s.Logger.Errorf("Failed to remove temporary directory %s: %v", tmpDir, err)
 		}
 	}()
@@ -518,7 +518,7 @@ func (s *remoteRunScriptStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	defer func() {
-		if err := localEm.FS.RemoveAll(tmpDir); err != nil {
+		if err := localEm.FS.RemoveAll(ctx, tmpDir); err != nil {
 			s.Logger.Errorf("Failed to remove temporary directory %s: %v", tmpDir, err)
 		}
 	}()
