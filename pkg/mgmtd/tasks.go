@@ -81,6 +81,11 @@ func (t *CreateMgmtdServiceTask) Init(r *task.Runtime, logger log.Interface) {
 					UseRdmaNetwork: true,
 				}),
 		},
+		{
+			Nodes:    nodes,
+			Parallel: true,
+			NewStep:  func() task.Step { return new(genAdminCliShellStep) },
+		},
 	})
 }
 

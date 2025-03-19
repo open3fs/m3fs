@@ -1,0 +1,3 @@
+#!/bin/bash
+
+docker exec -it 3fs-mgmtd /opt/3fs/bin/admin_cli -cfg /opt/3fs/etc/admin_cli.toml --config.mgmtd_client.mgmtd_server_addresses '{{ .MgmtdServerAddresses }}' \'$@\'

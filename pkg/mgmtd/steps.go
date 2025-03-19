@@ -20,7 +20,9 @@ import (
 	"embed"
 	"fmt"
 	"net"
+	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"text/template"
@@ -45,6 +47,8 @@ var (
 	MgmtdMainTomlTmpl []byte
 	// AdminCliTomlTmpl is the template content of admin_cli.toml
 	AdminCliTomlTmpl []byte
+	// AdminCliShellTmpl is the template content of admin_cli.sh
+	AdminCliShellTmpl []byte
 )
 
 func init() {
@@ -65,6 +69,11 @@ func init() {
 	}
 
 	AdminCliTomlTmpl, err = templatesFs.ReadFile("templates/admin_cli.toml.tmpl")
+	if err != nil {
+		panic(err)
+	}
+
+	AdminCliShellTmpl, err = templatesFs.ReadFile("templates/admin_cli.sh.tmpl")
 	if err != nil {
 		panic(err)
 	}
@@ -98,7 +107,6 @@ func (s *genAdminCliConfigStep) Execute(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(err, "execute template of admin_cli.toml.tmpl")
 	}
-	s.Logger.Debugf("Config of admin cli: %s", data.String())
 	s.Runtime.Store(task.RuntimeAdminCliTomlKey, data.Bytes())
 
 	return nil
@@ -157,6 +165,47 @@ func (s *initClusterStep) Execute(ctx context.Context) error {
 	}
 
 	s.Logger.Infof("Cluster initialization success")
+	return nil
+}
+
+type genAdminCliShellStep struct {
+	task.BaseStep
+}
+
+func (s *genAdminCliShellStep) Execute(ctx context.Context) error {
+	tempDir, err := s.Runtime.LocalEm.FS.MkdirTemp(ctx, os.TempDir(), "3fs-mgmtd")
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	mgmtdServerAddresses, ok := s.Runtime.LoadString(task.RuntimeMgmtdServerAddressesKey)
+	if !ok {
+		return errors.Errorf("Failed to value of %s", task.RuntimeMgmtdServerAddressesKey)
+	}
+
+	t, err := template.New("admin_cli.sh").Parse(string(AdminCliShellTmpl))
+	if err != nil {
+		return errors.Annotatef(err, "parse template of admin_cli.sh.tmpl")
+	}
+	data := new(bytes.Buffer)
+	err = t.Execute(data, map[string]string{
+		"MgmtdServerAddresses": mgmtdServerAddresses,
+	})
+	if err != nil {
+		return errors.Annotate(err, "execute template of admin_cli.sh.tmpl")
+	}
+	srcShellPath := filepath.Join(tempDir, "admin_cli.sh")
+	if err = s.Runtime.LocalEm.FS.WriteFile(srcShellPath, data.Bytes(), 0777); err != nil {
+		return errors.Trace(err)
+	}
+	dstShellPath := filepath.Join(s.Runtime.WorkDir, "admin_cli.sh")
+	if err = s.Em.Runner.Scp(ctx, srcShellPath, dstShellPath); err != nil {
+		return errors.Trace(err)
+	}
+	if err = s.Runtime.LocalEm.FS.RemoveAll(ctx, tempDir); err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 
