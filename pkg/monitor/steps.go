@@ -109,7 +109,7 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	localConfigDir, _ := s.Runtime.Load("monitor_temp_config_dir")
 	localConfigFile := path.Join(localConfigDir.(string), "monitor_collector_main.toml")
 	remoteConfigFile := path.Join(etcDir, "monitor_collector_main.toml")
-	if err := s.Em.Runner.Scp(localConfigFile, remoteConfigFile); err != nil {
+	if err := s.Em.Runner.Scp(ctx, localConfigFile, remoteConfigFile); err != nil {
 		return errors.Annotatef(err, "scp monitor_collector_main.toml")
 	}
 	logDir := path.Join(workDir, "log")

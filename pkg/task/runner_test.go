@@ -17,8 +17,9 @@ package task
 import (
 	"testing"
 
-	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/open3fs/m3fs/pkg/config"
 )
 
 func TestRunnerSuite(t *testing.T) {
@@ -34,7 +35,10 @@ type runnerSuite struct {
 func (s *runnerSuite) SetupTest() {
 	s.baseSuite.SetupTest()
 	s.mockTask = new(mockTask)
-	s.runner = NewRunner(new(config.Config), s.mockTask)
+	s.runner = &Runner{
+		tasks: []Interface{s.mockTask},
+		cfg:   new(config.Config),
+	}
 }
 
 func (s *runnerSuite) TestInit() {

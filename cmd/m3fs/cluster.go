@@ -142,7 +142,7 @@ func createCluster(ctx *cli.Context) error {
 		return errors.Trace(err)
 	}
 
-	runner := task.NewRunner(cfg,
+	runner, err := task.NewRunner(cfg,
 		new(fdb.CreateFdbClusterTask),
 		new(clickhouse.CreateClickhouseClusterTask),
 		new(monitor.CreateMonitorTask),
@@ -152,6 +152,9 @@ func createCluster(ctx *cli.Context) error {
 		new(mgmtd.InitUserAndChainTask),
 		new(fsclient.Create3FSClientServiceTask),
 	)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	runner.Init()
 	if err = runner.Run(ctx.Context); err != nil {
 		return errors.Annotate(err, "create cluster")
@@ -180,7 +183,10 @@ func deleteCluster(ctx *cli.Context) error {
 	if clusterDeleteAll {
 		runnerTasks = append(runnerTasks, new(network.PrepareNetworkTask))
 	}
-	runner := task.NewRunner(cfg, runnerTasks...)
+	runner, err := task.NewRunner(cfg, runnerTasks...)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	runner.Init()
 	if err = runner.Run(ctx.Context); err != nil {
 		return errors.Annotate(err, "delete cluster")
@@ -200,7 +206,10 @@ func prepareCluster(ctx *cli.Context) error {
 	}
 	runnerTasks = append(runnerTasks, new(network.PrepareNetworkTask))
 
-	runner := task.NewRunner(cfg, runnerTasks...)
+	runner, err := task.NewRunner(cfg, runnerTasks...)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	runner.Init()
 	if artifactPath != "" {
 		if err = runner.Store(task.RuntimeArtifactPathKey, artifactPath); err != nil {

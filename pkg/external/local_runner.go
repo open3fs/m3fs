@@ -15,9 +15,11 @@
 package external
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -31,6 +33,8 @@ import (
 type LocalRunner struct {
 	logger         log.Interface
 	maxExitTimeout time.Duration
+	user           string
+	password       string
 }
 
 // NonSudoExec executes a command.
@@ -59,28 +63,48 @@ func (r *LocalRunner) NonSudoExec(ctx context.Context, command string, args ...s
 		}
 	}
 
-	r.logger.Debugf("Run command: %s %s", command, strings.Join(args, " "))
+	cmdStr := fmt.Sprintf("%s %s", command, strings.Join(args, " "))
+	r.logger.Debugf("Run command: %s", cmdStr)
 	out := new(bytes.Buffer)
-	errOut := new(bytes.Buffer)
 	cmd := exec.Command(command, args...)
-	cmd.Stdout = out
-	cmd.Stderr = errOut
-	err := r.runCtx(ctx, cmd)
+	in, err := cmd.StdinPipe()
 	if err != nil {
-		return out.String(), checkErr(err, errOut.String())
+		return "", errors.Annotate(err, "get cmd stdinpipe")
+	}
+	errOut, err := cmd.StderrPipe()
+	if err != nil {
+		return "", errors.Annotate(err, "get cmd stderrpipe")
+	}
+	cmd.Stdout = out
+	errOutStr, err := r.runCtx(ctx, cmd, in, errOut)
+	if err != nil {
+		return "", checkErr(err, errOutStr)
 	}
 
-	return out.String(), nil
+	if _, err = out.WriteString(errOutStr); err != nil {
+		return "", errors.Annotate(err, "append stderr output")
+	}
+	outStr := out.String()
+	r.logger.Debugf("Output of %s: %s", cmdStr, outStr)
+
+	return outStr, nil
 }
 
 // Exec executes a command with sudo
 func (r *LocalRunner) Exec(ctx context.Context, cmd string, args ...string) (string, error) {
-	return r.NonSudoExec(ctx, "sudo", append([]string{cmd}, args...)...)
+	return r.NonSudoExec(ctx, "sudo",
+		[]string{
+			"-S",
+			"/bin/bash",
+			"-c",
+			strings.Join(append([]string{cmd}, args...), " "),
+		}...)
 }
 
 // Scp copy local file or dir to remote host.
-func (r *LocalRunner) Scp(local, remote string) error {
-	return errors.New("not implemented")
+func (r *LocalRunner) Scp(ctx context.Context, local, remote string) error {
+	_, err := r.Exec(ctx, "cp", "-r", local, remote)
+	return errors.Trace(err)
 }
 
 // Wait is an essential part of exec.Cmd which must have been started by Start,
@@ -93,13 +117,55 @@ func (r *LocalRunner) Scp(local, remote string) error {
 //
 // Note: if sub process is in state D (waiting for IO), the goroutine will leak.
 // There is no way to guarantee neither hanging nor leaking resources
-func (r *LocalRunner) runCtx(ctx context.Context, cmd *exec.Cmd) (err error) {
+func (r *LocalRunner) runCtx(ctx context.Context, cmd *exec.Cmd,
+	in io.WriteCloser, errOut io.ReadCloser) (errOutStr string, err error) {
+
 	startTime := time.Now()
 	maxExitTimeout := r.maxExitTimeout
 
 	if err = cmd.Start(); err != nil {
-		return err
+		return "", err
 	}
+
+	var (
+		output       []byte
+		line         = ""
+		errOutReader = bufio.NewReader(errOut)
+	)
+
+	requirePasswordPrefix := "[sudo] password for "
+	if r.user != "" {
+		requirePasswordPrefix = fmt.Sprintf("[sudo] password for %s: ", r.user)
+	}
+	for {
+		b, err := errOutReader.ReadByte()
+		if err != nil {
+			if err != io.EOF {
+				r.logger.Debugf("Failed to read data from stdout: %s", err)
+			}
+			break
+		}
+
+		output = append(output, b)
+		if b == byte('\n') {
+			line = ""
+			continue
+		}
+
+		line += string(b)
+
+		if (strings.HasPrefix(line, requirePasswordPrefix) || strings.HasPrefix(line, "Password")) &&
+			strings.HasSuffix(line, ": ") {
+
+			line = ""
+			_, err = in.Write([]byte(r.password + "\n"))
+			if err != nil {
+				r.logger.Debugf("Failed to input sudo password: %s", err)
+				break
+			}
+		}
+	}
+	errOutStr = strings.ReplaceAll(string(output), requirePasswordPrefix, "")
 
 	done := make(chan error)
 	go func() {
@@ -111,13 +177,13 @@ func (r *LocalRunner) runCtx(ctx context.Context, cmd *exec.Cmd) (err error) {
 	case <-ctx.Done():
 		d := time.Since(startTime)
 		if err = cmd.Process.Kill(); err != nil {
-			return err
+			return errOutStr, err
 		}
 		select {
 		case <-done:
 		case <-time.After(maxExitTimeout):
 			r.logger.Warnf("Wait for command to exit timeout: %s", maxExitTimeout)
-			return errors.Errorf("wait process to exit timeout after %s", maxExitTimeout)
+			return errOutStr, errors.Errorf("wait process to exit timeout after %s", maxExitTimeout)
 		}
 		if b, ok := cmd.Stdout.(*bytes.Buffer); ok {
 			r.logger.Warnf("Process was killed after %v: %s %s\nstdout: %v\nstderr: %v",
@@ -127,9 +193,9 @@ func (r *LocalRunner) runCtx(ctx context.Context, cmd *exec.Cmd) (err error) {
 			r.logger.Warnf("Process was killed after %v: %s %s\nstdout: %v\nstderr: %v",
 				d.Round(100*time.Millisecond), cmd.Path, cmd.Args, cmd.Stdout, cmd.Stderr)
 		}
-		return ctx.Err()
+		return errOutStr, ctx.Err()
 	case err = <-done:
-		return err
+		return errOutStr, err
 	}
 }
 
@@ -179,6 +245,8 @@ func (e runErrorImpl) ExitCodeIn(errnos ...syscall.Errno) bool {
 type LocalRunnerCfg struct {
 	Logger         log.Interface
 	MaxExitTimeout *time.Duration
+	User           string
+	Password       string
 }
 
 // NewLocalRunner creates a local runner.
@@ -191,5 +259,7 @@ func NewLocalRunner(cfg *LocalRunnerCfg) *LocalRunner {
 	return &LocalRunner{
 		logger:         cfg.Logger,
 		maxExitTimeout: maxExitTimeout,
+		user:           cfg.User,
+		password:       cfg.Password,
 	}
 }

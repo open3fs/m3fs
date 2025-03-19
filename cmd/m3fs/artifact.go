@@ -76,7 +76,10 @@ func exportArtifact(ctx *cli.Context) error {
 		return errors.Trace(err)
 	}
 
-	runner := task.NewRunner(cfg, new(artifact.ExportArtifactTask))
+	runner, err := task.NewRunner(cfg, new(artifact.ExportArtifactTask))
+	if err != nil {
+		return errors.Trace(err)
+	}
 	runner.Init()
 	if err = runner.Store(task.RuntimeArtifactTmpDirKey, tmpDir); err != nil {
 		return errors.Trace(err)

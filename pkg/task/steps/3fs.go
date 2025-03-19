@@ -135,17 +135,17 @@ func (s *prepare3FSConfigStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	if err = s.copyFile(tmpDir); err != nil {
+	if err = s.copyFile(ctx, tmpDir); err != nil {
 		return errors.Trace(err)
 	}
 
 	return nil
 }
 
-func (s *prepare3FSConfigStep) copyFile(src string) error {
+func (s *prepare3FSConfigStep) copyFile(ctx context.Context, src string) error {
 	dst := getConfigDir(s.serviceWorkDir)
 	s.Logger.Infof("Copying %s configs from %s to %s %s", s.service, src, s.Node.Name, dst)
-	if err := s.Em.Runner.Scp(src, dst); err != nil {
+	if err := s.Em.Runner.Scp(ctx, src, dst); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -543,7 +543,7 @@ func (s *remoteRunScriptStep) Execute(ctx context.Context) error {
 	}()
 
 	s.Logger.Infof("Scp %s to %s", tmpScriptPath, remoteFile)
-	if err = s.Em.Runner.Scp(tmpScriptPath, remoteFile); err != nil {
+	if err = s.Em.Runner.Scp(ctx, tmpScriptPath, remoteFile); err != nil {
 		return errors.Trace(err)
 	}
 

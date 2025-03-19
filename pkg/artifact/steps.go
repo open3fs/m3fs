@@ -184,7 +184,7 @@ func (s *distributeArtifactStep) Execute(ctx context.Context) error {
 		if err := s.Em.FS.MkdirAll(ctx, filepath.Dir(dstPath)); err != nil {
 			return errors.Trace(err)
 		}
-		if err := s.Em.Runner.Scp(srcPath, dstPath); err != nil {
+		if err := s.Em.Runner.Scp(ctx, srcPath, dstPath); err != nil {
 			return errors.Trace(err)
 		}
 	} else {

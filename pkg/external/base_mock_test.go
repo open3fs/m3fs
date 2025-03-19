@@ -300,7 +300,7 @@ func (mr *MockedRunner) CalledScpCount(local, remote string) int {
 }
 
 // Scp copy local file or dir to remote host.
-func (mr *MockedRunner) Scp(local, remote string) error {
+func (mr *MockedRunner) Scp(ctx context.Context, local, remote string) error {
 	mr.t.Logf("Processing: scp %s to %s", local, remote)
 	resultKey := local + ":" + remote
 	if results, ok := mr.scpResults[resultKey]; ok {

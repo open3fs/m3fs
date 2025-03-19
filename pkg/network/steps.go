@@ -122,7 +122,7 @@ func (s *genIbdev2netdevScriptStep) Execute(ctx context.Context) error {
 		return errors.Annotatef(err, "mkdir %s", binDir)
 	}
 	remoteGenScriptPath := "/tmp/gen-ibdev2netdev"
-	if err := s.Em.Runner.Scp(scriptLocalPath, remoteGenScriptPath); err != nil {
+	if err := s.Em.Runner.Scp(ctx, scriptLocalPath, remoteGenScriptPath); err != nil {
 		return errors.Annotatef(err, "scp %s", scriptLocalPath)
 	}
 	_, err = s.Em.Runner.Exec(ctx, "bash", remoteGenScriptPath, binDir)
@@ -208,7 +208,7 @@ func (s *createRdmaRxeLinkStep) Execute(ctx context.Context) error {
 		return errors.Annotatef(err, "mkdir %s", binDir)
 	}
 	remotePath := path.Join(binDir, "create_rdma_rxe_link")
-	if err := s.Em.Runner.Scp(scriptLocalPath, remotePath); err != nil {
+	if err := s.Em.Runner.Scp(ctx, scriptLocalPath, remotePath); err != nil {
 		return errors.Annotatef(err, "scp %s", scriptLocalPath)
 	}
 	_, err = s.Em.Runner.Exec(ctx, "chmod", "+x", remotePath)

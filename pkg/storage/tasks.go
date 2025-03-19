@@ -107,7 +107,8 @@ func (t *CreateStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 			NewStep: steps.NewGen3FSNodeIDStepFunc(ServiceName, 10001, storage.Nodes),
 		},
 		{
-			Nodes: nodes,
+			Nodes:    nodes,
+			Parallel: true,
 			NewStep: steps.NewRemoteRunScriptStepFunc(
 				workDir,
 				"disk_tool.sh",
@@ -191,7 +192,8 @@ func (t *DeleteStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 				workDir),
 		},
 		{
-			Nodes: nodes,
+			Nodes:    nodes,
+			Parallel: true,
 			NewStep: steps.NewRemoteRunScriptStepFunc(
 				workDir,
 				"disk_tool.sh",

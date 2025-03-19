@@ -49,7 +49,7 @@ func (m *MockRunner) Exec(ctx context.Context, cmd string, args ...string) (stri
 }
 
 // Scp mock.
-func (m *MockRunner) Scp(local, remote string) error {
+func (m *MockRunner) Scp(ctx context.Context, local, remote string) error {
 	arg := m.Called(local, remote)
 	return arg.Error(0)
 }

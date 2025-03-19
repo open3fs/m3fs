@@ -39,7 +39,7 @@ type RunnerInterface interface {
 	NonSudoExec(ctx context.Context, command string, args ...string) (string, error)
 	Exec(ctx context.Context, command string, args ...string) (string, error)
 
-	Scp(local, remote string) error
+	Scp(ctx context.Context, local, remote string) error
 }
 
 // RemoteRunner implements RunInterface by running command on a remote host.
@@ -186,7 +186,7 @@ func (r *RemoteRunner) Close() {
 }
 
 // Scp copy local file or dir to remote host.
-func (r *RemoteRunner) Scp(local, remote string) error {
+func (r *RemoteRunner) Scp(ctx context.Context, local, remote string) error {
 	r.log.Debugf("Scp %s on the local node to %s on the remote node", local, remote)
 	f, err := os.Stat(local)
 	if err != nil {

@@ -81,12 +81,12 @@ func (s *genAdminCliConfigStep) Execute(ctx context.Context) error {
 		node := s.Runtime.Nodes[nodeName]
 		mgmtdServerAddresses[i] = fmt.Sprintf(`"RDMA://%s"`, net.JoinHostPort(node.Host, port))
 	}
-	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey,
-		fmt.Sprintf(`[%s]`, strings.Join(mgmtdServerAddresses, ",")))
+	mgmtdServerAddressesStr := fmt.Sprintf("[%s]", strings.Join(mgmtdServerAddresses, ","))
+	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey, mgmtdServerAddressesStr)
 
 	adminCliData := map[string]any{
 		"ClusterID":            s.Runtime.Cfg.Name,
-		"MgmtdServerAddresses": mgmtdServerAddresses,
+		"MgmtdServerAddresses": mgmtdServerAddressesStr,
 	}
 	s.Logger.Debugf("Admin cli config template data: %v", adminCliData)
 	t, err := template.New("admin_cli.toml").Parse(string(AdminCliTomlTmpl))

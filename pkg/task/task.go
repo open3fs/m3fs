@@ -75,9 +75,16 @@ func (t *BaseTask) newStepExecuter(newStepFunc func() Step) func(context.Context
 	return func(ctx context.Context, node config.Node) error {
 		step := newStepFunc()
 		logger := t.Logger.Subscribe(log.FieldKeyNode, node.Name)
-		em, err := external.NewRemoteRunnerManager(&node, logger)
-		if err != nil {
-			return errors.Trace(err)
+
+		var em *external.Manager
+		var err error
+		if t.Runtime.LocalNode != nil && node.Name == t.Runtime.LocalNode.Name {
+			em = t.Runtime.LocalEm
+		} else {
+			em, err = external.NewRemoteRunnerManager(&node, logger)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		step.Init(t.Runtime, em, node, logger)
 		return errors.Trace(step.Execute(ctx))

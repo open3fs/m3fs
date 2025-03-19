@@ -24,6 +24,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
 	"github.com/open3fs/m3fs/pkg/log"
+	"github.com/open3fs/m3fs/pkg/utils"
 )
 
 // defines keys of runtime cache.
@@ -42,11 +43,12 @@ const (
 // Runtime contains task run info
 type Runtime struct {
 	sync.Map
-	Cfg      *config.Config
-	Nodes    map[string]config.Node
-	Services *config.Services
-	WorkDir  string
-	LocalEm  *external.Manager
+	Cfg       *config.Config
+	Nodes     map[string]config.Node
+	Services  *config.Services
+	WorkDir   string
+	LocalEm   *external.Manager
+	LocalNode *config.Node
 }
 
 // LoadString load string value form sync map
@@ -71,25 +73,33 @@ func (r *Runtime) LoadInt(key any) (int, bool) {
 
 // Runner is a task runner.
 type Runner struct {
-	Runtime *Runtime
-	tasks   []Interface
-	cfg     *config.Config
-	init    bool
+	Runtime   *Runtime
+	tasks     []Interface
+	cfg       *config.Config
+	localNode *config.Node
+	init      bool
 }
 
 // Init initializes all tasks.
 func (r *Runner) Init() {
-	r.Runtime = &Runtime{Cfg: r.cfg, WorkDir: r.cfg.WorkDir}
+	r.Runtime = &Runtime{Cfg: r.cfg, WorkDir: r.cfg.WorkDir, LocalNode: r.localNode}
 	r.Runtime.Nodes = make(map[string]config.Node, len(r.cfg.Nodes))
 	for _, node := range r.cfg.Nodes {
 		r.Runtime.Nodes[node.Name] = node
 	}
 	r.Runtime.Services = &r.cfg.Services
 	logger := log.Logger.Subscribe(log.FieldKeyNode, "<LOCAL>")
-	em := external.NewManager(external.NewLocalRunner(&external.LocalRunnerCfg{
+	runnerCfg := &external.LocalRunnerCfg{
 		Logger:         logger,
 		MaxExitTimeout: r.cfg.CmdMaxExitTimeout,
-	}), logger)
+	}
+	if r.localNode != nil {
+		runnerCfg.User = r.localNode.Username
+		if r.localNode.Password != nil {
+			runnerCfg.Password = *r.localNode.Password
+		}
+	}
+	em := external.NewManager(external.NewLocalRunner(runnerCfg), logger)
 	r.Runtime.LocalEm = em
 
 	for _, task := range r.tasks {
@@ -129,9 +139,23 @@ func (r *Runner) Run(ctx context.Context) error {
 }
 
 // NewRunner creates a new task runner.
-func NewRunner(cfg *config.Config, tasks ...Interface) *Runner {
-	return &Runner{
-		tasks: tasks,
-		cfg:   cfg,
+func NewRunner(cfg *config.Config, tasks ...Interface) (*Runner, error) {
+	localIPs, err := utils.GetLocalIPs()
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
+	var localNode *config.Node
+	for i, node := range cfg.Nodes {
+		if isLocal, err := utils.IsLocalHost(node.Host, localIPs); err != nil {
+			return nil, errors.Trace(err)
+		} else if isLocal {
+			localNode = &cfg.Nodes[i]
+			break
+		}
+	}
+	return &Runner{
+		tasks:     tasks,
+		localNode: localNode,
+		cfg:       cfg,
+	}, nil
 }

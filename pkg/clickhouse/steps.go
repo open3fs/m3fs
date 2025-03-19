@@ -129,7 +129,7 @@ func (s *startContainerStep) Execute(ctx context.Context) error {
 	localConfigDir, _ := s.Runtime.Load("clickhouse_temp_config_dir")
 	localConfigFile := path.Join(localConfigDir.(string), "config.xml")
 	remoteConfigFile := path.Join(configDir, "config.xml")
-	if err := s.Em.Runner.Scp(localConfigFile, remoteConfigFile); err != nil {
+	if err := s.Em.Runner.Scp(ctx, localConfigFile, remoteConfigFile); err != nil {
 		return errors.Annotatef(err, "scp config.xml")
 	}
 
@@ -139,7 +139,7 @@ func (s *startContainerStep) Execute(ctx context.Context) error {
 	}
 	localSQLFile := path.Join(localConfigDir.(string), "3fs-monitor.sql")
 	remoteSQLFile := path.Join(sqlDir, "3fs-monitor.sql")
-	if err := s.Em.Runner.Scp(localSQLFile, remoteSQLFile); err != nil {
+	if err := s.Em.Runner.Scp(ctx, localSQLFile, remoteSQLFile); err != nil {
 		return errors.Annotatef(err, "scp 3fs-monitor.sql")
 	}
 

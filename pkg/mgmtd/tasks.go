@@ -99,7 +99,8 @@ func (t *DeleteMgmtdServiceTask) Init(r *task.Runtime, logger log.Interface) {
 	}
 	t.SetSteps([]task.StepConfig{
 		{
-			Nodes: nodes,
+			Nodes:    nodes,
+			Parallel: true,
 			NewStep: steps.NewRm3FSContainerStepFunc(
 				r.Services.Mgmtd.ContainerName,
 				ServiceName,
