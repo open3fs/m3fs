@@ -146,9 +146,8 @@ listen_port_rdma = 8000`
 }
 
 func (s *prepare3FSConfigStepSuite) testPrepareConfig(removeAllErr error) {
-	s.MockLocalFS.On("MkdirAll", "/root/3fs/mgmtd").Return(nil)
 	tmpDir := "/root/tmp..."
-	s.MockLocalFS.On("MkdirTemp", "/root/3fs/mgmtd", s.node.Name).Return(tmpDir, nil)
+	s.MockLocalFS.On("MkdirTemp", "/tmp", "prepare-3fs-config").Return(tmpDir, nil)
 	s.MockLocalFS.On("RemoveAll", tmpDir).Return(removeAllErr)
 	mainAppConfig, mainLauncherConfig, mainConfig, adminCli := s.getGeneratedConfigContent()
 	s.mockGenConfig(tmpDir+"/mgmtd_main_app.toml", mainAppConfig)
@@ -429,16 +428,15 @@ func (s *remoteRunScriptStepSuite) SetupTest() {
 }
 
 func (s *remoteRunScriptStepSuite) testPrepareConfig(removeAllErr error) {
-	s.MockLocalFS.On("MkdirAll", "/root/3fs/storage").Return(nil)
 	tmpDir := "/root/tmp..."
-	s.MockLocalFS.On("MkdirTemp", "/root/3fs/storage", s.node.Name).
+	s.MockLocalFS.On("MkdirTemp", "/tmp", "remote-run-script").
 		Return(tmpDir, nil)
 	s.MockLocalFS.On("RemoveAll", tmpDir).Return(removeAllErr)
 	tmpFilePath := tmpDir + "/tmp_script.sh"
 	s.MockLocalFS.On("WriteFile", tmpFilePath, []byte("ls -al"), os.FileMode(0777)).
 		Return(nil)
 	s.MockFS.On("MkdirAll", "/root/3fs/storage").Return(nil)
-	s.MockFS.On("MkTempFile", "/root/3fs/storage").Return(tmpFilePath, nil)
+	s.MockFS.On("MkTempFile", "/tmp").Return(tmpFilePath, nil)
 	s.MockRunner.On("Scp", tmpFilePath, tmpFilePath).Return(nil)
 	s.MockRunner.On("Exec", "bash", []string{tmpFilePath, "a", "b"}).Return("", nil)
 	s.MockRunner.On("Exec", "rm", []string{"-f", tmpFilePath}).Return("", nil)

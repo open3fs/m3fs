@@ -63,7 +63,7 @@ var clusterCmd = &cli.Command{
 				&cli.StringFlag{
 					Name:        "registry",
 					Aliases:     []string{"r"},
-					Usage:       "Image registry(default is null)",
+					Usage:       "Image registry(default is empty)",
 					Destination: &registry,
 				},
 			},

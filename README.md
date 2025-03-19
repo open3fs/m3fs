@@ -148,7 +148,13 @@ Firstly, download following images from docker hub, and upload them to your regi
 - open3fs/clickhouse:25.1-jammy
 - open3fs/3fs:20250315
 
-Then, create the cluster with `--registry` argument:
+Then, generating cluster config with `--registry` argument:
+
+```
+./m3fs config create --registry harbor.yourname.com
+```
+
+You can also use private registry, by creating the cluster with `--registry` argument:
 
 ```
 ./m3fs cluster create -c cluster.yml --registry harbor.yourname.com

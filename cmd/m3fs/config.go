@@ -46,6 +46,12 @@ var configCmd = &cli.Command{
 					Destination: &clusterName,
 				},
 				&cli.StringFlag{
+					Name:        "registry",
+					Aliases:     []string{"r"},
+					Usage:       "Image registry(default is empty)",
+					Destination: &registry,
+				},
+				&cli.StringFlag{
 					Name:        "file",
 					Aliases:     []string{"f"},
 					Usage:       "Specify a configuration file path(default:\"cluster.yml\")",
@@ -131,7 +137,8 @@ func createSampleConfig(ctx *cli.Context) error {
 		return errors.Annotate(err, "create sample config file")
 	}
 	err = tmpl.Execute(file, map[string]string{
-		"name": clusterName,
+		"name":     clusterName,
+		"registry": registry,
 	})
 	if err != nil {
 		return errors.Annotate(err, "write sample config file")

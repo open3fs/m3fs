@@ -108,11 +108,7 @@ func (s *prepare3FSConfigStep) getMoniterEndpoints() string {
 
 func (s *prepare3FSConfigStep) Execute(ctx context.Context) error {
 	localEm := s.Runtime.LocalEm
-	err := localEm.FS.MkdirAll(ctx, s.serviceWorkDir)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	tmpDir, err := localEm.FS.MkdirTemp(ctx, s.serviceWorkDir, s.Node.Name)
+	tmpDir, err := localEm.FS.MkdirTemp(ctx, os.TempDir(), "prepare-3fs-config")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -509,11 +505,7 @@ type remoteRunScriptStep struct {
 func (s *remoteRunScriptStep) Execute(ctx context.Context) error {
 	s.Logger.Infof("Start to run script %s on node", s.scriptName)
 	localEm := s.Runtime.LocalEm
-	err := localEm.FS.MkdirAll(ctx, s.workDir)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	tmpDir, err := localEm.FS.MkdirTemp(ctx, s.workDir, s.Node.Name)
+	tmpDir, err := localEm.FS.MkdirTemp(ctx, os.TempDir(), "remote-run-script")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -531,7 +523,7 @@ func (s *remoteRunScriptStep) Execute(ctx context.Context) error {
 	if err = s.Em.FS.MkdirAll(ctx, s.workDir); err != nil {
 		return errors.Trace(err)
 	}
-	remoteFile, err := s.Em.FS.MkTempFile(ctx, s.workDir)
+	remoteFile, err := s.Em.FS.MkTempFile(ctx, os.TempDir())
 	if err != nil {
 		return errors.Annotate(err, "make temp file")
 	}
