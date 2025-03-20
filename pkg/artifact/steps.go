@@ -190,16 +190,7 @@ func (s *distributeArtifactStep) Execute(ctx context.Context) error {
 	} else {
 		s.Logger.Infof("Skip copying existed artifact to %s", s.Node.Name)
 	}
-	tempDir, err := s.Em.FS.MkdirTemp(ctx, s.Runtime.WorkDir, "artifact")
-	if err != nil {
-		return errors.Trace(err)
-	}
-	s.Runtime.Store(s.GetNodeKey(task.RuntimeArtifactTmpDirKey), tempDir)
 
-	s.Logger.Infof("Extracting the artifact to %s on %s", tempDir, s.Node.Name)
-	if err = s.Em.FS.ExtractTar(ctx, dstPath, tempDir); err != nil {
-		return errors.Trace(err)
-	}
 	return nil
 }
 
@@ -208,11 +199,17 @@ type importArtifactStep struct {
 }
 
 func (s *importArtifactStep) Execute(ctx context.Context) error {
-	tempDir, ok := s.Runtime.LoadString(s.GetNodeKey(task.RuntimeArtifactTmpDirKey))
-	if !ok {
-		return errors.Errorf("Failed to get value of %s",
-			s.GetNodeKey(task.RuntimeArtifactTmpDirKey))
+	tempDir, err := s.Em.FS.MkdirTemp(ctx, s.Runtime.WorkDir, "artifact")
+	if err != nil {
+		return errors.Trace(err)
 	}
+	s.Runtime.Store(s.GetNodeKey(task.RuntimeArtifactTmpDirKey), tempDir)
+	pkgPath := filepath.Join(s.Runtime.WorkDir, "3fs.tar.gz")
+	s.Logger.Infof("Extracting the artifact to %s on %s", tempDir, s.Node.Name)
+	if err = s.Em.FS.ExtractTar(ctx, pkgPath, tempDir); err != nil {
+		return errors.Trace(err)
+	}
+
 	imageNames := []string{
 		config.ImageNameFdb,
 		config.ImageNameClickhouse,

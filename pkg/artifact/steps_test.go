@@ -223,14 +223,8 @@ func (s *distributeArtifactStepSuite) SetupTest() {
 
 func (s *distributeArtifactStepSuite) TestWithExisted() {
 	s.MockFS.On("Sha256sum", "/root/3fs/3fs.tar.gz").Return("xxx", nil)
-	s.MockFS.On("MkdirTemp", "/root/3fs", "artifact").Return("/root/3fs/artifact-xxx", nil)
-	s.MockFS.On("ExtractTar", "/root/3fs/3fs.tar.gz", "/root/3fs/artifact-xxx").Return(nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
-
-	tempDir, ok := s.Runtime.LoadString(s.step.GetNodeKey(task.RuntimeArtifactTmpDirKey))
-	s.True(ok)
-	s.Equal("/root/3fs/artifact-xxx", tempDir)
 
 	s.MockFS.AssertExpectations(s.T())
 }
@@ -239,8 +233,6 @@ func (s *distributeArtifactStepSuite) TestWithNotExisted() {
 	s.MockFS.On("Sha256sum", "/root/3fs/3fs.tar.gz").Return("", fmt.Errorf("Dummy error"))
 	s.MockFS.On("MkdirAll", "/root/3fs").Return(nil)
 	s.MockRunner.On("Scp", "/root/3fs.tar.gz", "/root/3fs/3fs.tar.gz").Return(nil)
-	s.MockFS.On("MkdirTemp", "/root/3fs", "artifact").Return("/root/3fs/artifact-xxx", nil)
-	s.MockFS.On("ExtractTar", "/root/3fs/3fs.tar.gz", "/root/3fs/artifact-xxx").Return(nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
 
@@ -283,7 +275,6 @@ func (s *importArtifactStepSuite) SetupTest() {
 	s.step = &importArtifactStep{}
 	s.SetupRuntime()
 	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
-	s.Runtime.Store(s.step.GetNodeKey(task.RuntimeArtifactTmpDirKey), "/root/3fs/artifact-xxx")
 	s.images = []*importImageInfo{
 		newImportImageInfo(s.Runtime, config.ImageNameFdb),
 		newImportImageInfo(s.Runtime, config.ImageNameClickhouse),
@@ -292,16 +283,24 @@ func (s *importArtifactStepSuite) SetupTest() {
 }
 
 func (s *importArtifactStepSuite) TestWithoutRegistry() {
+	s.MockFS.On("MkdirTemp", "/root/3fs", "artifact").Return("/root/3fs/artifact-xxx", nil)
+	s.MockFS.On("ExtractTar", "/root/3fs/3fs.tar.gz", "/root/3fs/artifact-xxx").Return(nil)
 	for _, image := range s.images {
 		s.MockDocker.On("Load", image.filePath).Return("", nil)
 	}
 
 	s.NoError(s.step.Execute(s.Ctx()))
 
+	tempDir, ok := s.Runtime.LoadString(s.step.GetNodeKey(task.RuntimeArtifactTmpDirKey))
+	s.True(ok)
+	s.Equal("/root/3fs/artifact-xxx", tempDir)
+
 	s.MockDocker.AssertExpectations(s.T())
 }
 
 func (s *importArtifactStepSuite) TestWithReigstry() {
+	s.MockFS.On("MkdirTemp", "/root/3fs", "artifact").Return("/root/3fs/artifact-xxx", nil)
+	s.MockFS.On("ExtractTar", "/root/3fs/3fs.tar.gz", "/root/3fs/artifact-xxx").Return(nil)
 	s.Runtime.Cfg.Images.Registry = "harbor.xxx.com"
 	for _, image := range s.images {
 		s.MockDocker.On("Load", image.filePath).Return("", nil)
@@ -309,6 +308,10 @@ func (s *importArtifactStepSuite) TestWithReigstry() {
 	}
 
 	s.NoError(s.step.Execute(s.Ctx()))
+
+	tempDir, ok := s.Runtime.LoadString(s.step.GetNodeKey(task.RuntimeArtifactTmpDirKey))
+	s.True(ok)
+	s.Equal("/root/3fs/artifact-xxx", tempDir)
 
 	s.MockDocker.AssertExpectations(s.T())
 }

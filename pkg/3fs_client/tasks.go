@@ -66,7 +66,7 @@ type Create3FSClientServiceTask struct {
 
 // Init initializes the task.
 func (t *Create3FSClientServiceTask) Init(r *task.Runtime, logger log.Interface) {
-	t.BaseTask.SetName("Create3FSClicnetServiceTask")
+	t.BaseTask.SetName("Create3FSClientServiceTask")
 	t.BaseTask.Init(r, logger)
 	nodes := make([]config.Node, len(r.Cfg.Services.Client.Nodes))
 	client := r.Cfg.Services.Client
