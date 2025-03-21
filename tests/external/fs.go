@@ -80,8 +80,8 @@ func (m *MockFS) Sha256sum(ctx context.Context, path string) (string, error) {
 }
 
 // Tar mock.
-func (m *MockFS) Tar(srcPaths []string, basePath, dstPath string) error {
-	return m.Called(srcPaths, basePath, dstPath).Error(0)
+func (m *MockFS) Tar(srcPaths []string, basePath, dstPath string, needGzip bool) error {
+	return m.Called(srcPaths, basePath, dstPath, needGzip).Error(0)
 }
 
 // ExtractTar mock.

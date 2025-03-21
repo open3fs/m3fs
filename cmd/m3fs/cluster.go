@@ -57,13 +57,13 @@ var clusterCmd = &cli.Command{
 				&cli.StringFlag{
 					Name:        "workdir",
 					Aliases:     []string{"w"},
-					Usage:       "Path to the working directory(default is current directory)",
+					Usage:       "Path to the working directory (default is current directory)",
 					Destination: &workDir,
 				},
 				&cli.StringFlag{
 					Name:        "registry",
 					Aliases:     []string{"r"},
-					Usage:       "Image registry(default is empty)",
+					Usage:       "Image registry (default is empty)",
 					Destination: &registry,
 				},
 			},
@@ -84,13 +84,13 @@ var clusterCmd = &cli.Command{
 				&cli.StringFlag{
 					Name:        "workdir",
 					Aliases:     []string{"w"},
-					Usage:       "Path to the working directory(default is current directory)",
+					Usage:       "Path to the working directory (default is current directory)",
 					Destination: &workDir,
 				},
 				&cli.BoolFlag{
 					Name:        "all",
 					Aliases:     []string{"a"},
-					Usage:       "Remove images, packages and scripts(default is false)",
+					Usage:       "Remove images, packages and scripts",
 					Destination: &clusterDeleteAll,
 				},
 			},

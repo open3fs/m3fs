@@ -31,6 +31,7 @@ import (
 const (
 	RuntimeArtifactTmpDirKey    = "artifact/tmp_dir"
 	RuntimeArtifactPathKey      = "artifact/path"
+	RuntimeArtifactGzipKey      = "artifact/gzip"
 	RuntimeArtifactSha256sumKey = "artifact/sha256sum"
 	RuntimeArtifactFilePathsKey = "artifact/file_paths"
 
@@ -59,6 +60,16 @@ func (r *Runtime) LoadString(key any) (string, bool) {
 	}
 
 	return valI.(string), true
+}
+
+// LoadBool load bool value form sync map
+func (r *Runtime) LoadBool(key any) (bool, bool) {
+	valI, ok := r.Load(key)
+	if !ok {
+		return false, false
+	}
+
+	return valI.(bool), true
 }
 
 // LoadInt load int value form sync map

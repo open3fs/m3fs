@@ -41,20 +41,20 @@ var configCmd = &cli.Command{
 				&cli.StringFlag{
 					Name:        "name",
 					Aliases:     []string{"n"},
-					Usage:       "3FS cluster name(default:\"open3fs\")",
+					Usage:       "3FS cluster name (default: \"open3fs\")",
 					Value:       "open3fs",
 					Destination: &clusterName,
 				},
 				&cli.StringFlag{
 					Name:        "registry",
 					Aliases:     []string{"r"},
-					Usage:       "Image registry(default is empty)",
+					Usage:       "Image registry (default is empty)",
 					Destination: &registry,
 				},
 				&cli.StringFlag{
 					Name:        "file",
 					Aliases:     []string{"f"},
-					Usage:       "Specify a configuration file path(default:\"cluster.yml\")",
+					Usage:       "Specify a configuration file path (default: \"cluster.yml\")",
 					Destination: &sampleConfigPath,
 					Value:       "cluster.yml",
 				},

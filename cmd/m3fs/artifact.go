@@ -45,8 +45,15 @@ var artifactCmd = &cli.Command{
 				&cli.StringFlag{
 					Name:        "tmp-dir",
 					Aliases:     []string{"t"},
-					Usage:       "Temporary dir used to save downloaded packages(default is /tmp/3fs)",
+					Usage:       "Temporary dir used to save downloaded packages (default: \"/tmp/3fs\")",
 					Destination: &tmpDir,
+					Required:    false,
+				},
+				&cli.BoolFlag{
+					Name:        "gzip",
+					Aliases:     []string{"z"},
+					Usage:       "Archive the artifact through gzip",
+					Destination: &artifactGzip,
 					Required:    false,
 				},
 				&cli.StringFlag{
@@ -85,6 +92,9 @@ func exportArtifact(ctx *cli.Context) error {
 		return errors.Trace(err)
 	}
 	if err = runner.Store(task.RuntimeArtifactPathKey, outputPath); err != nil {
+		return errors.Trace(err)
+	}
+	if err = runner.Store(task.RuntimeArtifactGzipKey, artifactGzip); err != nil {
 		return errors.Trace(err)
 	}
 	if err = runner.Run(ctx.Context); err != nil {

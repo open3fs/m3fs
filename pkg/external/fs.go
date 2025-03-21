@@ -40,7 +40,7 @@ type FSInterface interface {
 	ReadRemoteFile(string) (string, error)
 	IsNotExist(string) (bool, error)
 	Sha256sum(context.Context, string) (string, error)
-	Tar(srcPaths []string, basePath, dstPath string) error
+	Tar(srcPaths []string, basePath, dstPath string, needGzip bool) error
 	ExtractTar(ctx context.Context, srcPath, dstDir string) error
 }
 
@@ -174,7 +174,7 @@ func (fe *fsExternal) Sha256sum(ctx context.Context, path string) (string, error
 	return parts[0], nil
 }
 
-func (fe *fsExternal) Tar(srcPaths []string, basePath, dstPath string) error {
+func (fe *fsExternal) Tar(srcPaths []string, basePath, dstPath string, needGzip bool) error {
 	if fe.returnUnimplemented {
 		return errors.New("unimplemented")
 	}
@@ -188,13 +188,18 @@ func (fe *fsExternal) Tar(srcPaths []string, basePath, dstPath string) error {
 		}
 	}()
 
-	gzipWriter := gzip.NewWriter(outputFile)
-	defer func() {
-		if err := gzipWriter.Close(); err != nil {
-			fe.logger.Warnf("Failed to close gzip writer: %v", err)
-		}
-	}()
-	tarWriter := tar.NewWriter(gzipWriter)
+	var tarWriter *tar.Writer
+	if needGzip {
+		gzipWriter := gzip.NewWriter(outputFile)
+		defer func() {
+			if err := gzipWriter.Close(); err != nil {
+				fe.logger.Warnf("Failed to close gzip writer: %v", err)
+			}
+		}()
+		tarWriter = tar.NewWriter(gzipWriter)
+	} else {
+		tarWriter = tar.NewWriter(outputFile)
+	}
 	defer func() {
 		if err := tarWriter.Close(); err != nil {
 			fe.logger.Warnf("Failed to close tar writer: %v", err)
@@ -246,7 +251,7 @@ func (fe *fsExternal) addToTar(tarWriter *tar.Writer, srcPath, basePath string) 
 }
 
 func (fe *fsExternal) ExtractTar(ctx context.Context, srcPath, dstDir string) error {
-	_, err := fe.run(ctx, "tar", "-zxvf", srcPath, "-C", dstDir)
+	_, err := fe.run(ctx, "tar", "-axf", srcPath, "-C", dstDir)
 	if err != nil {
 		return errors.Trace(err)
 	}

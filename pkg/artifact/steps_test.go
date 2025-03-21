@@ -158,13 +158,29 @@ func (s *tarFilesStepSuite) SetupTest() {
 		[]string{"/tmp/3fs/3fs_20250315_amd64.docker"})
 	s.Runtime.Store(task.RuntimeArtifactTmpDirKey, "/tmp/3fs")
 	s.Runtime.Store(task.RuntimeArtifactPathKey, "/root/3fs.tar.gz")
+	s.Runtime.Store(task.RuntimeArtifactGzipKey, true)
 }
 
-func (s *tarFilesStepSuite) Test() {
+func (s *tarFilesStepSuite) TestWithGzip() {
 	s.MockLocalFS.On("Tar",
 		[]string{"/tmp/3fs/3fs_20250315_amd64.docker"},
 		"/tmp/3fs",
-		"/root/3fs.tar.gz").
+		"/root/3fs.tar.gz",
+		true).
+		Return(nil)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.MockLocalFS.AssertExpectations(s.T())
+}
+
+func (s *tarFilesStepSuite) TestWithoutGzip() {
+	s.Runtime.Store(task.RuntimeArtifactGzipKey, false)
+	s.MockLocalFS.On("Tar",
+		[]string{"/tmp/3fs/3fs_20250315_amd64.docker"},
+		"/tmp/3fs",
+		"/root/3fs.tar.gz",
+		false).
 		Return(nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))

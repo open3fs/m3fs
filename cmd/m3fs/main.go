@@ -29,6 +29,7 @@ var (
 	debug            bool
 	configFilePath   string
 	artifactPath     string
+	artifactGzip     bool
 	outputPath       string
 	tmpDir           string
 	workDir          string

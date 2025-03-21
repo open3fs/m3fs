@@ -133,9 +133,13 @@ func (s *tarFilesStep) Execute(context.Context) error {
 	if !ok {
 		return errors.Errorf("Failed to get value of %s", task.RuntimeArtifactTmpDirKey)
 	}
+	needGzip, ok := s.Runtime.LoadBool(task.RuntimeArtifactGzipKey)
+	if !ok {
+		return errors.Errorf("Failed to get value of %s", task.RuntimeArtifactGzipKey)
+	}
 
 	s.Logger.Infof("Generating tar files %s", dstPath)
-	if err := s.Runtime.LocalEm.FS.Tar(filePaths, tmpDir, dstPath); err != nil {
+	if err := s.Runtime.LocalEm.FS.Tar(filePaths, tmpDir, dstPath, needGzip); err != nil {
 		return errors.Trace(err)
 	}
 	s.Logger.Infof("Generated tar files %s", dstPath)
@@ -151,12 +155,13 @@ func (s *sha256sumArtifactStep) Execute(ctx context.Context) error {
 	if !ok {
 		return errors.Errorf("Failed to get value of %s", task.RuntimeArtifactPathKey)
 	}
+	s.Logger.Infof("Generating SHA256 checksum of artifact %s", srcPath)
 	localSum, err := s.Runtime.LocalEm.FS.Sha256sum(ctx, srcPath)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	s.Runtime.Store(task.RuntimeArtifactSha256sumKey, localSum)
-	s.Logger.Debugf("SHA256 checksum of artifact %s is %s", srcPath, localSum)
+	s.Logger.Infof("SHA256 checksum of artifact %s is %s", srcPath, localSum)
 	return nil
 }
 
@@ -230,6 +235,7 @@ func (s *importArtifactStep) loadImage(ctx context.Context, imageName, tempDir s
 		return errors.Trace(err)
 	}
 	imageFilePath := filepath.Join(tempDir, imageFileName)
+	s.Logger.Infof("Loading image %s on %s", imageName, s.Node.Name)
 	if _, err = s.Em.Docker.Load(ctx, imageFilePath); err != nil {
 		return errors.Trace(err)
 	}
