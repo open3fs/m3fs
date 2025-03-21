@@ -24,6 +24,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/task"
 	ttask "github.com/open3fs/m3fs/tests/task"
 )
 
@@ -54,7 +55,7 @@ func (s *genMonitorConfigStepSuite) Test() {
 
 	s.NoError(s.step.Execute(s.Ctx()))
 
-	tmpDirValue, ok := s.Runtime.Load("monitor_temp_config_dir")
+	tmpDirValue, ok := s.Runtime.Load(task.RuntimeMonitorTmpDirKey)
 	s.True(ok)
 	tmpDir := tmpDirValue.(string)
 	s.Equal("/tmp/3fs-monitor.xxx", tmpDir)
@@ -76,7 +77,7 @@ func (s *runContainerStepSuite) SetupTest() {
 	s.step = &runContainerStep{}
 	s.SetupRuntime()
 	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
-	s.Runtime.Store("monitor_temp_config_dir", "/tmp/3f-monitor.xxx")
+	s.Runtime.Store(task.RuntimeMonitorTmpDirKey, "/tmp/3f-monitor.xxx")
 }
 
 func (s *runContainerStepSuite) Test() {

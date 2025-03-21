@@ -35,8 +35,10 @@ const (
 	RuntimeArtifactSha256sumKey = "artifact/sha256sum"
 	RuntimeArtifactFilePathsKey = "artifact/file_paths"
 
-	RuntimeFdbClusterFileContentKey = "fdb_cluster_file_content"
-	RuntimeMgmtdServerAddressesKey  = "mgmtd_server_addresses"
+	RuntimeClickhouseTmpDirKey      = "clickhouse/tmp_dir"
+	RuntimeMonitorTmpDirKey         = "monitor/tmp_dir"
+	RuntimeFdbClusterFileContentKey = "fdb/cluster_file_content"
+	RuntimeMgmtdServerAddressesKey  = "mgmtd/server_addresses"
 	RuntimeUserTokenKey             = "user_token"
 	RuntimeAdminCliTomlKey          = "admin_cli_toml"
 )

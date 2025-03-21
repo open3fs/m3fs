@@ -25,6 +25,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/task"
 	ttask "github.com/open3fs/m3fs/tests/task"
 )
 
@@ -58,7 +59,7 @@ func (s *genClickhouseConfigStepSuite) Test() {
 
 	s.NoError(s.step.Execute(s.Ctx()))
 
-	tmpDirValue, ok := s.Runtime.Load("clickhouse_temp_config_dir")
+	tmpDirValue, ok := s.Runtime.Load(task.RuntimeClickhouseTmpDirKey)
 	s.True(ok)
 	tmpDir := tmpDirValue.(string)
 	s.Equal("/tmp/3fs-clickhouse.xxx", tmpDir)
@@ -79,7 +80,7 @@ func (s *startContainerStepSuite) SetupTest() {
 
 	s.step = &startContainerStep{}
 	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
-	s.Runtime.Store("clickhouse_temp_config_dir", "/tmp/3f-clickhouse.xxx")
+	s.Runtime.Store(task.RuntimeClickhouseTmpDirKey, "/tmp/3f-clickhouse.xxx")
 }
 
 func (s *startContainerStepSuite) TestStartContainerStep() {

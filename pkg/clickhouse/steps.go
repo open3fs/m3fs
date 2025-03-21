@@ -69,7 +69,7 @@ func (s *genClickhouseConfigStep) Execute(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	s.Runtime.Store("clickhouse_temp_config_dir", tempDir)
+	s.Runtime.Store(task.RuntimeClickhouseTmpDirKey, tempDir)
 
 	configFileName := "config.xml"
 	configTmpl, err := template.New(configFileName).Parse(string(ClickhouseConfigTmpl))
@@ -126,8 +126,11 @@ func (s *startContainerStep) Execute(ctx context.Context) error {
 	if err := s.Em.FS.MkdirAll(ctx, configDir); err != nil {
 		return errors.Annotatef(err, "mkdir %s", configDir)
 	}
-	localConfigDir, _ := s.Runtime.Load("clickhouse_temp_config_dir")
-	localConfigFile := path.Join(localConfigDir.(string), "config.xml")
+	localConfigDir, ok := s.Runtime.LoadString(task.RuntimeClickhouseTmpDirKey)
+	if !ok {
+		return errors.Errorf("Failed to get value of %s", task.RuntimeClickhouseTmpDirKey)
+	}
+	localConfigFile := path.Join(localConfigDir, "config.xml")
 	remoteConfigFile := path.Join(configDir, "config.xml")
 	if err := s.Em.Runner.Scp(ctx, localConfigFile, remoteConfigFile); err != nil {
 		return errors.Annotatef(err, "scp config.xml")
@@ -137,7 +140,7 @@ func (s *startContainerStep) Execute(ctx context.Context) error {
 	if err := s.Em.FS.MkdirAll(ctx, sqlDir); err != nil {
 		return errors.Annotatef(err, "mkdir %s", sqlDir)
 	}
-	localSQLFile := path.Join(localConfigDir.(string), "3fs-monitor.sql")
+	localSQLFile := path.Join(localConfigDir, "3fs-monitor.sql")
 	remoteSQLFile := path.Join(sqlDir, "3fs-monitor.sql")
 	if err := s.Em.Runner.Scp(ctx, localSQLFile, remoteSQLFile); err != nil {
 		return errors.Annotatef(err, "scp 3fs-monitor.sql")

@@ -18,6 +18,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/log"
 	"github.com/open3fs/m3fs/pkg/task"
+	"github.com/open3fs/m3fs/pkg/task/steps"
 )
 
 // CreateMonitorTask is a task for creating a 3fs monitor.
@@ -41,6 +42,10 @@ func (t *CreateMonitorTask) Init(r *task.Runtime, logger log.Interface) {
 		{
 			Nodes:   []config.Node{nodes[0]},
 			NewStep: func() task.Step { return new(runContainerStep) },
+		},
+		{
+			Nodes:   []config.Node{nodes[0]},
+			NewStep: steps.NewCleanupLocalStepFunc(task.RuntimeMonitorTmpDirKey),
 		},
 	})
 }

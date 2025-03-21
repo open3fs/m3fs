@@ -60,7 +60,7 @@ func (s *genMonitorConfigStep) Execute(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	s.Runtime.Store("monitor_temp_config_dir", tempDir)
+	s.Runtime.Store(task.RuntimeMonitorTmpDirKey, tempDir)
 
 	fileName := "monitor_collector_main.toml"
 	tmpl, err := template.New(fileName).Parse(string(MonitorCollectorMainTmpl))
@@ -106,7 +106,7 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotatef(err, "mkdir %s", etcDir)
 	}
-	localConfigDir, _ := s.Runtime.Load("monitor_temp_config_dir")
+	localConfigDir, _ := s.Runtime.Load(task.RuntimeMonitorTmpDirKey)
 	localConfigFile := path.Join(localConfigDir.(string), "monitor_collector_main.toml")
 	remoteConfigFile := path.Join(etcDir, "monitor_collector_main.toml")
 	if err := s.Em.Runner.Scp(ctx, localConfigFile, remoteConfigFile); err != nil {
