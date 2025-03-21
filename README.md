@@ -187,3 +187,67 @@ images:
     repo: "open3fs/clickhouse"
     tag: "25.1-jammy"
 ```
+
+### Install For Large-Scale Cluster
+
+For large-scale deployments, m3fs supports using the **nodeGroups** property in *cluster.yml* instead of individually listing each node in the **nodes** property.
+
+For example, to deploy a 20-node cluster, you can organize nodes into functional groups:
+
+- A management and metadata group (3 nodes)
+- A storage services group (10 nodes)
+- A client group (7 nodes)
+
+This approach simplifies configuration and management of large clusters by defining IP ranges for each node group.
+
+```
+...
+# Above content are same as before
+nodeGroups:
+  - name: meta
+    username: "root"
+    ipBegin: "192.168.1.1"
+    ipEnd: "192.168.1.3"
+  - name: storage
+    username: "root"
+    ipBegin: "192.168.1.11"
+    ipEnd: "192.168.1.20"
+  - name: client
+    username: "root"
+    ipBegin: "192.168.1.31"
+    ipEnd: "192.168.1.37"
+services:
+  client:
+    containerName: 3fs-client
+    nodeGroups:
+      - group1
+    hostMountpoint: /mnt/3fs
+  storage:
+    containerName: 3fs-storage
+    nodeGroups:
+      - storage
+    diskType: "nvme"
+  mgmtd:
+    containerName: 3fs-mgmtd
+    nodeGroups:
+      - meta
+  meta:
+    containerName: 3fs-meta
+    nodeGroups:
+      - meta
+  monitor:
+    containerName: 3fs-monitor
+    nodeGroups:
+      - meta
+  fdb:
+    containerName: 3fs-fdb
+    nodeGroups:
+      - meta
+  clickhouse:
+    containerName: 3fs-clickhouse
+    nodeGroups:
+      - meta
+
+# Following content are same as before
+...
+```
