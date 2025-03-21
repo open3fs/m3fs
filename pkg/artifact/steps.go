@@ -236,9 +236,11 @@ func (s *importArtifactStep) loadImage(ctx context.Context, imageName, tempDir s
 	}
 	imageFilePath := filepath.Join(tempDir, imageFileName)
 	s.Logger.Infof("Loading image %s on %s", imageName, s.Node.Name)
-	if _, err = s.Em.Docker.Load(ctx, imageFilePath); err != nil {
+	out, err := s.Em.Docker.Load(ctx, imageFilePath)
+	if err != nil {
 		return errors.Trace(err)
 	}
+	s.Logger.Infof("%s ", strings.TrimSpace(out))
 	if s.Runtime.Cfg.Images.Registry != "" {
 		imageWithRegistry, err := s.Runtime.Cfg.Images.GetImage(imageName)
 		if err != nil {

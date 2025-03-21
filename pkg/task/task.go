@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -71,7 +72,7 @@ func (t *BaseTask) Name() string {
 	return t.name
 }
 
-func (t *BaseTask) newStepExecuter(newStepFunc func() Step) func(context.Context, config.Node) error {
+func (t *BaseTask) newStepExecuter(newStepFunc func() Step, retryTime int) func(context.Context, config.Node) error {
 	return func(ctx context.Context, node config.Node) error {
 		step := newStepFunc()
 		logger := t.Logger.Subscribe(log.FieldKeyNode, node.Name)
@@ -87,14 +88,23 @@ func (t *BaseTask) newStepExecuter(newStepFunc func() Step) func(context.Context
 			}
 		}
 		step.Init(t.Runtime, em, node, logger)
-		return errors.Trace(step.Execute(ctx))
+		for i := 0; i <= retryTime; i++ {
+			err = step.Execute(ctx)
+			if err != nil && i != retryTime {
+				logger.Warnf("Step failed, retrying: %v", err)
+				time.Sleep(time.Second)
+				continue
+			}
+			break
+		}
+		return errors.Trace(err)
 	}
 }
 
 // ExecuteSteps executes all the steps of the task.
 func (t *BaseTask) ExecuteSteps(ctx context.Context) error {
 	for _, stepCfg := range t.steps {
-		executor := t.newStepExecuter(stepCfg.NewStep)
+		executor := t.newStepExecuter(stepCfg.NewStep, stepCfg.RetryTime)
 		if stepCfg.Parallel && len(stepCfg.Nodes) > 1 {
 			workerPool := common.NewWorkerPool(executor, len(stepCfg.Nodes))
 			workerPool.Start(ctx)
@@ -115,7 +125,16 @@ func (t *BaseTask) ExecuteSteps(ctx context.Context) error {
 			}
 		} else {
 			for _, node := range stepCfg.Nodes {
-				if err := executor(ctx, node); err != nil {
+				var err error
+				for i := 0; i <= stepCfg.RetryTime; i++ {
+					if err = executor(ctx, node); err != nil && i != stepCfg.RetryTime {
+						t.Logger.Warnf("Step failed, retrying: %v", err)
+						time.Sleep(time.Second)
+						continue
+					}
+					break
+				}
+				if err != nil {
 					return errors.Trace(err)
 				}
 			}
@@ -133,9 +152,10 @@ type Step interface {
 
 // StepConfig is a struct that holds the configuration of a step.
 type StepConfig struct {
-	Nodes    []config.Node
-	Parallel bool
-	NewStep  func() Step
+	Nodes     []config.Node
+	Parallel  bool
+	RetryTime int
+	NewStep   func() Step
 }
 
 // BaseStep is a base struct that all steps should embed.

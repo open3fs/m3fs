@@ -44,8 +44,9 @@ func (t *CreateFdbClusterTask) Init(r *task.Runtime, logger log.Interface) {
 			NewStep:  func() task.Step { return new(runContainerStep) },
 		},
 		{
-			Nodes:   []config.Node{nodes[0]},
-			NewStep: func() task.Step { return new(initClusterStep) },
+			Nodes:     []config.Node{nodes[0]},
+			RetryTime: 10,
+			NewStep:   func() task.Step { return new(initClusterStep) },
 		},
 	})
 }
