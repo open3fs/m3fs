@@ -44,8 +44,9 @@ func (s *configSuite) newConfig() *Config {
 	cfg := NewConfigWithDefaults()
 	cfg.Nodes = []Node{
 		{
-			Name: "node1",
-			Host: "localhost",
+			Name:     "node1",
+			Host:     "localhost",
+			Username: "node1",
 		},
 	}
 	cfg.Services.Fdb.Nodes = []string{"node1"}
@@ -212,4 +213,137 @@ func (s *configSuite) TestWithImageNoRepo() {
 	cfg.Images.Fdb.Repo = ""
 
 	s.Error(cfg.SetValidate("", ""), "images.fdb.repo is required")
+}
+
+func (s *configSuite) TestWithDupGroupName() {
+	cfg := s.newConfigWithDefaults()
+	cfg.NodeGroups = append(cfg.NodeGroups, NodeGroup{
+		Name: "group1",
+	})
+	cfg.NodeGroups = append(cfg.NodeGroups, NodeGroup{
+		Name: "group1",
+	})
+
+	s.Error(cfg.SetValidate("", ""), "duplicate node group name: group1")
+}
+
+func (s *configSuite) TestWithNoNodeGroupName() {
+	cfg := s.newConfigWithDefaults()
+	cfg.NodeGroups = append(cfg.NodeGroups, NodeGroup{
+		Name: "",
+	})
+
+	s.Error(cfg.SetValidate("", ""), "nodeGroups[0].name is required")
+}
+
+func (s *configSuite) TestWithNoNodeGroupIPOverlap() {
+	cfg := s.newConfigWithDefaults()
+	cfg.NodeGroups = append(cfg.NodeGroups, NodeGroup{
+		Name:    "gp1",
+		IPBegin: "10.1.1.1",
+		IPEnd:   "10.1.1.5",
+	})
+	cfg.NodeGroups = append(cfg.NodeGroups, NodeGroup{
+		Name:    "gp2",
+		IPBegin: "10.1.1.4",
+		IPEnd:   "10.1.1.6",
+	})
+
+	s.Error(cfg.SetValidate("", ""), "node group gp2 and gp1 ip range overlap")
+}
+
+func (s *configSuite) TestWithEmptyNodeGroupIP() {
+	cfg := s.newConfigWithDefaults()
+	cfg.NodeGroups = append(cfg.NodeGroups, NodeGroup{
+		Name:    "gp1",
+		IPBegin: "1.1.1.1",
+		IPEnd:   "1.1.1.0",
+	})
+
+	s.Error(cfg.SetValidate("", ""), "node group gp1 ip range is empty")
+}
+
+func (s *configSuite) TestWithNodeNodeGroupIPDup() {
+	cfg := s.newConfigWithDefaults()
+	cfg.Nodes = append(cfg.Nodes, Node{
+		Name:     "gp1",
+		Host:     "1.1.1.2",
+		Username: "root",
+	})
+	cfg.NodeGroups = append(cfg.NodeGroups, NodeGroup{
+		Name:     "gp1",
+		IPBegin:  "1.1.1.1",
+		IPEnd:    "1.1.1.3",
+		Username: "username",
+	})
+
+	s.Error(cfg.SetValidate("", ""), "node ip 1.1.1.2 duplicate in node group gp1")
+}
+
+func (s *configSuite) TestWithNodeNodegroupIpDup() {
+	cfg := s.newConfigWithDefaults()
+	cfg.Nodes = append(cfg.Nodes, Node{
+		Name:     "gp1",
+		Host:     "1.1.1.2",
+		Username: "root",
+	})
+	cfg.NodeGroups = append(cfg.NodeGroups, NodeGroup{
+		Name:     "gp1",
+		IPBegin:  "1.1.1.1",
+		IPEnd:    "1.1.1.3",
+		Username: "username",
+	})
+
+	s.Error(cfg.SetValidate("", ""), "node ip 1.1.1.2 duplicate in node group gp1")
+}
+
+func (s *configSuite) TestParseNodeGroup() {
+	cfg := s.newConfigWithDefaults()
+	cfg.NodeGroups = append(cfg.NodeGroups, NodeGroup{
+		Name:     "gp1",
+		IPBegin:  "1.1.1.1",
+		IPEnd:    "1.1.1.3",
+		Username: "root",
+	})
+	cfg.Services.Fdb.NodeGroups = []string{"gp1"}
+	cfg.Services.Clickhouse.NodeGroups = []string{"gp1"}
+	cfg.Services.Monitor.NodeGroups = []string{"gp1"}
+	cfg.Services.Mgmtd.NodeGroups = []string{"gp1"}
+	cfg.Services.Meta.NodeGroups = []string{"gp1"}
+	cfg.Services.Storage.NodeGroups = []string{"gp1"}
+	cfg.Services.Client.NodeGroups = []string{"gp1"}
+
+	s.NoError(cfg.SetValidate("", ""))
+
+	nodesExp := []Node{
+		{
+			Name:     "gp1-node(1.1.1.1)",
+			Host:     "1.1.1.1",
+			Username: "root",
+			Port:     22,
+		},
+		{
+			Name:     "gp1-node(1.1.1.2)",
+			Host:     "1.1.1.2",
+			Username: "root",
+			Port:     22,
+		},
+		{
+			Name:     "gp1-node(1.1.1.3)",
+			Host:     "1.1.1.3",
+			Username: "root",
+			Port:     22,
+		},
+	}
+	s.Equal(nodesExp, cfg.NodeGroups[0].Nodes)
+	serviceNodes := []string{"node1", "gp1-node(1.1.1.1)", "gp1-node(1.1.1.2)", "gp1-node(1.1.1.3)"}
+	s.Equal(serviceNodes, cfg.Services.Fdb.Nodes)
+	s.Equal(serviceNodes, cfg.Services.Clickhouse.Nodes)
+	s.Equal(serviceNodes, cfg.Services.Monitor.Nodes)
+	s.Equal(serviceNodes, cfg.Services.Mgmtd.Nodes)
+	s.Equal(serviceNodes, cfg.Services.Meta.Nodes)
+	s.Equal(serviceNodes, cfg.Services.Storage.Nodes)
+	s.Equal(serviceNodes, cfg.Services.Client.Nodes)
+	nodesExp = append([]Node{cfg.Nodes[0]}, nodesExp...)
+	s.Equal(nodesExp, cfg.Nodes)
 }

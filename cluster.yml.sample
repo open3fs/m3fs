@@ -24,6 +24,18 @@ nodes:
     host: "192.168.1.2"
     username: "root"
     password: "password"
+# nodeGroups is used to defines a group of nodes in a ip range with same username and password configuration
+nodeGroups:
+    # name is the name of node group
+  - name: group1
+    # username is used for ssh authentication.
+    username: "root"
+    # password is used for ssh authentication.
+    password: "password"
+    # ipBegin defines the begin ip of node group(include this ip)
+    ipBegin: "192.168.1.10"
+    # ipBegin defines the begin ip of node group(include this ip)
+    ipEnd: "192.168.1.15"
 services:
   client:
     # containerName defines the container name of 3fs client.
@@ -31,6 +43,9 @@ services:
     containerName: 3fs-client
     nodes: 
       - node1
+    # nodeGroups defines the node groups that deploy the 3fs client
+    nodeGroups:
+      - group1
     # hostMountpoint defines the mount point for 3fs on the client node.
     # Default value is "/mnt/3fs"
     hostMountpoint: /mnt/3fs
@@ -41,6 +56,9 @@ services:
     nodes: 
       - node1
       - node2
+    # nodeGroups defines the node groups that deploy the storage service
+    nodeGroups:
+      - group1
     # diskType configure the disk type of the storage node to use, can be one of the following:
     # - nvme: NVMe SSD
     # - dir: use a directory on the filesystem
@@ -66,6 +84,9 @@ services:
     containerName: 3fs-mgmtd
     nodes: 
       - node1
+    # nodeGroups defines the node groups that deploy the mgmtd service
+    nodeGroups:
+      - group1
     # chunkSize is in kbyte. Default value is 1048576.
     chunkSize: 1048576
     # stripSize is the size of strip. Default value is 16.
@@ -80,6 +101,9 @@ services:
     containerName: 3fs-meta
     nodes: 
       - node1
+    # nodeGroups defines the node groups that deploy the meta service
+    nodeGroups:
+      - group1
     # rdmaListenPort is the RDMA listen port of meta service. Default value is 8001.
     rdmaListenPort: 8001
     # tcpListenPort is the RDMA listen port of meta service. Default value is 9001.
@@ -90,6 +114,9 @@ services:
     containerName: 3fs-monitor
     nodes:
       - node1
+    # nodeGroups defines the node groups that deploy the monitor service
+    nodeGroups:
+      - group1
     # port defaines the listen port of 3fs monitor service.
     # Default value is 10000.
     port: 10000
@@ -102,6 +129,9 @@ services:
     port: 4500
     nodes: 
       - node1
+    # nodeGroups defines the node groups that deploy the fdb service
+    nodeGroups:
+      - group1
   clickhouse:
     # containerName defines the container name of clickhouse.
     # Default value is 3fs-clickhouse.
@@ -111,6 +141,9 @@ services:
     tcpPort: 8999
     nodes: 
       - node1
+    # nodeGroups defines the node groups that deploy the clickhouse service
+    nodeGroups:
+      - group1
 images:
   # registry is the domain of image registry.
   registry: ""

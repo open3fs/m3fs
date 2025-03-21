@@ -67,8 +67,9 @@ func (t *ImportArtifactTask) Init(r *task.Runtime, logger log.Interface) {
 			NewStep: func() task.Step { return new(sha256sumArtifactStep) },
 		},
 		{
-			Nodes:   r.Cfg.Nodes,
-			NewStep: func() task.Step { return new(distributeArtifactStep) },
+			Nodes:    r.Cfg.Nodes,
+			Parallel: true,
+			NewStep:  func() task.Step { return new(distributeArtifactStep) },
 		},
 		{
 			Nodes:    r.Cfg.Nodes,
