@@ -110,7 +110,6 @@ func ipv6ToInt(ip net.IP) uint64 {
 		uint64(ip[4])<<24 | uint64(ip[5])<<16 | uint64(ip[6])<<8 | uint64(ip[7])
 }
 
-// intToIP 将32位整数转换为IPv4地址
 func intToIP(n uint32) net.IP {
 	ip := make(net.IP, 4)
 	ip[0] = byte(n >> 24)

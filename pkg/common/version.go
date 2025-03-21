@@ -14,7 +14,7 @@
 
 package common
 
-// Version info of this bianry, set by -ldflags
+// Version info of this binary, set by -ldflags
 var (
 	Version   string
 	GitSha    string

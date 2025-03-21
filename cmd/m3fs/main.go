@@ -15,12 +15,15 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 
+	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/errors"
 	mlog "github.com/open3fs/m3fs/pkg/log"
 )
@@ -72,6 +75,17 @@ func main() {
 				Destination: &debug,
 			},
 		},
+		Version: fmt.Sprintf(`%s
+Git SHA: %s
+Build At: %s
+Go Version: %s
+Go OS/Arch: %s/%s`,
+			common.Version,
+			common.GitSha[:7],
+			common.BuildTime,
+			runtime.Version(),
+			runtime.GOOS,
+			runtime.GOARCH),
 	}
 
 	if err := app.Run(os.Args); err != nil {

@@ -44,8 +44,8 @@ endif
 
 export BIN := $(PWD)/bin
 
-buildVersionLDFlag := -X github.com/open3fs/m3fs/pkg/utils/vconst.Version=$(BUILD_VERSION) -X github.com/open3fs/m3fs/pkg/utils/vconst.GitSha=$(COMMIT) \
-		-X github.com/open3fs/m3fs/pkg/utils/vconst.BuildTime=$(BUILD_AT)
+buildVersionLDFlag := -X github.com/open3fs/m3fs/pkg/common.Version=$(BUILD_VERSION) -X github.com/open3fs/m3fs/pkg/common.GitSha=$(COMMIT) \
+		-X github.com/open3fs/m3fs/pkg/common.BuildTime=$(BUILD_AT)
 
 .PHONY: build
 build:
