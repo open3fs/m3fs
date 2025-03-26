@@ -100,7 +100,7 @@ proc_thread_pool_stratetry = 'SHARED_QUEUE'
 categories = [ '.' ]
 handlers = [ 'normal', 'err', 'fatal' ]
 inherit = true
-level = 'INFO'
+level = '{{ .LogLevel }}'
 propagate = 'NONE'
 
 [[common.log.handlers]]

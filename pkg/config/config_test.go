@@ -99,6 +99,20 @@ func (s *configSuite) TestSetConfigDefaults() {
 
 	s.NoError(cfg.SetValidate("/root", ""))
 
+	s.Equal(cfg.LogLevel, "INFO")
+	s.Equal(cfg.Services.Mgmtd.RDMAListenPort, 8000)
+	s.Equal(cfg.Services.Mgmtd.TCPListenPort, 9000)
+	s.Equal(cfg.Services.Fdb.Port, 4500)
+	s.Equal(cfg.Nodes[0].Port, 22)
+}
+
+func (s *configSuite) TestSetConfigWithLogLevel() {
+	cfg := s.newConfig()
+	cfg.LogLevel = "DEBUG"
+
+	s.NoError(cfg.SetValidate("/root", ""))
+
+	s.Equal(cfg.LogLevel, "DEBUG")
 	s.Equal(cfg.Services.Mgmtd.RDMAListenPort, 8000)
 	s.Equal(cfg.Services.Mgmtd.TCPListenPort, 9000)
 	s.Equal(cfg.Services.Fdb.Port, 4500)

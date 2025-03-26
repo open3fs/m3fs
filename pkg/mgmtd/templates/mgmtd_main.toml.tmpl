@@ -2,7 +2,7 @@
 categories = [ '.' ]
 handlers = [ 'normal', 'err', 'fatal' ]
 inherit = true
-level = 'INFO'
+level = '{{ .LogLevel }}'
 propagate = 'NONE'
 
 [[common.log.handlers]]

@@ -155,6 +155,7 @@ type Config struct {
 	Name              string
 	WorkDir           string      `yaml:"workDir"`
 	NetworkType       NetworkType `yaml:"networkType"`
+	LogLevel          string      `yaml:"logLevel"`
 	Nodes             []Node
 	NodeGroups        []NodeGroup    `yaml:"nodeGroups"`
 	Services          Services       `yaml:"services"`
@@ -266,6 +267,9 @@ func (c *Config) parseNodeGroupToNodes(nodeGroupMap map[string]*NodeGroup) {
 func (c *Config) SetValidate(workDir, registry string) error {
 	if c.Name == "" {
 		return errors.New("name is required")
+	}
+	if c.LogLevel == "" {
+		c.LogLevel = "INFO"
 	}
 	if workDir != "" {
 		c.WorkDir = workDir
@@ -458,6 +462,7 @@ func NewConfigWithDefaults() *Config {
 	return &Config{
 		Name:        "3fs",
 		NetworkType: NetworkTypeRDMA,
+		LogLevel:    "INFO",
 		Services: Services{
 			Fdb: Fdb{
 				ContainerName:      "3fs-fdb",

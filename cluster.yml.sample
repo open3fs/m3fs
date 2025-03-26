@@ -11,6 +11,9 @@ workDir: "/opt/3fs"
 # - ERDMA: use aliyun ERDMA as RDMA network protocol
 # - RXE: use linux rxe kernel module to mock RDMA network protocol
 networkType: "RDMA"
+# Set the log level of 3fs services.
+# Supported values: "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
+logLevel: "INFO"
 nodes:
   - name: node1
     # host is the ip of a 3fs node. 

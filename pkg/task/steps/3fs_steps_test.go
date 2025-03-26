@@ -95,6 +95,7 @@ func (s *prepare3FSConfigStepSuite) SetupTest() {
 		},
 	}
 	s.Cfg.Name = "test-cluster"
+	s.Cfg.LogLevel = "DEBUG"
 	s.node = s.Cfg.Nodes[0]
 	s.Cfg.Services.Mgmtd.Nodes = []string{"node1"}
 	s.Cfg.Services.Mgmtd.TCPListenPort = 9000
@@ -111,7 +112,8 @@ node_id = {{ .NodeID }}`),
 		MainLauncherTomlTmpl: []byte(`allow_dev_version = true
 cluster_id = '{{ .ClusterID }}'
 mgmtd_server_addresses = {{ .MgmtdServerAddresses }}`),
-		MainTomlTmpl: []byte(`monitor_remote_ip = "{{ .MonitorRemoteIP }}"
+		MainTomlTmpl: []byte(`level = "{{ .LogLevel }}"
+monitor_remote_ip = "{{ .MonitorRemoteIP }}"
 mgmtd_server_addresses = {{ .MgmtdServerAddresses }}
 listen_port = {{ .TCPListenPort }}
 listen_port_rdma = {{ .RDMAListenPort }}`),
@@ -137,7 +139,8 @@ node_id = 1`
 	mainLauncher := `allow_dev_version = true
 cluster_id = 'test-cluster'
 mgmtd_server_addresses = `
-	mainContent := `monitor_remote_ip = ""
+	mainContent := `level = "DEBUG"
+monitor_remote_ip = ""
 mgmtd_server_addresses = 
 listen_port = 9000
 listen_port_rdma = 8000`

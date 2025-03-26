@@ -201,6 +201,7 @@ func (s *prepare3FSConfigStep) genConfigs(tmpDir string) error {
 	}
 
 	mainTmplData := map[string]any{
+		"LogLevel":             s.Runtime.Cfg.LogLevel,
 		"MonitorRemoteIP":      s.getMoniterEndpoints(),
 		"RDMAListenPort":       s.rdmaListenPort,
 		"TCPListenPort":        s.tcpListenPort,
