@@ -159,7 +159,7 @@ Firstly, download following images from docker hub, and upload them to your regi
 
 - open3f3/foundationdb:7.3.63
 - open3fs/clickhouse:25.1-jammy
-- open3fs/3fs:20250315
+- open3fs/3fs:20250327
 
 Then, generating cluster config with `--registry` argument:
 
@@ -179,7 +179,7 @@ The relative path of the images in your registry are written in the images secti
 images:
   3fs:
     repo: "open3fs/3fs"
-    tag: "20250315"
+    tag: "20250327"
   fdb: 
     repo: "open3fs/foundationdb"
     tag: "7.3.63"

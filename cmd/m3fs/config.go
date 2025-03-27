@@ -111,7 +111,7 @@ images:
   registry: "{{ .registry }}"
   3fs:
     repo: "open3fs/3fs"
-    tag: "20250315"
+    tag: "20250327"
   fdb: 
     repo: "open3fs/foundationdb"
     tag: "7.3.63"
