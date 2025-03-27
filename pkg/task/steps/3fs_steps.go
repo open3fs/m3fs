@@ -497,10 +497,11 @@ func NewUpload3FSMainConfigStepFunc(
 type remoteRunScriptStep struct {
 	task.BaseStep
 
-	workDir    string
-	scriptName string
-	script     []byte
-	scriptArgs []string
+	workDir        string
+	scriptName     string
+	scriptTmpl     []byte
+	scriptTmplData map[string]any
+	scriptArgs     []string
 }
 
 func (s *remoteRunScriptStep) Execute(ctx context.Context) error {
@@ -516,8 +517,18 @@ func (s *remoteRunScriptStep) Execute(ctx context.Context) error {
 		}
 	}()
 
+	tmpl, err := template.New(s.scriptName).Parse(string(s.scriptTmpl))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	script := new(bytes.Buffer)
+	err = tmpl.Execute(script, s.scriptTmplData)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	tmpScriptPath := path.Join(tmpDir, "/tmp_script.sh")
-	if err = localEm.FS.WriteFile(tmpScriptPath, s.script, os.FileMode(0777)); err != nil {
+	if err = localEm.FS.WriteFile(tmpScriptPath, script.Bytes(), os.FileMode(0777)); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -554,14 +565,16 @@ func (s *remoteRunScriptStep) Execute(ctx context.Context) error {
 
 // NewRemoteRunScriptStepFunc is remoteRunScriptStep factory func.
 func NewRemoteRunScriptStepFunc(
-	workDir, scriptName string, script []byte, scriptArgs []string) func() task.Step {
+	workDir, scriptName string, scriptTmpl []byte,
+	scriptTmplData map[string]any, scriptArgs []string) func() task.Step {
 
 	return func() task.Step {
 		return &remoteRunScriptStep{
-			workDir:    workDir,
-			scriptName: scriptName,
-			script:     script,
-			scriptArgs: scriptArgs,
+			workDir:        workDir,
+			scriptName:     scriptName,
+			scriptTmplData: scriptTmplData,
+			scriptTmpl:     scriptTmpl,
+			scriptArgs:     scriptArgs,
 		}
 	}
 }

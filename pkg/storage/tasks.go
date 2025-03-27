@@ -38,8 +38,8 @@ var (
 	StorageMainLauncherTomlTmpl []byte
 	// StorageMainTomlTmpl is the template content of storage_main.toml
 	StorageMainTomlTmpl []byte
-	// DiskToolScript is the template content of disk_tool.sh
-	DiskToolScript []byte
+	// DiskToolScriptTmpl is the template content of disk_tool.sh
+	DiskToolScriptTmpl []byte
 )
 
 func init() {
@@ -59,7 +59,7 @@ func init() {
 		panic(err)
 	}
 
-	DiskToolScript, err = templatesFs.ReadFile("templates/disk_tool.sh.tmpl")
+	DiskToolScriptTmpl, err = templatesFs.ReadFile("templates/disk_tool.sh.tmpl")
 	if err != nil {
 		panic(err)
 	}
@@ -112,7 +112,10 @@ func (t *CreateStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 			NewStep: steps.NewRemoteRunScriptStepFunc(
 				workDir,
 				"disk_tool.sh",
-				DiskToolScript,
+				DiskToolScriptTmpl,
+				map[string]any{
+					"SectorSize": t.Runtime.Cfg.Services.Storage.SectorSize,
+				},
 				[]string{
 					workDir,
 					strconv.Itoa(storage.DiskNumPerNode),
@@ -197,7 +200,10 @@ func (t *DeleteStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 			NewStep: steps.NewRemoteRunScriptStepFunc(
 				workDir,
 				"disk_tool.sh",
-				DiskToolScript,
+				DiskToolScriptTmpl,
+				map[string]any{
+					"SectorSize": t.Runtime.Cfg.Services.Storage.SectorSize,
+				},
 				[]string{
 					workDir,
 					strconv.Itoa(storage.DiskNumPerNode),

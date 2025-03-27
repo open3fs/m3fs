@@ -419,6 +419,7 @@ func (s *remoteRunScriptStepSuite) SetupTest() {
 		"/root/3fs/storage",
 		"test123",
 		[]byte("ls -al"),
+		map[string]any{},
 		[]string{
 			"a", "b",
 		},

@@ -64,7 +64,7 @@ function prepare_nvme_disk() {
                         echo "Disk ${DISK_PATH} is already formatted with XFS."
                 else
                         echo "Formatting ${DISK_PATH} with XFS..."
-                        mkfs.xfs -f -L "3fs-data-${ID}" ${DISK_PATH}
+                        mkfs.xfs -f -L "3fs-data-${ID}" -s size={{ .SectorSize }} ${DISK_PATH}
                 fi
         
                 # Create mount point

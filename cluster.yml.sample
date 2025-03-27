@@ -67,6 +67,8 @@ services:
     # - dir: use a directory on the filesystem
     # Default value is "nvme".
     diskType: "nvme"
+    # sectorSize configure the sector size of storage disk xfs filesystem. Default value is 4096.
+    sectorSize: 4096
     # diskNumPerNode defines the num of disks for each storage node. Default value is 1.
     diskNumPerNode: 1
     # rdmaListenPort is the RDMA listen port of storage service. Default value is 8002.
@@ -154,7 +156,7 @@ images:
     # repo contains the namespace and name of the image.
     repo: "open3fs/3fs"
     # tag is the image tag.
-    tag: "20250315"
+    tag: "20250327"
   fdb: 
     repo: "open3fs/foundationdb"
     tag: "7.3.63"

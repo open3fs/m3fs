@@ -122,6 +122,7 @@ type Storage struct {
 	Nodes             []string
 	NodeGroups        []string `yaml:"nodeGroups"`
 	DiskType          DiskType `yaml:"diskType,omitempty"`
+	SectorSize        int      `yaml:"sectorSize,omitempty"`
 	DiskNumPerNode    int      `yaml:"diskNumPerNode,omitempty"`
 	RDMAListenPort    int      `yaml:"rdmaListenPort,omitempty"`
 	TCPListenPort     int      `yaml:"tcpListenPort,omitempty"`
@@ -495,6 +496,7 @@ func NewConfigWithDefaults() *Config {
 			Storage: Storage{
 				ContainerName:     "3fs-storage",
 				DiskType:          DiskTypeNvme,
+				SectorSize:        4096,
 				RDMAListenPort:    8002,
 				TCPListenPort:     9002,
 				ReplicationFactor: 2,
@@ -512,7 +514,7 @@ func NewConfigWithDefaults() *Config {
 			Registry: "",
 			FFFS: Image{
 				Repo: "open3fs/3fs",
-				Tag:  "20250315",
+				Tag:  "20250327",
 			},
 			Fdb: Image{
 				Repo: "open3fs/foundationdb",
