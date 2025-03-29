@@ -159,7 +159,7 @@ Firstly, download following images from docker hub, and upload them to your regi
 
 - open3f3/foundationdb:7.3.63
 - open3fs/clickhouse:25.1-jammy
-- open3fs/3fs:20250327
+- open3fs/3fs:YYYYMMDD
 
 Then, generating cluster config with `--registry` argument:
 
