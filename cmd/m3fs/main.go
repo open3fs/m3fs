@@ -40,7 +40,7 @@ var (
 	clusterDeleteAll bool
 )
 
-// getShaPrefix 安全地获取GitSha的前缀，处理GitSha为空的情况
+// getShaPrefix safely gets the prefix of GitSha and handles the case when GitSha is empty
 func getShaPrefix(sha string) string {
 	if len(sha) >= 7 {
 		return sha[:7]
