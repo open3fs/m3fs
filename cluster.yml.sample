@@ -14,6 +14,12 @@ networkType: "RDMA"
 # Set the log level of 3fs services.
 # Supported values: "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
 logLevel: "INFO"
+# UI related configurations
+ui:
+  # taskInfoColor defines the highlight color for task execution messages in logs
+  # Supported values: "green", "cyan", "yellow", "blue", "magenta", "red", "white"
+  # Default value is "green"
+  taskInfoColor: "green"
 nodes:
   - name: node1
     # host is the ip of a 3fs node. 

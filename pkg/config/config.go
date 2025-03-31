@@ -151,6 +151,11 @@ type Services struct {
 	Client     Client
 }
 
+// UIConfig holds UI related configurations
+type UIConfig struct {
+	TaskInfoColor string `yaml:"taskInfoColor,omitempty"`
+}
+
 // Config is the 3fs cluster config definition
 type Config struct {
 	Name              string
@@ -161,6 +166,7 @@ type Config struct {
 	NodeGroups        []NodeGroup    `yaml:"nodeGroups"`
 	Services          Services       `yaml:"services"`
 	Images            Images         `yaml:"images"`
+	UI                UIConfig       `yaml:"ui,omitempty"`
 	CmdMaxExitTimeout *time.Duration `yaml:",omitempty"`
 }
 

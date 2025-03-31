@@ -16,8 +16,11 @@ package task
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 
+	"github.com/fatih/color"
 	"github.com/sirupsen/logrus"
 
 	"github.com/open3fs/m3fs/pkg/config"
@@ -139,10 +142,44 @@ func (r *Runner) Register(task ...Interface) error {
 	return nil
 }
 
+// getColorAttribute returns the corresponding color.Attribute based on the color name in configuration
+func getColorAttribute(colorName string) color.Attribute {
+	colorMap := map[string]color.Attribute{
+		"green":   color.FgHiGreen,
+		"cyan":    color.FgHiCyan,
+		"yellow":  color.FgHiYellow,
+		"blue":    color.FgHiBlue,
+		"magenta": color.FgHiMagenta,
+		"red":     color.FgHiRed,
+		"white":   color.FgHiWhite,
+	}
+
+	// Convert to lowercase for comparison
+	if attr, ok := colorMap[strings.ToLower(colorName)]; ok {
+		return attr
+	}
+
+	// Return light green as default
+	return color.FgHiGreen
+}
+
 // Run runs all tasks.
 func (r *Runner) Run(ctx context.Context) error {
+	// Get highlight color from configuration
+	highlightColor := color.FgHiGreen // Use light green as default
+
+	// Use color from configuration if specified
+	if r.cfg != nil && r.cfg.UI.TaskInfoColor != "" {
+		highlightColor = getColorAttribute(r.cfg.UI.TaskInfoColor)
+	}
+
+	// Create color print function
+	taskHighlight := color.New(highlightColor, color.Bold).SprintFunc()
+
 	for _, task := range r.tasks {
-		logrus.Infof("Running task %s", task.Name())
+		// Highlight the entire message with color
+		message := taskHighlight(fmt.Sprintf("Running task %s", task.Name()))
+		logrus.Info(message)
 		if err := task.Run(ctx); err != nil {
 			return errors.Annotatef(err, "run task %s", task.Name())
 		}
