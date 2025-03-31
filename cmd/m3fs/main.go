@@ -40,7 +40,6 @@ var (
 	clusterDeleteAll bool
 )
 
-
 func main() {
 	app := &cli.App{
 		Name:  "m3fs",
