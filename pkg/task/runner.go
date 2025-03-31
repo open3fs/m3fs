@@ -143,7 +143,12 @@ func (r *Runner) Register(task ...Interface) error {
 }
 
 // getColorAttribute returns the corresponding color.Attribute based on the color name in configuration
+// Returns -1 if the color name is "none" or not recognized
 func getColorAttribute(colorName string) color.Attribute {
+	if strings.ToLower(colorName) == "none" {
+		return color.Attribute(-1) // Special value to indicate no color
+	}
+
 	colorMap := map[string]color.Attribute{
 		"green":   color.FgHiGreen,
 		"cyan":    color.FgHiCyan,
@@ -159,26 +164,34 @@ func getColorAttribute(colorName string) color.Attribute {
 		return attr
 	}
 
-	// Return light green as default
-	return color.FgHiGreen
+	// Return invalid attribute to indicate no color
+	return color.Attribute(-1)
 }
 
 // Run runs all tasks.
 func (r *Runner) Run(ctx context.Context) error {
-	// Get highlight color from configuration
-	highlightColor := color.FgHiGreen // Use light green as default
+	// Determine whether to use color highlighting
+	useColor := false
+	var highlightColor color.Attribute
 
 	// Use color from configuration if specified
 	if r.cfg != nil && r.cfg.UI.TaskInfoColor != "" {
 		highlightColor = getColorAttribute(r.cfg.UI.TaskInfoColor)
+		// Only use color if a valid attribute was returned
+		useColor = int(highlightColor) >= 0
 	}
 
-	// Create color print function
-	taskHighlight := color.New(highlightColor, color.Bold).SprintFunc()
-
 	for _, task := range r.tasks {
-		// Highlight the entire message with color
-		message := taskHighlight(fmt.Sprintf("Running task %s", task.Name()))
+		var message string
+		if useColor {
+			// Create color print function and highlight message
+			taskHighlight := color.New(highlightColor, color.Bold).SprintFunc()
+			message = taskHighlight(fmt.Sprintf("Running task %s", task.Name()))
+		} else {
+			// Plain message without highlighting
+			message = fmt.Sprintf("Running task %s", task.Name())
+		}
+		
 		logrus.Info(message)
 		if err := task.Run(ctx); err != nil {
 			return errors.Annotatef(err, "run task %s", task.Name())
