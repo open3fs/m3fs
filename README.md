@@ -53,9 +53,10 @@ Then, edit **cluster.yml**:
 name: "open3fs"
 workDir: "/opt/3fs"
 # networkType configure the network type of the cluster, can be one of the following:
-# - RDMA: use RDMA network protocol
+# -    IB: use InfiniBand network protocol
+# -  RDMA: use RDMA network protocol
 # - ERDMA: use aliyun ERDMA as RDMA network protocol
-# - RXE: use linux rxe kernel module to mock RDMA network protocol
+# -   RXE: use Linux rxe kernel module to mock RDMA network protocol
 networkType: "ERDMA"
 nodes:
   - name: node1

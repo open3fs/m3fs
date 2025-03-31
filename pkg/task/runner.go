@@ -52,6 +52,13 @@ type Runtime struct {
 	WorkDir   string
 	LocalEm   *external.Manager
 	LocalNode *config.Node
+
+	// MgmtdProtocol is used to set the protocol of mgmtd address.
+	// It maps RDMA types to RDMA://
+	// It maps IB types to IPoIB://
+	// Currently, only mgmtd address uses IPoIB protocol, all other services still use RDMA protocol.
+	// TODO: Find the reason from 3FS code base.
+	MgmtdProtocol string
 }
 
 // LoadString load string value form sync map
@@ -96,6 +103,10 @@ type Runner struct {
 // Init initializes all tasks.
 func (r *Runner) Init() {
 	r.Runtime = &Runtime{Cfg: r.cfg, WorkDir: r.cfg.WorkDir, LocalNode: r.localNode}
+	r.Runtime.MgmtdProtocol = "RDMA"
+	if r.cfg.NetworkType == config.NetworkTypeIB {
+		r.Runtime.MgmtdProtocol = "IPoIB"
+	}
 	r.Runtime.Nodes = make(map[string]config.Node, len(r.cfg.Nodes))
 	for _, node := range r.cfg.Nodes {
 		r.Runtime.Nodes[node.Name] = node
