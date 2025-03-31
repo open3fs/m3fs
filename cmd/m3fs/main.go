@@ -82,7 +82,7 @@ Build At: %s
 Go Version: %s
 Go OS/Arch: %s/%s`,
 			common.Version,
-			common.GitSha,
+			common.GitSha[:7],
 			common.BuildTime,
 			runtime.Version(),
 			runtime.GOOS,
