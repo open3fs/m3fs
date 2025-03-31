@@ -159,7 +159,6 @@ func getColorAttribute(colorName string) color.Attribute {
 		"white":   color.FgHiWhite,
 	}
 
-	// Convert to lowercase for comparison
 	if attr, ok := colorMap[strings.ToLower(colorName)]; ok {
 		return attr
 	}

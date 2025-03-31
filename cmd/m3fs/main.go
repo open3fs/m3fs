@@ -40,13 +40,6 @@ var (
 	clusterDeleteAll bool
 )
 
-// getShaPrefix safely gets the prefix of GitSha and handles the case when GitSha is empty
-func getShaPrefix(sha string) string {
-	if len(sha) >= 7 {
-		return sha[:7]
-	}
-	return "unknown"
-}
 
 func main() {
 	app := &cli.App{
@@ -89,7 +82,7 @@ Build At: %s
 Go Version: %s
 Go OS/Arch: %s/%s`,
 			common.Version,
-			getShaPrefix(common.GitSha),
+			common.GitSha,
 			common.BuildTime,
 			runtime.Version(),
 			runtime.GOOS,
