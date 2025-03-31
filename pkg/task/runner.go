@@ -169,34 +169,25 @@ func getColorAttribute(colorName string) color.Attribute {
 
 // Run runs all tasks.
 func (r *Runner) Run(ctx context.Context) error {
-	// Determine whether to use color highlighting
 	useColor := false
 	var highlightColor color.Attribute
-
-	// Use color from configuration if specified
 	if r.cfg != nil && r.cfg.UI.TaskInfoColor != "" {
 		highlightColor = getColorAttribute(r.cfg.UI.TaskInfoColor)
-		// Only use color if a valid attribute was returned
 		useColor = int(highlightColor) >= 0
 	}
-
 	for _, task := range r.tasks {
 		var message string
 		if useColor {
-			// Create color print function and highlight message
 			taskHighlight := color.New(highlightColor, color.Bold).SprintFunc()
 			message = taskHighlight(fmt.Sprintf("Running task %s", task.Name()))
 		} else {
-			// Plain message without highlighting
 			message = fmt.Sprintf("Running task %s", task.Name())
 		}
-		
 		logrus.Info(message)
 		if err := task.Run(ctx); err != nil {
 			return errors.Annotatef(err, "run task %s", task.Name())
 		}
 	}
-
 	return nil
 }
 
