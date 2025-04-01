@@ -123,6 +123,30 @@ func (s *runnerSuite) TestTaskInfoHighlighting() {
 	s.NoError(s.runner.Run(s.Ctx()))
 
 	s.mockTask.AssertExpectations(s.T())
+
+	emptyColorCfg := &config.Config{
+		UI: config.UIConfig{
+			TaskInfoColor: "",
+		},
+	}
+
+	s.runner.cfg = emptyColorCfg
+	s.mockTask.On("Name").Return("mockTask")
+	s.mockTask.On("Run").Return(nil)
+
+	s.NoError(s.runner.Run(s.Ctx()))
+
+	s.mockTask.AssertExpectations(s.T())
+
+	noUICfg := &config.Config{}
+
+	s.runner.cfg = noUICfg
+	s.mockTask.On("Name").Return("mockTask")
+	s.mockTask.On("Run").Return(nil)
+
+	s.NoError(s.runner.Run(s.Ctx()))
+
+	s.mockTask.AssertExpectations(s.T())
 }
 
 func (s *runnerSuite) TestGetColorAttribute() {
