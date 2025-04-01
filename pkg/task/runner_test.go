@@ -81,72 +81,54 @@ func (s *runnerSuite) TestRun() {
 	s.mockTask.AssertExpectations(s.T())
 }
 
-func (s *runnerSuite) TestTaskInfoHighlighting() {
-	cfg := &config.Config{
+func (s *runnerSuite) testTaskInfoHighlighting() {
+	s.mockTask.On("Name").Return("mockTask")
+	s.mockTask.On("Run").Return(nil)
+
+	s.NoError(s.runner.Run(s.Ctx()))
+
+	s.mockTask.AssertExpectations(s.T())
+}
+
+func (s *runnerSuite) TestTaskInfoHighlightingWithValidColor() {
+	s.runner.cfg = &config.Config{
 		UI: config.UIConfig{
 			TaskInfoColor: "green",
 		},
 	}
+	s.testTaskInfoHighlighting()
+}
 
-	s.runner.cfg = cfg
-	s.mockTask.On("Name").Return("mockTask")
-	s.mockTask.On("Run").Return(nil)
-
-	s.NoError(s.runner.Run(s.Ctx()))
-
-	s.mockTask.AssertExpectations(s.T())
-
-	noColorCfg := &config.Config{
+func (s *runnerSuite) TestTaskInfoHighlightingWithNoneColor() {
+	s.runner.cfg = &config.Config{
 		UI: config.UIConfig{
 			TaskInfoColor: "none",
 		},
 	}
+	s.testTaskInfoHighlighting()
+}
 
-	s.runner.cfg = noColorCfg
-	s.mockTask.On("Name").Return("mockTask")
-	s.mockTask.On("Run").Return(nil)
-
-	s.NoError(s.runner.Run(s.Ctx()))
-
-	s.mockTask.AssertExpectations(s.T())
-
-	invalidColorCfg := &config.Config{
+func (s *runnerSuite) TestTaskInfoHighlightingWithInvalidColor() {
+	s.runner.cfg = &config.Config{
 		UI: config.UIConfig{
 			TaskInfoColor: "invalid-color",
 		},
 	}
+	s.testTaskInfoHighlighting()
+}
 
-	s.runner.cfg = invalidColorCfg
-	s.mockTask.On("Name").Return("mockTask")
-	s.mockTask.On("Run").Return(nil)
-
-	s.NoError(s.runner.Run(s.Ctx()))
-
-	s.mockTask.AssertExpectations(s.T())
-
-	emptyColorCfg := &config.Config{
+func (s *runnerSuite) TestTaskInfoHighlightingWithEmptyColor() {
+	s.runner.cfg = &config.Config{
 		UI: config.UIConfig{
 			TaskInfoColor: "",
 		},
 	}
+	s.testTaskInfoHighlighting()
+}
 
-	s.runner.cfg = emptyColorCfg
-	s.mockTask.On("Name").Return("mockTask")
-	s.mockTask.On("Run").Return(nil)
-
-	s.NoError(s.runner.Run(s.Ctx()))
-
-	s.mockTask.AssertExpectations(s.T())
-
-	noUICfg := &config.Config{}
-
-	s.runner.cfg = noUICfg
-	s.mockTask.On("Name").Return("mockTask")
-	s.mockTask.On("Run").Return(nil)
-
-	s.NoError(s.runner.Run(s.Ctx()))
-
-	s.mockTask.AssertExpectations(s.T())
+func (s *runnerSuite) TestTaskInfoHighlightingWithNoUIConfig() {
+	s.runner.cfg = &config.Config{}
+	s.testTaskInfoHighlighting()
 }
 
 func (s *runnerSuite) TestGetColorAttribute() {
