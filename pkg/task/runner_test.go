@@ -50,6 +50,13 @@ func (s *runnerSuite) TestInit() {
 	s.mockTask.AssertExpectations(s.T())
 }
 
+func (s *runnerSuite) TestInitWithIB() {
+	s.runner.cfg.NetworkType = config.NetworkTypeIB
+	s.TestInit()
+
+	s.Equal(s.runner.Runtime.MgmtdProtocol, "IPoIB")
+}
+
 func (s *runnerSuite) TestRegisterAfterInit() {
 	s.TestInit()
 	s.mockTask.On("Name").Return("mockTask")

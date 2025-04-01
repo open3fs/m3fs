@@ -88,7 +88,8 @@ func (s *genAdminCliConfigStep) Execute(ctx context.Context) error {
 	port := strconv.Itoa(s.Runtime.Services.Mgmtd.RDMAListenPort)
 	for i, nodeName := range s.Runtime.Services.Mgmtd.Nodes {
 		node := s.Runtime.Nodes[nodeName]
-		mgmtdServerAddresses[i] = fmt.Sprintf(`"RDMA://%s"`, net.JoinHostPort(node.Host, port))
+		mgmtdServerAddresses[i] = fmt.Sprintf(`"%s://%s"`,
+			s.Runtime.MgmtdProtocol, net.JoinHostPort(node.Host, port))
 	}
 	mgmtdServerAddressesStr := fmt.Sprintf("[%s]", strings.Join(mgmtdServerAddresses, ","))
 	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey, mgmtdServerAddressesStr)

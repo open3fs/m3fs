@@ -206,6 +206,7 @@ func (s *prepare3FSConfigStep) genConfigs(tmpDir string) error {
 		"RDMAListenPort":       s.rdmaListenPort,
 		"TCPListenPort":        s.tcpListenPort,
 		"MgmtdServerAddresses": mgmtdServerAddresses,
+		"MgmtdProtocol":        s.Runtime.MgmtdProtocol,
 	}
 	for k, v := range s.extraMainTomlData {
 		mainTmplData[k] = v

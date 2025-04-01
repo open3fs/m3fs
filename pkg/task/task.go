@@ -211,6 +211,10 @@ func (s *BaseStep) GetErdmaSoPath(ctx context.Context) error {
 // GetRdmaVolumes returns the volumes need mapped to container for the rdma network.
 func (s *BaseStep) GetRdmaVolumes() []*external.VolumeArgs {
 	volumes := []*external.VolumeArgs{}
+	if s.Runtime.Cfg.NetworkType == config.NetworkTypeIB {
+		return volumes
+	}
+
 	if s.Runtime.Cfg.NetworkType != config.NetworkTypeRDMA {
 		ibdev2netdevScriptPath := path.Join(s.Runtime.Cfg.WorkDir, "bin", "ibdev2netdev")
 		volumes = append(volumes, &external.VolumeArgs{
