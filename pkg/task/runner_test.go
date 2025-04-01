@@ -17,6 +17,7 @@ package task
 import (
 	"testing"
 
+	"github.com/fatih/color"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/open3fs/m3fs/pkg/config"
@@ -78,4 +79,67 @@ func (s *runnerSuite) TestRun() {
 	s.NoError(s.runner.Run(s.Ctx()))
 
 	s.mockTask.AssertExpectations(s.T())
+}
+
+func (s *runnerSuite) TestTaskInfoHighlighting() {
+	cfg := &config.Config{
+		UI: config.UIConfig{
+			TaskInfoColor: "green",
+		},
+	}
+
+	s.runner.cfg = cfg
+	s.mockTask.On("Name").Return("mockTask")
+	s.mockTask.On("Run").Return(nil)
+
+	s.NoError(s.runner.Run(s.Ctx()))
+
+	s.mockTask.AssertExpectations(s.T())
+
+	noColorCfg := &config.Config{
+		UI: config.UIConfig{
+			TaskInfoColor: "none",
+		},
+	}
+
+	s.runner.cfg = noColorCfg
+	s.mockTask.On("Name").Return("mockTask")
+	s.mockTask.On("Run").Return(nil)
+
+	s.NoError(s.runner.Run(s.Ctx()))
+
+	s.mockTask.AssertExpectations(s.T())
+
+	invalidColorCfg := &config.Config{
+		UI: config.UIConfig{
+			TaskInfoColor: "invalid-color",
+		},
+	}
+
+	s.runner.cfg = invalidColorCfg
+	s.mockTask.On("Name").Return("mockTask")
+	s.mockTask.On("Run").Return(nil)
+
+	s.NoError(s.runner.Run(s.Ctx()))
+
+	s.mockTask.AssertExpectations(s.T())
+}
+
+func (s *runnerSuite) TestGetColorAttribute() {
+	s.Equal(color.FgHiGreen, getColorAttribute("green"))
+	s.Equal(color.FgHiCyan, getColorAttribute("cyan"))
+	s.Equal(color.FgHiYellow, getColorAttribute("yellow"))
+	s.Equal(color.FgHiBlue, getColorAttribute("blue"))
+	s.Equal(color.FgHiMagenta, getColorAttribute("magenta"))
+	s.Equal(color.FgHiRed, getColorAttribute("red"))
+	s.Equal(color.FgHiWhite, getColorAttribute("white"))
+
+	s.Equal(color.FgHiGreen, getColorAttribute("GREEN"))
+	s.Equal(color.FgHiCyan, getColorAttribute("Cyan"))
+
+	s.Equal(color.Attribute(-1), getColorAttribute("none"))
+	s.Equal(color.Attribute(-1), getColorAttribute("NONE"))
+
+	s.Equal(color.Attribute(-1), getColorAttribute("invalid-color"))
+	s.Equal(color.Attribute(-1), getColorAttribute(""))
 }
