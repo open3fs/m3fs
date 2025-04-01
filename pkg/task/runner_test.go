@@ -150,20 +150,26 @@ func (s *runnerSuite) TestTaskInfoHighlighting() {
 }
 
 func (s *runnerSuite) TestGetColorAttribute() {
-	s.Equal(color.FgHiGreen, getColorAttribute("green"))
-	s.Equal(color.FgHiCyan, getColorAttribute("cyan"))
-	s.Equal(color.FgHiYellow, getColorAttribute("yellow"))
-	s.Equal(color.FgHiBlue, getColorAttribute("blue"))
-	s.Equal(color.FgHiMagenta, getColorAttribute("magenta"))
-	s.Equal(color.FgHiRed, getColorAttribute("red"))
-	s.Equal(color.FgHiWhite, getColorAttribute("white"))
+	cases := []struct {
+		expected  color.Attribute
+		colorName string
+	}{
+		{color.FgHiGreen, "green"},
+		{color.FgHiCyan, "cyan"},
+		{color.FgHiYellow, "yellow"},
+		{color.FgHiBlue, "blue"},
+		{color.FgHiMagenta, "magenta"},
+		{color.FgHiRed, "red"},
+		{color.FgHiWhite, "white"},
+		{color.FgHiGreen, "GREEN"},
+		{color.FgHiCyan, "Cyan"},
+		{color.Attribute(-1), "none"},
+		{color.Attribute(-1), "NONE"},
+		{color.Attribute(-1), "invalid-color"},
+		{color.Attribute(-1), ""},
+	}
 
-	s.Equal(color.FgHiGreen, getColorAttribute("GREEN"))
-	s.Equal(color.FgHiCyan, getColorAttribute("Cyan"))
-
-	s.Equal(color.Attribute(-1), getColorAttribute("none"))
-	s.Equal(color.Attribute(-1), getColorAttribute("NONE"))
-
-	s.Equal(color.Attribute(-1), getColorAttribute("invalid-color"))
-	s.Equal(color.Attribute(-1), getColorAttribute(""))
+	for _, c := range cases {
+		s.Equal(c.expected, getColorAttribute(c.colorName))
+	}
 }
