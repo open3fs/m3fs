@@ -47,7 +47,7 @@ type ArchitectureDiagramGenerator struct {
 func NewArchitectureDiagramGenerator(cfg *config.Config) *ArchitectureDiagramGenerator {
 	return &ArchitectureDiagramGenerator{
 		cfg:          cfg,
-		colorEnabled: true, // Default to colored output
+		colorEnabled: true,
 	}
 }
 
@@ -67,6 +67,129 @@ func (g *ArchitectureDiagramGenerator) getColorReset() string {
 		return colorReset
 	}
 	return ""
+}
+
+// renderNodeRow renders a row of nodes with the given style
+func (g *ArchitectureDiagramGenerator) renderNodeRow(buffer *bytes.Buffer, nodes []string, rowSize int,
+	renderFunc func(buffer *bytes.Buffer, nodeName string, index int)) {
+
+	nodeCount := len(nodes)
+	for i := 0; i < nodeCount; i += rowSize {
+		end := i + rowSize
+		if end > nodeCount {
+			end = nodeCount
+		}
+
+		for j := i; j < end; j++ {
+			buffer.WriteString("+----------------+ ")
+		}
+		buffer.WriteString("\n")
+
+		for j := i; j < end; j++ {
+			nodeName := nodes[j]
+			if len(nodeName) > 16 {
+				nodeName = nodeName[:13] + "..."
+			}
+			buffer.WriteString("|" + g.getColorCode(colorCyan) + fmt.Sprintf("%-16s", nodeName) + g.getColorReset() + "| ")
+		}
+		buffer.WriteString("\n")
+
+		renderFunc(buffer, "", i)
+
+		for j := i; j < end; j++ {
+			buffer.WriteString("+----------------+ ")
+		}
+		buffer.WriteString("\n")
+	}
+}
+
+// renderServiceRow renders a row showing a specific service on the nodes
+func (g *ArchitectureDiagramGenerator) renderServiceRow(buffer *bytes.Buffer,
+	nodes []string, serviceNodes []string, startIndex int, endIndex int,
+	serviceName string, color string) {
+
+	for j := startIndex; j < endIndex; j++ {
+		nodeName := nodes[j]
+		if g.isNodeInList(nodeName, serviceNodes) {
+			// Calculate the length of the content in brackets (including brackets)
+			labelLength := len(serviceName) + 2 // +2 for the brackets []
+
+			// Fix the total width of the cell content to 16 (aligned with node names)
+			// Minus 2 leading spaces, total width is 14
+			totalCellWidth := 14
+
+			// Calculate the number of spaces needed
+			spacesNeeded := totalCellWidth - labelLength
+			if spacesNeeded < 0 {
+				spacesNeeded = 0
+			}
+
+			// Build the service label string
+			serviceLabel := "[" + serviceName + "]"
+
+			buffer.WriteString("|  " + g.getColorCode(color) +
+				serviceLabel + g.getColorReset() +
+				strings.Repeat(" ", spacesNeeded) + "| ")
+		} else {
+			buffer.WriteString("|                | ")
+		}
+	}
+	buffer.WriteString("\n")
+}
+
+// renderStorageFunc renders all services for storage nodes
+func (g *ArchitectureDiagramGenerator) renderStorageFunc(buffer *bytes.Buffer, _ string, startIndex int) {
+	storageNodes := g.getStorageNodes()
+	realStorageNodes := g.getRealStorageNodes()
+	fdbNodes := g.getFdbNodes()
+	metaNodes := g.getMetaNodes()
+	mgmtdNodes := g.getMgmtdNodes()
+	monitorNodes := g.getMonitorNodes()
+	clickhouseNodes := g.getClickhouseNodes()
+
+	storageCount := len(storageNodes)
+	rowSize := 8
+	endIndex := startIndex + rowSize
+	if endIndex > storageCount {
+		endIndex = storageCount
+	}
+
+	// Render all service rows with proper alignment
+	g.renderServiceRow(buffer, storageNodes, realStorageNodes, startIndex, endIndex, "storage", colorYellow)
+	g.renderServiceRow(buffer, storageNodes, fdbNodes, startIndex, endIndex, "foundationdb", colorBlue)
+	g.renderServiceRow(buffer, storageNodes, metaNodes, startIndex, endIndex, "meta", colorPink)
+	g.renderServiceRow(buffer, storageNodes, mgmtdNodes, startIndex, endIndex, "mgmtd", colorPurple)
+	g.renderServiceRow(buffer, storageNodes, monitorNodes, startIndex, endIndex, "monitor", colorPurple)
+	g.renderServiceRow(buffer, storageNodes, clickhouseNodes, startIndex, endIndex, "clickhouse", colorRed)
+}
+
+// renderSummaryRow renders a row of statistics
+func (g *ArchitectureDiagramGenerator) renderSummaryRow(buffer *bytes.Buffer, stats []struct {
+	name  string
+	count int
+	color string
+	width int
+}) {
+	for _, stat := range stats {
+		buffer.WriteString(fmt.Sprintf("%s%-"+fmt.Sprintf("%d", stat.width)+"s%s %-2d  ",
+			g.getColorCode(stat.color), stat.name+":", g.getColorReset(), stat.count))
+	}
+	buffer.WriteString("\n")
+}
+
+// renderClientFunc renders client services
+func (g *ArchitectureDiagramGenerator) renderClientFunc(buffer *bytes.Buffer, _ string, startIndex int) {
+	clientNodes := g.getClientNodes()
+	clientCount := len(clientNodes)
+
+	rowSize := 8
+	endIndex := startIndex + rowSize
+	if endIndex > clientCount {
+		endIndex = clientCount
+	}
+
+	// Use appropriate service rendering
+	g.renderServiceRow(buffer, clientNodes, clientNodes, startIndex, endIndex, "hf3fs_fuse", colorGreen)
 }
 
 // GenerateBasicASCII generates a basic ASCII art representation of the cluster architecture
@@ -96,39 +219,11 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	buffer.WriteString(strings.Repeat("-", 70))
 	buffer.WriteString("\n")
 
-	rowSize := 8
-	for i := 0; i < clientCount; i += rowSize {
-		end := i + rowSize
-		if end > clientCount {
-			end = clientCount
-		}
-
-		for j := i; j < end; j++ {
-			buffer.WriteString("+----------------+ ")
-		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			nodeName := clientNodes[j]
-			if len(nodeName) > 16 {
-				nodeName = nodeName[:13] + "..."
-			}
-			buffer.WriteString("|" + g.getColorCode(colorCyan) + fmt.Sprintf("%-16s", nodeName) + g.getColorReset() + "| ")
-		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			buffer.WriteString("|  " + g.getColorCode(colorGreen) + "[hf3fs_fuse]" + g.getColorReset() + "  | ")
-		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			buffer.WriteString("+----------------+ ")
-		}
-		buffer.WriteString("\n\n")
-	}
+	// 使用专门的客户端渲染函数
+	g.renderNodeRow(&buffer, clientNodes, 8, g.renderClientFunc)
 
 	buffer.WriteString("\n")
+
 	arrowCount := clientCount
 	if arrowCount <= 0 {
 		arrowCount = 1
@@ -164,116 +259,85 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	buffer.WriteString(strings.Repeat("-", 70))
 	buffer.WriteString("\n")
 
-	for i := 0; i < storageCount; i += rowSize {
-		end := i + rowSize
-		if end > storageCount {
-			end = storageCount
-		}
+	// Render storage nodes using the storage function
+	g.renderNodeRow(&buffer, storageNodes, 8, g.renderStorageFunc)
 
-		for j := i; j < end; j++ {
-			buffer.WriteString("+----------------+ ")
-		}
-		buffer.WriteString("\n")
+	buffer.WriteString("\n" + g.getColorCode(colorCyan) + "CLUSTER SUMMARY:" + g.getColorReset() + "\n")
+	buffer.WriteString(strings.Repeat("-", 70) + "\n")
 
-		for j := i; j < end; j++ {
-			nodeName := storageNodes[j]
-			if len(nodeName) > 16 {
-				nodeName = nodeName[:13] + "..."
-			}
-			buffer.WriteString("|" + g.getColorCode(colorCyan) + fmt.Sprintf("%-16s", nodeName) + g.getColorReset() + "| ")
+	// Calculate unique nodes count
+	var uniqueNodes []string
+	for _, node := range clientNodes {
+		if !g.isNodeInList(node, uniqueNodes) {
+			uniqueNodes = append(uniqueNodes, node)
 		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			nodeName := storageNodes[j]
-			if g.isNodeInList(nodeName, realStorageNodes) {
-				buffer.WriteString("|  " + g.getColorCode(colorYellow) + "[storage]" + g.getColorReset() + "     | ")
-			} else {
-				buffer.WriteString("|                | ")
-			}
-		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			nodeName := storageNodes[j]
-			if g.isNodeInList(nodeName, fdbNodes) {
-				buffer.WriteString("|  " + g.getColorCode(colorBlue) + "[foundationdb]" + g.getColorReset() + "| ")
-			} else {
-				buffer.WriteString("|                | ")
-			}
-		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			nodeName := storageNodes[j]
-			if g.isNodeInList(nodeName, metaNodes) {
-				buffer.WriteString("|  " + g.getColorCode(colorPink) + "[meta]" + g.getColorReset() + "        | ")
-			} else {
-				buffer.WriteString("|                | ")
-			}
-		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			nodeName := storageNodes[j]
-			if g.isNodeInList(nodeName, mgmtdNodes) {
-				buffer.WriteString("|  " + g.getColorCode(colorPurple) + "[mgmtd]" + g.getColorReset() + "       | ")
-			} else {
-				buffer.WriteString("|                | ")
-			}
-		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			nodeName := storageNodes[j]
-			if g.isNodeInList(nodeName, monitorNodes) {
-				buffer.WriteString("|  " + g.getColorCode(colorPurple) + "[monitor]" + g.getColorReset() + "     | ")
-			} else {
-				buffer.WriteString("|                | ")
-			}
-		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			nodeName := storageNodes[j]
-			if g.isNodeInList(nodeName, clickhouseNodes) {
-				buffer.WriteString("|  " + g.getColorCode(colorRed) + "[clickhouse]" + g.getColorReset() + "  | ")
-			} else {
-				buffer.WriteString("|                | ")
-			}
-		}
-		buffer.WriteString("\n")
-
-		for j := i; j < end; j++ {
-			buffer.WriteString("+----------------+ ")
-		}
-		buffer.WriteString("\n\n")
 	}
+
+	for _, node := range storageNodes {
+		if !g.isNodeInList(node, uniqueNodes) {
+			uniqueNodes = append(uniqueNodes, node)
+		}
+	}
+
+	// Render summary statistics - first row
+	firstRowStats := []struct {
+		name  string
+		count int
+		color string
+		width int
+	}{
+		{"Client Nodes", len(clientNodes), colorGreen, 13},
+		{"Storage Nodes", len(realStorageNodes), colorYellow, 14},
+		{"FoundationDB", len(fdbNodes), colorBlue, 12},
+		{"Meta Service", len(metaNodes), colorPink, 12},
+	}
+	g.renderSummaryRow(&buffer, firstRowStats)
+
+	// Render summary statistics - second row
+	secondRowStats := []struct {
+		name  string
+		count int
+		color string
+		width int
+	}{
+		{"Mgmtd Service", len(mgmtdNodes), colorPurple, 13},
+		{"Monitor Svc", len(monitorNodes), colorPurple, 14},
+		{"Clickhouse", len(clickhouseNodes), colorRed, 12},
+		{"Total Nodes", len(uniqueNodes), colorCyan, 12},
+	}
+	g.renderSummaryRow(&buffer, secondRowStats)
 
 	return buffer.String(), nil
 }
 
-// getClientNodes returns all client nodes
-func (g *ArchitectureDiagramGenerator) getClientNodes() []string {
-	var clientNodeNames []string
+// getNodesForService gets nodes for a specific service type
+func (g *ArchitectureDiagramGenerator) getNodesForService(nodes []string, nodeGroups []string) []string {
+	var serviceNodes []string
 
-	for _, nodeName := range g.cfg.Services.Client.Nodes {
+	for _, nodeName := range nodes {
 		for _, node := range g.cfg.Nodes {
 			if node.Name == nodeName {
-				clientNodeNames = append(clientNodeNames, node.Name)
+				serviceNodes = append(serviceNodes, node.Name)
 				break
 			}
 		}
 	}
 
-	for _, groupName := range g.cfg.Services.Client.NodeGroups {
+	for _, groupName := range nodeGroups {
 		for _, nodeGroup := range g.cfg.NodeGroups {
 			if nodeGroup.Name == groupName {
 				ipList := g.expandNodeGroup(&nodeGroup)
-				clientNodeNames = append(clientNodeNames, ipList...)
+				serviceNodes = append(serviceNodes, ipList...)
 			}
 		}
 	}
+
+	return serviceNodes
+}
+
+// getClientNodes returns all client nodes
+func (g *ArchitectureDiagramGenerator) getClientNodes() []string {
+	clientNodeNames := g.getNodesForService(g.cfg.Services.Client.Nodes, g.cfg.Services.Client.NodeGroups)
 
 	if len(clientNodeNames) == 0 {
 		return []string{"default-client"}
@@ -354,150 +418,32 @@ func (g *ArchitectureDiagramGenerator) isNodeInList(nodeName string, nodeList []
 
 // getMgmtdNodes gets all mgmtd nodes
 func (g *ArchitectureDiagramGenerator) getMgmtdNodes() []string {
-	var mgmtdNodes []string
-
-	for _, nodeName := range g.cfg.Services.Mgmtd.Nodes {
-		for _, node := range g.cfg.Nodes {
-			if node.Name == nodeName {
-				mgmtdNodes = append(mgmtdNodes, node.Name)
-				break
-			}
-		}
-	}
-
-	for _, groupName := range g.cfg.Services.Mgmtd.NodeGroups {
-		for _, nodeGroup := range g.cfg.NodeGroups {
-			if nodeGroup.Name == groupName {
-				ipList := g.expandNodeGroup(&nodeGroup)
-				mgmtdNodes = append(mgmtdNodes, ipList...)
-			}
-		}
-	}
-
-	return mgmtdNodes
+	return g.getNodesForService(g.cfg.Services.Mgmtd.Nodes, g.cfg.Services.Mgmtd.NodeGroups)
 }
 
 // getMonitorNodes gets all monitor nodes
 func (g *ArchitectureDiagramGenerator) getMonitorNodes() []string {
-	var monitorNodes []string
-
-	for _, nodeName := range g.cfg.Services.Monitor.Nodes {
-		for _, node := range g.cfg.Nodes {
-			if node.Name == nodeName {
-				monitorNodes = append(monitorNodes, node.Name)
-				break
-			}
-		}
-	}
-
-	for _, groupName := range g.cfg.Services.Monitor.NodeGroups {
-		for _, nodeGroup := range g.cfg.NodeGroups {
-			if nodeGroup.Name == groupName {
-				ipList := g.expandNodeGroup(&nodeGroup)
-				monitorNodes = append(monitorNodes, ipList...)
-			}
-		}
-	}
-
-	return monitorNodes
+	return g.getNodesForService(g.cfg.Services.Monitor.Nodes, g.cfg.Services.Monitor.NodeGroups)
 }
 
 // getRealStorageNodes gets the actual storage nodes, excluding nodes that only run management services
 func (g *ArchitectureDiagramGenerator) getRealStorageNodes() []string {
-	var storageNodeNames []string
-
-	for _, nodeName := range g.cfg.Services.Storage.Nodes {
-		for _, node := range g.cfg.Nodes {
-			if node.Name == nodeName {
-				storageNodeNames = append(storageNodeNames, node.Name)
-				break
-			}
-		}
-	}
-
-	for _, groupName := range g.cfg.Services.Storage.NodeGroups {
-		for _, nodeGroup := range g.cfg.NodeGroups {
-			if nodeGroup.Name == groupName {
-				ipList := g.expandNodeGroup(&nodeGroup)
-				storageNodeNames = append(storageNodeNames, ipList...)
-			}
-		}
-	}
-
-	return storageNodeNames
+	return g.getNodesForService(g.cfg.Services.Storage.Nodes, g.cfg.Services.Storage.NodeGroups)
 }
 
 // getFdbNodes gets nodes running foundationdb service
 func (g *ArchitectureDiagramGenerator) getFdbNodes() []string {
-	var fdbNodes []string
-
-	for _, nodeName := range g.cfg.Services.Fdb.Nodes {
-		for _, node := range g.cfg.Nodes {
-			if node.Name == nodeName {
-				fdbNodes = append(fdbNodes, node.Name)
-				break
-			}
-		}
-	}
-
-	for _, groupName := range g.cfg.Services.Fdb.NodeGroups {
-		for _, nodeGroup := range g.cfg.NodeGroups {
-			if nodeGroup.Name == groupName {
-				ipList := g.expandNodeGroup(&nodeGroup)
-				fdbNodes = append(fdbNodes, ipList...)
-			}
-		}
-	}
-
-	return fdbNodes
+	return g.getNodesForService(g.cfg.Services.Fdb.Nodes, g.cfg.Services.Fdb.NodeGroups)
 }
 
 // getClickhouseNodes gets nodes running clickhouse service
 func (g *ArchitectureDiagramGenerator) getClickhouseNodes() []string {
-	var clickhouseNodes []string
-
-	for _, nodeName := range g.cfg.Services.Clickhouse.Nodes {
-		for _, node := range g.cfg.Nodes {
-			if node.Name == nodeName {
-				clickhouseNodes = append(clickhouseNodes, node.Name)
-				break
-			}
-		}
-	}
-
-	for _, groupName := range g.cfg.Services.Clickhouse.NodeGroups {
-		for _, nodeGroup := range g.cfg.NodeGroups {
-			if nodeGroup.Name == groupName {
-				ipList := g.expandNodeGroup(&nodeGroup)
-				clickhouseNodes = append(clickhouseNodes, ipList...)
-			}
-		}
-	}
-
-	return clickhouseNodes
+	return g.getNodesForService(g.cfg.Services.Clickhouse.Nodes, g.cfg.Services.Clickhouse.NodeGroups)
 }
 
 // getMetaNodes gets nodes running meta service
 func (g *ArchitectureDiagramGenerator) getMetaNodes() []string {
-	var metaNodes []string
-
-	for _, nodeName := range g.cfg.Services.Meta.Nodes {
-		for _, node := range g.cfg.Nodes {
-			if node.Name == nodeName {
-				metaNodes = append(metaNodes, node.Name)
-				break
-			}
-		}
-	}
-
-	for _, groupName := range g.cfg.Services.Meta.NodeGroups {
-		for _, nodeGroup := range g.cfg.NodeGroups {
-			if nodeGroup.Name == groupName {
-				ipList := g.expandNodeGroup(&nodeGroup)
-				metaNodes = append(metaNodes, ipList...)
-			}
-		}
-	}
+	metaNodes := g.getNodesForService(g.cfg.Services.Meta.Nodes, g.cfg.Services.Meta.NodeGroups)
 
 	if len(metaNodes) == 0 {
 		metaNodes = g.getRealStorageNodes()
