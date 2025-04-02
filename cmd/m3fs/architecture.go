@@ -508,10 +508,10 @@ func (g *ArchitectureDiagramGenerator) getNetworkSpeed() string {
 		return speed
 	}
 
-	if g.cfg.NetworkType == "IB" {
+	if g.cfg.NetworkType == config.NetworkTypeIB {
 		return "50 Gb/sec"
 	}
-	if g.cfg.NetworkType == "RDMA" {
+	if g.cfg.NetworkType == config.NetworkTypeRDMA {
 		return "100 Gb/sec"
 	}
 	return "10 Gb/sec"
