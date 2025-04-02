@@ -39,19 +39,34 @@ const (
 
 // ArchitectureDiagramGenerator generates architecture diagrams for m3fs clusters
 type ArchitectureDiagramGenerator struct {
-	cfg *config.Config
+	cfg          *config.Config
+	colorEnabled bool
 }
 
 // NewArchitectureDiagramGenerator creates a new ArchitectureDiagramGenerator
 func NewArchitectureDiagramGenerator(cfg *config.Config) *ArchitectureDiagramGenerator {
 	return &ArchitectureDiagramGenerator{
-		cfg: cfg,
+		cfg:          cfg,
+		colorEnabled: true, // Default to colored output
 	}
+}
+
+// SetColorEnabled enables or disables colored output in the diagram
+func (g *ArchitectureDiagramGenerator) SetColorEnabled(enabled bool) {
+	g.colorEnabled = enabled
 }
 
 // Generate generates an architecture diagram
 func (g *ArchitectureDiagramGenerator) Generate() (string, error) {
 	return g.GenerateBasicASCII()
+}
+
+// getColorReset returns the color reset code if colors are enabled
+func (g *ArchitectureDiagramGenerator) getColorReset() string {
+	if g.colorEnabled {
+		return colorReset
+	}
+	return ""
 }
 
 // GenerateBasicASCII generates a basic ASCII art representation of the cluster architecture
@@ -77,7 +92,7 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	clientCount := len(clientNodes)
 	storageCount := len(storageNodes)
 
-	buffer.WriteString(colorCyan + "CLIENT NODES:" + colorReset + "\n")
+	buffer.WriteString(g.getColorCode(colorCyan) + "CLIENT NODES:" + g.getColorReset() + "\n")
 	buffer.WriteString(strings.Repeat("-", 70))
 	buffer.WriteString("\n")
 
@@ -98,12 +113,12 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 			if len(nodeName) > 16 {
 				nodeName = nodeName[:13] + "..."
 			}
-			buffer.WriteString("|" + colorCyan + fmt.Sprintf("%-16s", nodeName) + colorReset + "| ")
+			buffer.WriteString("|" + g.getColorCode(colorCyan) + fmt.Sprintf("%-16s", nodeName) + g.getColorReset() + "| ")
 		}
 		buffer.WriteString("\n")
 
 		for j := i; j < end; j++ {
-			buffer.WriteString("|  " + colorGreen + "[hf3fs_fuse]" + colorReset + "  | ")
+			buffer.WriteString("|  " + g.getColorCode(colorGreen) + "[hf3fs_fuse]" + g.getColorReset() + "  | ")
 		}
 		buffer.WriteString("\n")
 
@@ -128,7 +143,12 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 
 	buffer.WriteString("╔" + strings.Repeat("═", totalWidth-2) + "╗\n")
 	rightPadding := totalWidth - 2 - len(networkText)
-	buffer.WriteString("║" + colorBlue + networkText + colorReset + strings.Repeat(" ", rightPadding) + "║\n")
+	buffer.WriteString("║" +
+		g.getColorCode(colorBlue) +
+		networkText +
+		g.getColorReset() +
+		strings.Repeat(" ", rightPadding) +
+		"║\n")
 	buffer.WriteString("╚" + strings.Repeat("═", totalWidth-2) + "╝\n")
 
 	arrowCount = storageCount
@@ -140,7 +160,7 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	buffer.WriteString(strings.Repeat("  ↓ ", arrowCount))
 	buffer.WriteString("\n\n")
 
-	buffer.WriteString(colorCyan + "STORAGE NODES:" + colorReset + "\n")
+	buffer.WriteString(g.getColorCode(colorCyan) + "STORAGE NODES:" + g.getColorReset() + "\n")
 	buffer.WriteString(strings.Repeat("-", 70))
 	buffer.WriteString("\n")
 
@@ -160,14 +180,14 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 			if len(nodeName) > 16 {
 				nodeName = nodeName[:13] + "..."
 			}
-			buffer.WriteString("|" + colorCyan + fmt.Sprintf("%-16s", nodeName) + colorReset + "| ")
+			buffer.WriteString("|" + g.getColorCode(colorCyan) + fmt.Sprintf("%-16s", nodeName) + g.getColorReset() + "| ")
 		}
 		buffer.WriteString("\n")
 
 		for j := i; j < end; j++ {
 			nodeName := storageNodes[j]
 			if g.isNodeInList(nodeName, realStorageNodes) {
-				buffer.WriteString("|  " + colorYellow + "[storage]" + colorReset + "     | ")
+				buffer.WriteString("|  " + g.getColorCode(colorYellow) + "[storage]" + g.getColorReset() + "     | ")
 			} else {
 				buffer.WriteString("|                | ")
 			}
@@ -177,7 +197,7 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		for j := i; j < end; j++ {
 			nodeName := storageNodes[j]
 			if g.isNodeInList(nodeName, fdbNodes) {
-				buffer.WriteString("|  " + colorBlue + "[foundationdb]" + colorReset + "| ")
+				buffer.WriteString("|  " + g.getColorCode(colorBlue) + "[foundationdb]" + g.getColorReset() + "| ")
 			} else {
 				buffer.WriteString("|                | ")
 			}
@@ -187,7 +207,7 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		for j := i; j < end; j++ {
 			nodeName := storageNodes[j]
 			if g.isNodeInList(nodeName, metaNodes) {
-				buffer.WriteString("|  " + colorPink + "[meta]" + colorReset + "        | ")
+				buffer.WriteString("|  " + g.getColorCode(colorPink) + "[meta]" + g.getColorReset() + "        | ")
 			} else {
 				buffer.WriteString("|                | ")
 			}
@@ -197,7 +217,7 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		for j := i; j < end; j++ {
 			nodeName := storageNodes[j]
 			if g.isNodeInList(nodeName, mgmtdNodes) {
-				buffer.WriteString("|  " + colorPurple + "[mgmtd]" + colorReset + "       | ")
+				buffer.WriteString("|  " + g.getColorCode(colorPurple) + "[mgmtd]" + g.getColorReset() + "       | ")
 			} else {
 				buffer.WriteString("|                | ")
 			}
@@ -207,7 +227,7 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		for j := i; j < end; j++ {
 			nodeName := storageNodes[j]
 			if g.isNodeInList(nodeName, monitorNodes) {
-				buffer.WriteString("|  " + colorPurple + "[monitor]" + colorReset + "     | ")
+				buffer.WriteString("|  " + g.getColorCode(colorPurple) + "[monitor]" + g.getColorReset() + "     | ")
 			} else {
 				buffer.WriteString("|                | ")
 			}
@@ -217,7 +237,7 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		for j := i; j < end; j++ {
 			nodeName := storageNodes[j]
 			if g.isNodeInList(nodeName, clickhouseNodes) {
-				buffer.WriteString("|  " + colorRed + "[clickhouse]" + colorReset + "  | ")
+				buffer.WriteString("|  " + g.getColorCode(colorRed) + "[clickhouse]" + g.getColorReset() + "  | ")
 			} else {
 				buffer.WriteString("|                | ")
 			}
@@ -559,5 +579,13 @@ func (g *ArchitectureDiagramGenerator) getEthernetSpeed() string {
 		return matches[1] + " " + matches[2]
 	}
 
+	return ""
+}
+
+// getColorCode returns the appropriate color code based on whether colors are enabled
+func (g *ArchitectureDiagramGenerator) getColorCode(colorCode string) string {
+	if g.colorEnabled {
+		return colorCode
+	}
 	return ""
 }

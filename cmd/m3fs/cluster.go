@@ -129,6 +129,11 @@ var clusterCmd = &cli.Command{
 					Destination: &configFilePath,
 					Required:    true,
 				},
+				&cli.BoolFlag{
+					Name:        "no-color",
+					Usage:       "Disable colored output in the diagram",
+					Destination: &noColorOutput,
+				},
 			},
 		},
 	},
@@ -245,6 +250,7 @@ func drawClusterArchitecture(ctx *cli.Context) error {
 	}
 
 	diagramGenerator := NewArchitectureDiagramGenerator(cfg)
+	diagramGenerator.SetColorEnabled(!noColorOutput)
 
 	diagram, err := diagramGenerator.GenerateBasicASCII()
 	if err != nil {

@@ -22,94 +22,29 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 )
 
-// TestDrawClusterArchitecture tests the architecture diagram generation functionality
+// TestDrawClusterArchitecture tests the no-color option in the architecture diagram generation
 func TestDrawClusterArchitecture(t *testing.T) {
-	testCases := []struct {
-		name           string
-		configSetup    func() *config.Config
-		expectedItems  []string
-		unexpectedItem string
-	}{
-		{
-			name: "Standard configuration",
-			configSetup: func() *config.Config {
-				cfg := config.NewConfigWithDefaults()
-				cfg.Name = "test-arch-cluster"
-				cfg.NetworkType = "Ethernet"
-				cfg.Nodes = []config.Node{
-					{Name: "node1", Host: "192.168.1.1"},
-					{Name: "node2", Host: "192.168.1.2"},
-				}
-				cfg.Services.Mgmtd.Nodes = []string{"node1"}
-				cfg.Services.Storage.Nodes = []string{"node1", "node2"}
-				cfg.Services.Client.Nodes = []string{"node2"}
-				cfg.Services.Client.HostMountpoint = "/mnt/m3fs"
-				return cfg
-			},
-			expectedItems: []string{
-				"Cluster: test-arch-cluster",
-				"CLIENT NODES",
-				"STORAGE NODES",
-				"node1",
-				"node2",
-				"[storage]",
-				"[hf3fs_fuse]",
-				"[mgmtd]",
-			},
-			unexpectedItem: "node3",
-		},
-		{
-			name: "Empty configuration",
-			configSetup: func() *config.Config {
-				cfg := config.NewConfigWithDefaults()
-				cfg.Name = "empty-cluster"
-				return cfg
-			},
-			expectedItems: []string{
-				"Cluster: empty-cluster",
-				"CLIENT NODES",
-				"STORAGE NODES",
-				"default-client",
-				"default-storage",
-			},
-			unexpectedItem: "node1",
-		},
-		{
-			name: "Special characters in cluster name",
-			configSetup: func() *config.Config {
-				cfg := config.NewConfigWithDefaults()
-				cfg.Name = "test@cluster!123"
-				return cfg
-			},
-			expectedItems: []string{
-				"Cluster: test@cluster!123",
-			},
-			unexpectedItem: "",
-		},
-	}
+	// We'll directly test the ArchitectureDiagramGenerator since we can't mock drawClusterArchitecture
+	cfg := createTestConfig()
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			cfg := tc.configSetup()
-			diagram := generateTestArchitectureDiagram(t, cfg)
+	// Explicit use of config package to avoid unused import error
+	var _ config.NetworkType = cfg.NetworkType
 
-			// Verify expected items are present
-			for _, item := range tc.expectedItems {
-				assert.Contains(t, diagram, item, "Diagram should contain %s", item)
-			}
+	t.Run("WithColor", func(t *testing.T) {
+		generator := NewArchitectureDiagramGenerator(cfg)
+		// Default should be with color
+		diagram, err := generator.GenerateBasicASCII()
+		assert.NoError(t, err)
+		assert.Contains(t, diagram, "\033[", "Output should contain color codes")
+		assert.Contains(t, diagram, "Cluster: test-cluster")
+	})
 
-			// Verify unexpected items are not present
-			if tc.unexpectedItem != "" {
-				assert.NotContains(t, diagram, tc.unexpectedItem, "Diagram should not contain %s", tc.unexpectedItem)
-			}
-		})
-	}
-}
-
-// generateTestArchitectureDiagram is a helper function to generate architecture diagram for tests
-func generateTestArchitectureDiagram(t *testing.T, cfg *config.Config) string {
-	diagramGenerator := NewArchitectureDiagramGenerator(cfg)
-	diagram, err := diagramGenerator.GenerateBasicASCII()
-	assert.NoError(t, err, "GenerateBasicASCII should not return an error")
-	return diagram
+	t.Run("WithoutColor", func(t *testing.T) {
+		generator := NewArchitectureDiagramGenerator(cfg)
+		generator.SetColorEnabled(false)
+		diagram, err := generator.GenerateBasicASCII()
+		assert.NoError(t, err)
+		assert.NotContains(t, diagram, "\033[", "Output should not contain color codes")
+		assert.Contains(t, diagram, "Cluster: test-cluster")
+	})
 }

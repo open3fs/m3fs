@@ -109,6 +109,42 @@ func TestArchitectureDiagramGenerator(t *testing.T) {
 	})
 }
 
+func TestNoColorOption(t *testing.T) {
+	cfg := createTestConfig()
+
+	t.Run("DefaultWithColor", func(t *testing.T) {
+		generator := NewArchitectureDiagramGenerator(cfg)
+		// Colors should be enabled by default
+		assert.True(t, generator.colorEnabled, "Colors should be enabled by default")
+
+		diagram, err := generator.GenerateBasicASCII()
+		assert.NoError(t, err, "GenerateBasicASCII should not return an error")
+
+		// Check if the output contains color codes
+		assert.Contains(t, diagram, "\033[", "Diagram should contain color codes when colors are enabled")
+	})
+
+	t.Run("WithNoColorOption", func(t *testing.T) {
+		generator := NewArchitectureDiagramGenerator(cfg)
+		// Set the no-color option
+		generator.SetColorEnabled(false)
+		assert.False(t, generator.colorEnabled, "Colors should be disabled after setting colorEnabled to false")
+
+		diagram, err := generator.GenerateBasicASCII()
+		assert.NoError(t, err, "GenerateBasicASCII should not return an error")
+
+		// Check if the output does not contain color codes
+		assert.NotContains(t, diagram, "\033[", "Diagram should not contain color codes when colors are disabled")
+
+		// Check if the diagram content is still complete
+		assert.Contains(t, diagram, "Cluster: test-cluster", "Diagram should still contain cluster name")
+		assert.Contains(t, diagram, "CLIENT NODES", "Diagram should still have CLIENT NODES section")
+		assert.Contains(t, diagram, "STORAGE NODES", "Diagram should still have STORAGE NODES section")
+		assert.Contains(t, diagram, "[storage]", "Diagram should still show storage service label")
+		assert.Contains(t, diagram, "[hf3fs_fuse]", "Diagram should still show hf3fs_fuse service label")
+	})
+}
+
 func TestNodeListFunctions(t *testing.T) {
 	t.Run("GetClientNodes", func(t *testing.T) {
 		testCases := []struct {

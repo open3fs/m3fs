@@ -38,6 +38,7 @@ var (
 	workDir          string
 	registry         string
 	clusterDeleteAll bool
+	noColorOutput    bool
 )
 
 func main() {
@@ -81,7 +82,8 @@ Build At: %s
 Go Version: %s
 Go OS/Arch: %s/%s`,
 			common.Version,
-			common.GitSha[:7],
+			// common.GitSha[:7],
+			common.GitSha,
 			common.BuildTime,
 			runtime.Version(),
 			runtime.GOOS,

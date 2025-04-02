@@ -49,6 +49,12 @@ This will display an ASCII art representation of your cluster architecture in th
 - Network connection type and speed
 - All storage nodes and their services (storage, mgmtd, meta, foundationdb, clickhouse, monitor)
 
+For environments that don't support colored output (such as certain terminals, CI/CD pipelines, or when redirecting output to a file), use the `--no-color` option:
+
+```
+./m3fs cluster architecture -c cluster.yml --no-color
+```
+
 This is useful for:
 - Visualizing your cluster configuration before deployment
 - Documenting your cluster layout
