@@ -111,25 +111,16 @@ func (g *ArchitectureDiagramGenerator) renderServiceRow(buffer *bytes.Buffer,
 	for j := startIndex; j < endIndex; j++ {
 		nodeName := nodes[j]
 		if g.isNodeInList(nodeName, serviceNodes) {
-			// Calculate the length of the content in brackets (including brackets)
-			labelLength := len(serviceName) + 2 // +2 for the brackets []
-
-			// Fix the total width of the cell content to 16 (aligned with node names)
-			// Minus 2 leading spaces, total width is 14
-			totalCellWidth := 14
-
-			// Calculate the number of spaces needed
-			spacesNeeded := totalCellWidth - labelLength
-			if spacesNeeded < 0 {
-				spacesNeeded = 0
-			}
-
-			// Build the service label string
 			serviceLabel := "[" + serviceName + "]"
+			totalCellWidth := 14
+			paddingNeeded := totalCellWidth - len(serviceLabel)
+			if paddingNeeded < 0 {
+				paddingNeeded = 0
+			}
 
 			buffer.WriteString("|  " + g.getColorCode(color) +
 				serviceLabel + g.getColorReset() +
-				strings.Repeat(" ", spacesNeeded) + "| ")
+				strings.Repeat(" ", paddingNeeded) + "| ")
 		} else {
 			buffer.WriteString("|                | ")
 		}
@@ -154,7 +145,6 @@ func (g *ArchitectureDiagramGenerator) renderStorageFunc(buffer *bytes.Buffer, _
 		endIndex = storageCount
 	}
 
-	// Render all service rows with proper alignment
 	g.renderServiceRow(buffer, storageNodes, realStorageNodes, startIndex, endIndex, "storage", colorYellow)
 	g.renderServiceRow(buffer, storageNodes, fdbNodes, startIndex, endIndex, "foundationdb", colorBlue)
 	g.renderServiceRow(buffer, storageNodes, metaNodes, startIndex, endIndex, "meta", colorPink)
@@ -188,7 +178,6 @@ func (g *ArchitectureDiagramGenerator) renderClientFunc(buffer *bytes.Buffer, _ 
 		endIndex = clientCount
 	}
 
-	// Use appropriate service rendering
 	g.renderServiceRow(buffer, clientNodes, clientNodes, startIndex, endIndex, "hf3fs_fuse", colorGreen)
 }
 
@@ -219,7 +208,6 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	buffer.WriteString(strings.Repeat("-", 70))
 	buffer.WriteString("\n")
 
-	// 使用专门的客户端渲染函数
 	g.renderNodeRow(&buffer, clientNodes, 8, g.renderClientFunc)
 
 	buffer.WriteString("\n")
@@ -259,13 +247,11 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	buffer.WriteString(strings.Repeat("-", 70))
 	buffer.WriteString("\n")
 
-	// Render storage nodes using the storage function
 	g.renderNodeRow(&buffer, storageNodes, 8, g.renderStorageFunc)
 
 	buffer.WriteString("\n" + g.getColorCode(colorCyan) + "CLUSTER SUMMARY:" + g.getColorReset() + "\n")
 	buffer.WriteString(strings.Repeat("-", 70) + "\n")
 
-	// Calculate unique nodes count
 	var uniqueNodes []string
 	for _, node := range clientNodes {
 		if !g.isNodeInList(node, uniqueNodes) {
@@ -279,7 +265,6 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		}
 	}
 
-	// Render summary statistics - first row
 	firstRowStats := []struct {
 		name  string
 		count int
@@ -293,7 +278,6 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	}
 	g.renderSummaryRow(&buffer, firstRowStats)
 
-	// Render summary statistics - second row
 	secondRowStats := []struct {
 		name  string
 		count int
