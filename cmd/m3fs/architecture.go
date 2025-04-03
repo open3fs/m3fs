@@ -51,6 +51,15 @@ const (
 	ServiceClient     ServiceType = "client"
 )
 
+// Common layout constants
+const (
+	defaultRowSize    = 8
+	diagramWidth      = 70
+	nodeCellWidth     = 16
+	serviceBoxPadding = 2  // padding inside service boxes
+	totalCellWidth    = 14 // width inside service cell
+)
+
 // ArchitectureDiagramGenerator generates architecture diagrams for m3fs clusters
 type ArchitectureDiagramGenerator struct {
 	cfg          *config.Config
@@ -80,9 +89,21 @@ func (g *ArchitectureDiagramGenerator) getColorReset() string {
 	return g.getColorCode(colorReset)
 }
 
+// renderBoxBorder renders a border line for node boxes
+func (g *ArchitectureDiagramGenerator) renderBoxBorder(buffer *bytes.Buffer, count int) {
+	for j := 0; j < count; j++ {
+		buffer.WriteString("+----------------+ ")
+	}
+	buffer.WriteByte('\n')
+}
+
 // renderNodeRow renders a row of nodes with the given style
 func (g *ArchitectureDiagramGenerator) renderNodeRow(buffer *bytes.Buffer, nodes []string, rowSize int,
 	renderFunc func(buffer *bytes.Buffer, nodeName string, index int)) {
+
+	if len(nodes) == 0 {
+		return
+	}
 
 	nodeCount := len(nodes)
 	for i := 0; i < nodeCount; i += rowSize {
@@ -91,26 +112,24 @@ func (g *ArchitectureDiagramGenerator) renderNodeRow(buffer *bytes.Buffer, nodes
 			end = nodeCount
 		}
 
-		for j := i; j < end; j++ {
-			buffer.WriteString("+----------------+ ")
-		}
-		buffer.WriteString("\n")
+		// Render top border
+		g.renderBoxBorder(buffer, end-i)
 
+		// Render node names
 		for j := i; j < end; j++ {
 			nodeName := nodes[j]
-			if len(nodeName) > 16 {
+			if len(nodeName) > nodeCellWidth {
 				nodeName = nodeName[:13] + "..."
 			}
-			buffer.WriteString("|" + g.getColorCode(colorCyan) + fmt.Sprintf("%-16s", nodeName) + g.getColorReset() + "| ")
+			fmt.Fprintf(buffer, "|%s%-16s%s| ", g.getColorCode(colorCyan), nodeName, g.getColorReset())
 		}
-		buffer.WriteString("\n")
+		buffer.WriteByte('\n')
 
+		// Render service details
 		renderFunc(buffer, "", i)
 
-		for j := i; j < end; j++ {
-			buffer.WriteString("+----------------+ ")
-		}
-		buffer.WriteString("\n")
+		// Render bottom border
+		g.renderBoxBorder(buffer, end-i)
 	}
 }
 
@@ -123,20 +142,21 @@ func (g *ArchitectureDiagramGenerator) renderServiceRow(buffer *bytes.Buffer,
 		nodeName := nodes[j]
 		if g.isNodeInList(nodeName, serviceNodes) {
 			serviceLabel := "[" + serviceName + "]"
-			totalCellWidth := 14
 			paddingNeeded := totalCellWidth - len(serviceLabel)
 			if paddingNeeded < 0 {
 				paddingNeeded = 0
 			}
 
-			buffer.WriteString("|  " + g.getColorCode(color) +
-				serviceLabel + g.getColorReset() +
-				strings.Repeat(" ", paddingNeeded) + "| ")
+			fmt.Fprintf(buffer, "|  %s%s%s%s| ",
+				g.getColorCode(color),
+				serviceLabel,
+				g.getColorReset(),
+				strings.Repeat(" ", paddingNeeded))
 		} else {
 			buffer.WriteString("|                | ")
 		}
 	}
-	buffer.WriteString("\n")
+	buffer.WriteByte('\n')
 }
 
 // ServiceConfig defines a service configuration for rendering
@@ -156,8 +176,6 @@ var (
 		{ServiceMonitor, "monitor", colorPurple},
 		{ServiceClickhouse, "clickhouse", colorRed},
 	}
-
-	defaultRowSize = 8
 )
 
 // renderStorageFunc renders all services for storage nodes
@@ -216,13 +234,30 @@ func (g *ArchitectureDiagramGenerator) renderClientFunc(buffer *bytes.Buffer, _ 
 
 // GenerateBasicASCII generates a basic ASCII art representation of the cluster architecture
 func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
+	// Prepare buffer for diagram output
 	var buffer bytes.Buffer
 
+	// Collect node information
 	clientNodes := g.getServiceNodes(ServiceClient)
 	storageNodes := g.getStorageNodes()
+	serviceNodesMap := g.prepareServiceNodesMap(clientNodes)
 
-	// Create service nodes map for use in statistics
-	serviceNodesMap := make(map[ServiceType][]string)
+	// Get network speed
+	networkSpeed := g.getNetworkSpeed()
+
+	// Generate diagram sections
+	g.renderClusterHeader(&buffer)
+	g.renderClientSection(&buffer, clientNodes)
+	g.renderNetworkSection(&buffer, networkSpeed)
+	g.renderStorageSection(&buffer, storageNodes)
+	g.renderSummarySection(&buffer, serviceNodesMap, clientNodes, storageNodes)
+
+	return buffer.String(), nil
+}
+
+// prepareServiceNodesMap prepares a map of service types to their respective nodes
+func (g *ArchitectureDiagramGenerator) prepareServiceNodesMap(clientNodes []string) map[ServiceType][]string {
+	serviceNodesMap := make(map[ServiceType][]string, len(serviceConfigs)+1)
 
 	// Fill the map with standard services
 	for _, cfg := range serviceConfigs {
@@ -236,52 +271,63 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	// Add client nodes to the map
 	serviceNodesMap[ServiceClient] = clientNodes
 
-	networkSpeed := g.getNetworkSpeed()
+	return serviceNodesMap
+}
 
-	// Render cluster header
-	buffer.WriteString(fmt.Sprintf("Cluster: %s\n", g.cfg.Name))
-	buffer.WriteString(strings.Repeat("=", 70))
-	buffer.WriteString("\n\n")
+// renderClusterHeader renders the cluster header section
+func (g *ArchitectureDiagramGenerator) renderClusterHeader(buffer *bytes.Buffer) {
+	fmt.Fprintf(buffer, "Cluster: %s\n%s\n\n",
+		g.cfg.Name,
+		strings.Repeat("=", diagramWidth))
+}
 
-	// Client nodes section
-	buffer.WriteString(g.getColorCode(colorCyan) + "CLIENT NODES:" + g.getColorReset() + "\n")
-	buffer.WriteString(strings.Repeat("-", 70))
-	buffer.WriteString("\n")
+// renderSectionHeader renders a section header with the given title
+func (g *ArchitectureDiagramGenerator) renderSectionHeader(buffer *bytes.Buffer, title string) {
+	fmt.Fprintf(buffer, "%s%s%s\n%s\n",
+		g.getColorCode(colorCyan),
+		title,
+		g.getColorReset(),
+		strings.Repeat("-", diagramWidth))
+}
 
-	g.renderNodeRow(&buffer, clientNodes, defaultRowSize, g.renderClientFunc)
-	buffer.WriteString("\n")
+// renderClientSection renders the client nodes section
+func (g *ArchitectureDiagramGenerator) renderClientSection(buffer *bytes.Buffer, clientNodes []string) {
+	g.renderSectionHeader(buffer, "CLIENT NODES:")
+
+	g.renderNodeRow(buffer, clientNodes, defaultRowSize, g.renderClientFunc)
+	buffer.WriteByte('\n')
 
 	// Calculate appropriate arrow count
 	arrowCount := g.calculateArrowCount(len(clientNodes))
 	buffer.WriteString(strings.Repeat("  ↓ ", arrowCount))
-	buffer.WriteString("\n")
+	buffer.WriteByte('\n')
+}
 
-	// Network section
-	g.renderNetworkSection(&buffer, networkSpeed)
-
+// renderStorageSection renders the storage nodes section
+func (g *ArchitectureDiagramGenerator) renderStorageSection(buffer *bytes.Buffer, storageNodes []string) {
 	// Calculate storage arrow count
-	arrowCount = g.calculateArrowCount(len(storageNodes))
+	arrowCount := g.calculateArrowCount(len(storageNodes))
 	buffer.WriteString(strings.Repeat("  ↓ ", arrowCount))
 	buffer.WriteString("\n\n")
 
 	// Storage nodes section
-	buffer.WriteString(g.getColorCode(colorCyan) + "STORAGE NODES:" + g.getColorReset() + "\n")
-	buffer.WriteString(strings.Repeat("-", 70))
+	g.renderSectionHeader(buffer, "STORAGE NODES:")
+
+	g.renderNodeRow(buffer, storageNodes, defaultRowSize, g.renderStorageFunc)
+}
+
+// renderSummarySection renders the cluster summary section
+func (g *ArchitectureDiagramGenerator) renderSummarySection(buffer *bytes.Buffer,
+	serviceNodesMap map[ServiceType][]string, clientNodes, storageNodes []string) {
+
 	buffer.WriteString("\n")
-
-	g.renderNodeRow(&buffer, storageNodes, defaultRowSize, g.renderStorageFunc)
-
-	// Cluster summary section
-	buffer.WriteString("\n" + g.getColorCode(colorCyan) + "CLUSTER SUMMARY:" + g.getColorReset() + "\n")
-	buffer.WriteString(strings.Repeat("-", 70) + "\n")
+	g.renderSectionHeader(buffer, "CLUSTER SUMMARY:")
 
 	// Count unique nodes across client and storage
 	uniqueNodes := g.countUniqueNodes(clientNodes, storageNodes)
 
-	// Render summary statistics
-	g.renderSummaryStatistics(&buffer, serviceNodesMap, uniqueNodes)
-
-	return buffer.String(), nil
+	// Render summary statistics in two rows for better readability
+	g.renderSummaryStatistics(buffer, serviceNodesMap, uniqueNodes)
 }
 
 // calculateArrowCount calculates appropriate arrow count for display
@@ -297,17 +343,15 @@ func (g *ArchitectureDiagramGenerator) calculateArrowCount(nodeCount int) int {
 // renderNetworkSection renders the network section of the diagram
 func (g *ArchitectureDiagramGenerator) renderNetworkSection(buffer *bytes.Buffer, networkSpeed string) {
 	networkText := fmt.Sprintf(" %s Network (%s) ", g.cfg.NetworkType, networkSpeed)
-	totalWidth := 70
+	rightPadding := diagramWidth - 2 - len(networkText)
 
-	buffer.WriteString("╔" + strings.Repeat("═", totalWidth-2) + "╗\n")
-	rightPadding := totalWidth - 2 - len(networkText)
-	buffer.WriteString("║" +
-		g.getColorCode(colorBlue) +
-		networkText +
-		g.getColorReset() +
-		strings.Repeat(" ", rightPadding) +
-		"║\n")
-	buffer.WriteString("╚" + strings.Repeat("═", totalWidth-2) + "╝\n")
+	buffer.WriteString("╔" + strings.Repeat("═", diagramWidth-2) + "╗\n")
+	fmt.Fprintf(buffer, "║%s%s%s%s║\n",
+		g.getColorCode(colorBlue),
+		networkText,
+		g.getColorReset(),
+		strings.Repeat(" ", rightPadding))
+	buffer.WriteString("╚" + strings.Repeat("═", diagramWidth-2) + "╝\n")
 }
 
 // countUniqueNodes counts unique nodes across node lists
@@ -376,28 +420,45 @@ func (g *ArchitectureDiagramGenerator) getNodesForService(nodes []string, nodeGr
 
 // getServiceNodes returns nodes for a specific service type
 func (g *ArchitectureDiagramGenerator) getServiceNodes(serviceType ServiceType) []string {
+	var nodes []string
+	var nodeGroups []string
+
+	// Get node and nodeGroup configuration based on service type
 	switch serviceType {
 	case ServiceMgmtd:
-		return g.getNodesForService(g.cfg.Services.Mgmtd.Nodes, g.cfg.Services.Mgmtd.NodeGroups)
+		nodes = g.cfg.Services.Mgmtd.Nodes
+		nodeGroups = g.cfg.Services.Mgmtd.NodeGroups
 	case ServiceMonitor:
-		return g.getNodesForService(g.cfg.Services.Monitor.Nodes, g.cfg.Services.Monitor.NodeGroups)
+		nodes = g.cfg.Services.Monitor.Nodes
+		nodeGroups = g.cfg.Services.Monitor.NodeGroups
 	case ServiceStorage:
-		return g.getNodesForService(g.cfg.Services.Storage.Nodes, g.cfg.Services.Storage.NodeGroups)
+		nodes = g.cfg.Services.Storage.Nodes
+		nodeGroups = g.cfg.Services.Storage.NodeGroups
 	case ServiceFdb:
-		return g.getNodesForService(g.cfg.Services.Fdb.Nodes, g.cfg.Services.Fdb.NodeGroups)
+		nodes = g.cfg.Services.Fdb.Nodes
+		nodeGroups = g.cfg.Services.Fdb.NodeGroups
 	case ServiceClickhouse:
-		return g.getNodesForService(g.cfg.Services.Clickhouse.Nodes, g.cfg.Services.Clickhouse.NodeGroups)
+		nodes = g.cfg.Services.Clickhouse.Nodes
+		nodeGroups = g.cfg.Services.Clickhouse.NodeGroups
 	case ServiceMeta:
-		return g.getNodesForService(g.cfg.Services.Meta.Nodes, g.cfg.Services.Meta.NodeGroups)
+		nodes = g.cfg.Services.Meta.Nodes
+		nodeGroups = g.cfg.Services.Meta.NodeGroups
 	case ServiceClient:
-		clientNodeNames := g.getNodesForService(g.cfg.Services.Client.Nodes, g.cfg.Services.Client.NodeGroups)
-		if len(clientNodeNames) == 0 {
-			return []string{"default-client"}
-		}
-		return clientNodeNames
+		nodes = g.cfg.Services.Client.Nodes
+		nodeGroups = g.cfg.Services.Client.NodeGroups
 	default:
 		return []string{}
 	}
+
+	// Get nodes from configuration
+	serviceNodes := g.getNodesForService(nodes, nodeGroups)
+
+	// Special case for client nodes
+	if serviceType == ServiceClient && len(serviceNodes) == 0 {
+		return []string{"default-client"}
+	}
+
+	return serviceNodes
 }
 
 // getClientNodes returns all client nodes
@@ -509,6 +570,11 @@ func (g *ArchitectureDiagramGenerator) getNetworkSpeed() string {
 	}
 
 	// Use default values based on network type
+	return g.getDefaultNetworkSpeed()
+}
+
+// getDefaultNetworkSpeed returns the default network speed based on the network type
+func (g *ArchitectureDiagramGenerator) getDefaultNetworkSpeed() string {
 	switch g.cfg.NetworkType {
 	case config.NetworkTypeIB:
 		return "50 Gb/sec"
@@ -519,11 +585,12 @@ func (g *ArchitectureDiagramGenerator) getNetworkSpeed() string {
 	}
 }
 
-// getIBNetworkSpeed gets InfiniBand network speed
+// getIBNetworkSpeed gets InfiniBand network speed using a safer approach
 func (g *ArchitectureDiagramGenerator) getIBNetworkSpeed() string {
-	cmd := exec.Command("ibstatus")
-	output, err := cmd.Output()
+	cmdIB := exec.Command("ibstatus")
+	output, err := cmdIB.CombinedOutput() // Use CombinedOutput to capture both stdout and stderr
 	if err != nil {
+		// Just silently fail and return empty, the caller will use defaults
 		return ""
 	}
 
@@ -538,24 +605,38 @@ func (g *ArchitectureDiagramGenerator) getIBNetworkSpeed() string {
 
 // getEthernetSpeed gets Ethernet network speed
 func (g *ArchitectureDiagramGenerator) getEthernetSpeed() string {
-	cmdIp := exec.Command("sh", "-c", "ip route | grep default | awk '{print $5}'")
-	interfaceOutput, err := cmdIp.Output()
-	if err != nil {
+	interfaceName, err := g.getDefaultInterface()
+	if err != nil || interfaceName == "" {
 		return ""
 	}
 
-	interfaceName := strings.TrimSpace(string(interfaceOutput))
+	return g.getInterfaceSpeed(interfaceName)
+}
+
+// getDefaultInterface returns the name of the default network interface
+func (g *ArchitectureDiagramGenerator) getDefaultInterface() (string, error) {
+	cmdIp := exec.Command("sh", "-c", "ip route | grep default | awk '{print $5}'")
+	interfaceOutput, err := cmdIp.Output()
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(interfaceOutput)), nil
+}
+
+// getInterfaceSpeed returns the speed of the given network interface with improved error handling
+func (g *ArchitectureDiagramGenerator) getInterfaceSpeed(interfaceName string) string {
 	if interfaceName == "" {
 		return ""
 	}
 
 	cmdEthtool := exec.Command("ethtool", interfaceName)
-	ethtoolOutput, err := cmdEthtool.Output()
+	ethtoolOutput, err := cmdEthtool.CombinedOutput() // Capture both stdout and stderr
 	if err != nil {
 		return ""
 	}
 
-	speedPattern := regexp.MustCompile(`Speed:\s+(\d+)([GMK]b/s)`)
+	speedPattern := regexp.MustCompile(`Speed:\s+(\d+)\s*([GMK]b/?s)`)
 	matches := speedPattern.FindStringSubmatch(string(ethtoolOutput))
 	if len(matches) > 2 {
 		return matches[1] + " " + matches[2]
@@ -566,11 +647,8 @@ func (g *ArchitectureDiagramGenerator) getEthernetSpeed() string {
 
 // getColorCode returns the appropriate color code based on whether colors are enabled
 func (g *ArchitectureDiagramGenerator) getColorCode(colorCode string) string {
-	if !g.colorEnabled || colorCode == "" {
+	if !g.colorEnabled {
 		return ""
-	}
-	if colorCode == colorReset {
-		return colorReset
 	}
 	return colorCode
 }
