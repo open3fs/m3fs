@@ -251,7 +251,7 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	g.renderClientSection(&buffer, clientNodes)
 	g.renderNetworkSection(&buffer, networkSpeed)
 	g.renderStorageSection(&buffer, storageNodes)
-	g.renderSummarySection(&buffer, serviceNodesMap, clientNodes, storageNodes)
+	g.renderSummarySection(&buffer, serviceNodesMap)
 
 	return buffer.String(), nil
 }
@@ -319,16 +319,13 @@ func (g *ArchitectureDiagramGenerator) renderStorageSection(buffer *bytes.Buffer
 
 // renderSummarySection renders the cluster summary section
 func (g *ArchitectureDiagramGenerator) renderSummarySection(buffer *bytes.Buffer,
-	serviceNodesMap map[ServiceType][]string, clientNodes, storageNodes []string) {
+	serviceNodesMap map[ServiceType][]string) {
 
 	buffer.WriteString("\n")
 	g.renderSectionHeader(buffer, "CLUSTER SUMMARY:")
 
-	// Count unique nodes across client and storage
-	uniqueNodes := g.countUniqueNodes(clientNodes, storageNodes)
-
 	// Render summary statistics in two rows for better readability
-	g.renderSummaryStatistics(buffer, serviceNodesMap, uniqueNodes)
+	g.renderSummaryStatistics(buffer, serviceNodesMap)
 }
 
 // calculateArrowCount calculates appropriate arrow count for display
@@ -355,42 +352,24 @@ func (g *ArchitectureDiagramGenerator) renderNetworkSection(buffer *bytes.Buffer
 	buffer.WriteString("╚" + strings.Repeat("═", diagramWidth-2) + "╝\n")
 }
 
-// countUniqueNodes counts unique nodes across node lists
-func (g *ArchitectureDiagramGenerator) countUniqueNodes(nodeLists ...[]string) []string {
-	nodeMap := make(map[string]bool)
-
-	for _, list := range nodeLists {
-		for _, node := range list {
-			nodeMap[node] = true
-		}
-	}
-
-	uniqueNodes := make([]string, 0, len(nodeMap))
-	for node := range nodeMap {
-		uniqueNodes = append(uniqueNodes, node)
-	}
-
-	return uniqueNodes
-}
-
 // renderSummaryStatistics renders the summary statistics section
 func (g *ArchitectureDiagramGenerator) renderSummaryStatistics(buffer *bytes.Buffer,
-	serviceNodesMap map[ServiceType][]string, uniqueNodes []string) {
+	serviceNodesMap map[ServiceType][]string) {
 
 	// Get node hosts mapping for quick lookup
 	nodeHosts := make(map[string]string)
 	for _, node := range g.cfg.Nodes {
 		nodeHosts[node.Name] = node.Host
 	}
-	
+
 	// Calculate actual node counts for all services
 	serviceNodeCounts := make(map[ServiceType]int)
-	
+
 	// Calculate node counts for each service
 	for svcType, nodeList := range serviceNodesMap {
 		// Use a map to track unique IPs for this service
 		uniqueIPs := make(map[string]struct{})
-		
+
 		for _, nodeName := range nodeList {
 			// Check if this is a node group
 			isNodeGroup := false
@@ -408,7 +387,7 @@ func (g *ArchitectureDiagramGenerator) renderSummaryStatistics(buffer *bytes.Buf
 					break
 				}
 			}
-			
+
 			// If not a node group, add the node's IP if available
 			if !isNodeGroup {
 				if host, ok := nodeHosts[nodeName]; ok {
@@ -419,10 +398,10 @@ func (g *ArchitectureDiagramGenerator) renderSummaryStatistics(buffer *bytes.Buf
 				}
 			}
 		}
-		
+
 		serviceNodeCounts[svcType] = len(uniqueIPs)
 	}
-	
+
 	// Get actual total node count
 	totalNodeCount := g.getTotalActualNodeCount()
 
@@ -570,38 +549,28 @@ func (g *ArchitectureDiagramGenerator) expandNodeGroup(nodeGroup *config.NodeGro
 	return []string{nodeName}
 }
 
-// getActualNodeCount returns the actual number of physical nodes in a node group
-func (g *ArchitectureDiagramGenerator) getActualNodeCount(nodeGroup *config.NodeGroup) int {
-	ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
-	if err != nil {
-		// In case of an error, return 1 as a fallback
-		return 1
-	}
-	return len(ipList)
-}
-
 // getTotalActualNodeCount calculates the actual total number of physical nodes
 func (g *ArchitectureDiagramGenerator) getTotalActualNodeCount() int {
 	// Create a set to track unique nodes by IP address
 	uniqueIPs := make(map[string]struct{})
-	
+
 	// Add regular nodes
 	for _, node := range g.cfg.Nodes {
 		uniqueIPs[node.Host] = struct{}{}
 	}
-	
+
 	// Add nodes from node groups
 	for _, nodeGroup := range g.cfg.NodeGroups {
 		ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
 		if err != nil {
 			continue
 		}
-		
+
 		for _, ip := range ipList {
 			uniqueIPs[ip] = struct{}{}
 		}
 	}
-	
+
 	return len(uniqueIPs)
 }
 

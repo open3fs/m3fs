@@ -197,10 +197,10 @@ func TestNodeListFunctions(t *testing.T) {
 					assert.True(t, found, "Expected node %s should be in client nodes", expectedNode)
 				}
 
-				if tc.unexpectedNode != "" {
-					for _, clientNode := range clientNodes {
-						assert.NotEqual(t, tc.unexpectedNode, clientNode, "Unexpected node should not be in client nodes")
-					}
+				// Check that unexpected node is not in the result
+				for _, clientNode := range clientNodes {
+					assert.NotContains(t, clientNode, tc.unexpectedNode,
+						"Unexpected node %s should not be in client nodes", tc.unexpectedNode)
 				}
 			})
 		}
@@ -376,7 +376,7 @@ func TestGetTotalActualNodeCount(t *testing.T) {
 			expectedCount: 2,
 		},
 		{
-			name: "node groups only",
+			name:  "node groups only",
 			nodes: []config.Node{},
 			nodeGroups: []config.NodeGroup{
 				{Name: "group1", IPBegin: "192.168.1.10", IPEnd: "192.168.1.15"},
@@ -479,29 +479,29 @@ func TestServiceNodeCounting(t *testing.T) {
 	}
 
 	generator := NewArchitectureDiagramGenerator(cfg)
-	
+
 	// Test the whole diagram generation to ensure correct node counts
 	diagram, err := generator.GenerateBasicASCII()
 	if err != nil {
 		t.Fatalf("GenerateBasicASCII() failed: %v", err)
 	}
-	
+
 	// Check that the counts in the summary section are correct
 	expectedCounts := map[string]int{
 		"Client Nodes":  7, // node1 + group1 (6 nodes)
 		"Storage Nodes": 8, // node1 + node2 + group1 (6 nodes)
-		"FoundationDB": 7,  // node1 + group1 (6 nodes)
-		"Meta Service": 7,  // node1 + group1 (6 nodes)
+		"FoundationDB":  7, // node1 + group1 (6 nodes)
+		"Meta Service":  7, // node1 + group1 (6 nodes)
 		"Mgmtd Service": 7, // node1 + group1 (6 nodes)
-		"Monitor Svc":  7,  // node1 + group1 (6 nodes)
-		"Clickhouse":  7,   // node1 + group1 (6 nodes)
-		"Total Nodes": 8,   // node1 + node2 + group1 (6 nodes, with some overlap)
+		"Monitor Svc":   7, // node1 + group1 (6 nodes)
+		"Clickhouse":    7, // node1 + group1 (6 nodes)
+		"Total Nodes":   8, // node1 + node2 + group1 (6 nodes, with some overlap)
 	}
-	
+
 	lines := strings.Split(diagram, "\n")
 	var summaryLines []string
 	inSummary := false
-	
+
 	// Extract just the summary section lines
 	for _, line := range lines {
 		if strings.Contains(line, "CLUSTER SUMMARY") {
@@ -512,25 +512,25 @@ func TestServiceNodeCounting(t *testing.T) {
 			summaryLines = append(summaryLines, line)
 		}
 	}
-	
+
 	// Check the summary against expected values
 	if len(summaryLines) < 2 {
 		t.Fatalf("Expected at least 2 summary lines, got %d", len(summaryLines))
 	}
-	
+
 	// Combine the two summary lines for easier checking
 	summaryText := summaryLines[0] + " " + summaryLines[1]
-	
+
 	// Strip color codes for comparison
 	summaryText = stripANSIColors(summaryText)
-	
+
 	// Check each expected count
 	for name, count := range expectedCounts {
-		// 使用正则表达式检查，以处理不同数量的空格
+		// Use regular expression to check, handles different amounts of spaces
 		pattern := regexp.MustCompile(name + `:\s+` + strconv.Itoa(count))
 		if !pattern.MatchString(summaryText) {
-			t.Errorf("Summary missing or incorrect count for %s, expected %d, diagram: %s", 
-			         name, count, summaryText)
+			t.Errorf("Summary missing or incorrect count for %s, expected %d, diagram: %s",
+				name, count, summaryText)
 		}
 	}
 }
@@ -546,71 +546,3 @@ func stripANSIColors(s string) string {
 // while the summary statistics count the actual physical nodes.
 // Therefore, a direct comparison between displayed boxes and reported counts
 // is not meaningful and would always fail.
-
-// Helper function to count node boxes in a section of the diagram
-func countNodeBoxesInSection(diagram, sectionHeader string) int {
-	lines := strings.Split(diagram, "\n")
-	inSection := false
-	nodeCount := 0
-	
-	for _, line := range lines {
-		if strings.Contains(line, sectionHeader) {
-			inSection = true
-			continue
-		}
-		
-		// When we find the next section, we're done counting
-		if inSection && strings.Contains(line, "CLUSTER SUMMARY") {
-			break
-		}
-		
-		// Count node boxes by looking for lines with node names
-		// Node names are in format |node1          | or |group1-node(...|
-		if inSection && strings.Contains(line, "|") && 
-		   (strings.Contains(line, "node") || strings.Contains(line, "group")) {
-			// This assumes nodes are displayed in a table format with each node in a cell
-			// Each node is between two pipe characters
-			parts := strings.Split(line, "|")
-			// Count non-empty cells (skip first and last empty parts around pipes)
-			for _, part := range parts {
-				trimmed := strings.TrimSpace(part)
-				if trimmed != "" && (strings.Contains(trimmed, "node") || strings.Contains(trimmed, "group")) {
-					nodeCount++
-				}
-			}
-		}
-	}
-	
-	return nodeCount
-}
-
-// Helper function to extract a count from the summary section
-func getCountFromSummary(diagram, statName string) int {
-	lines := strings.Split(diagram, "\n")
-	inSummary := false
-	
-	for _, line := range lines {
-		if strings.Contains(line, "CLUSTER SUMMARY") {
-			inSummary = true
-			continue
-		}
-		
-		// Clean the line of ANSI color codes for matching
-		cleanLine := stripANSIColors(line)
-		
-		if inSummary && strings.Contains(cleanLine, statName) {
-			// Extract the number after the stat name
-			parts := strings.Split(cleanLine, statName)
-			if len(parts) > 1 {
-				// Find the first number in the remaining string
-				numStr := regexp.MustCompile(`\d+`).FindString(parts[1])
-				if numStr != "" {
-					num, _ := strconv.Atoi(numStr)
-					return num
-				}
-			}
-		}
-	}
-	
-	return 0
-}
