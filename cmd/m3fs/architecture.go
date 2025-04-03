@@ -37,6 +37,20 @@ const (
 	colorPink   = "\033[38;5;219m" // Light pink color
 )
 
+// ServiceType defines the type of service in the 3fs cluster
+type ServiceType string
+
+// ServiceType constants
+const (
+	ServiceMgmtd      ServiceType = "mgmtd"
+	ServiceMonitor    ServiceType = "monitor"
+	ServiceStorage    ServiceType = "storage"
+	ServiceFdb        ServiceType = "fdb"
+	ServiceClickhouse ServiceType = "clickhouse"
+	ServiceMeta       ServiceType = "meta" 
+	ServiceClient     ServiceType = "client"
+)
+
 // ArchitectureDiagramGenerator generates architecture diagrams for m3fs clusters
 type ArchitectureDiagramGenerator struct {
 	cfg          *config.Config
@@ -63,10 +77,7 @@ func (g *ArchitectureDiagramGenerator) Generate() (string, error) {
 
 // getColorReset returns the color reset code if colors are enabled
 func (g *ArchitectureDiagramGenerator) getColorReset() string {
-	if g.colorEnabled {
-		return colorReset
-	}
-	return ""
+	return g.getColorCode(colorReset)
 }
 
 // renderNodeRow renders a row of nodes with the given style
@@ -131,12 +142,20 @@ func (g *ArchitectureDiagramGenerator) renderServiceRow(buffer *bytes.Buffer,
 // renderStorageFunc renders all services for storage nodes
 func (g *ArchitectureDiagramGenerator) renderStorageFunc(buffer *bytes.Buffer, _ string, startIndex int) {
 	storageNodes := g.getStorageNodes()
-	realStorageNodes := g.getRealStorageNodes()
-	fdbNodes := g.getFdbNodes()
-	metaNodes := g.getMetaNodes()
-	mgmtdNodes := g.getMgmtdNodes()
-	monitorNodes := g.getMonitorNodes()
-	clickhouseNodes := g.getClickhouseNodes()
+	
+	// Get services in the same order we need to render them
+	serviceConfigs := []struct {
+		nodes []string
+		name  string
+		color string
+	}{
+		{g.getServiceNodes(ServiceStorage), "storage", colorYellow},
+		{g.getServiceNodes(ServiceFdb), "foundationdb", colorBlue},
+		{g.getMetaNodes(), "meta", colorPink},
+		{g.getServiceNodes(ServiceMgmtd), "mgmtd", colorPurple},
+		{g.getServiceNodes(ServiceMonitor), "monitor", colorPurple},
+		{g.getServiceNodes(ServiceClickhouse), "clickhouse", colorRed},
+	}
 
 	storageCount := len(storageNodes)
 	rowSize := 8
@@ -145,12 +164,9 @@ func (g *ArchitectureDiagramGenerator) renderStorageFunc(buffer *bytes.Buffer, _
 		endIndex = storageCount
 	}
 
-	g.renderServiceRow(buffer, storageNodes, realStorageNodes, startIndex, endIndex, "storage", colorYellow)
-	g.renderServiceRow(buffer, storageNodes, fdbNodes, startIndex, endIndex, "foundationdb", colorBlue)
-	g.renderServiceRow(buffer, storageNodes, metaNodes, startIndex, endIndex, "meta", colorPink)
-	g.renderServiceRow(buffer, storageNodes, mgmtdNodes, startIndex, endIndex, "mgmtd", colorPurple)
-	g.renderServiceRow(buffer, storageNodes, monitorNodes, startIndex, endIndex, "monitor", colorPurple)
-	g.renderServiceRow(buffer, storageNodes, clickhouseNodes, startIndex, endIndex, "clickhouse", colorRed)
+	for _, cfg := range serviceConfigs {
+		g.renderServiceRow(buffer, storageNodes, cfg.nodes, startIndex, endIndex, cfg.name, cfg.color)
+	}
 }
 
 // renderSummaryRow renders a row of statistics
@@ -185,15 +201,28 @@ func (g *ArchitectureDiagramGenerator) renderClientFunc(buffer *bytes.Buffer, _ 
 func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	var buffer bytes.Buffer
 
-	clientNodes := g.getClientNodes()
+	clientNodes := g.getServiceNodes(ServiceClient)
+	
+	// Get all storage nodes in the correct order
 	storageNodes := g.getStorageNodes()
-
-	mgmtdNodes := g.getMgmtdNodes()
-	monitorNodes := g.getMonitorNodes()
-	realStorageNodes := g.getRealStorageNodes()
-	fdbNodes := g.getFdbNodes()
-	clickhouseNodes := g.getClickhouseNodes()
+	
+	// Get individual service nodes for display and stats
+	mgmtdNodes := g.getServiceNodes(ServiceMgmtd)
+	monitorNodes := g.getServiceNodes(ServiceMonitor)
+	realStorageNodes := g.getServiceNodes(ServiceStorage)
+	fdbNodes := g.getServiceNodes(ServiceFdb)
+	clickhouseNodes := g.getServiceNodes(ServiceClickhouse)
 	metaNodes := g.getMetaNodes()
+	
+	// Create a map for service lookup in summary
+	serviceNodesMap := map[ServiceType][]string{
+		ServiceMgmtd:      mgmtdNodes,
+		ServiceMonitor:    monitorNodes,
+		ServiceStorage:    realStorageNodes,
+		ServiceFdb:        fdbNodes,
+		ServiceClickhouse: clickhouseNodes,
+		ServiceMeta:       metaNodes,
+	}
 
 	networkSpeed := g.getNetworkSpeed()
 
@@ -252,17 +281,23 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	buffer.WriteString("\n" + g.getColorCode(colorCyan) + "CLUSTER SUMMARY:" + g.getColorReset() + "\n")
 	buffer.WriteString(strings.Repeat("-", 70) + "\n")
 
+	// Combine all unique nodes for calculating total unique node count
 	var uniqueNodes []string
+	allNodesMap := make(map[string]bool)
+	
+	// Add client nodes
 	for _, node := range clientNodes {
-		if !g.isNodeInList(node, uniqueNodes) {
-			uniqueNodes = append(uniqueNodes, node)
-		}
+		allNodesMap[node] = true
 	}
-
+	
+	// Add storage nodes
 	for _, node := range storageNodes {
-		if !g.isNodeInList(node, uniqueNodes) {
-			uniqueNodes = append(uniqueNodes, node)
-		}
+		allNodesMap[node] = true
+	}
+	
+	// Convert to slice
+	for node := range allNodesMap {
+		uniqueNodes = append(uniqueNodes, node)
 	}
 
 	firstRowStats := []struct {
@@ -272,9 +307,9 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		width int
 	}{
 		{"Client Nodes", len(clientNodes), colorGreen, 13},
-		{"Storage Nodes", len(realStorageNodes), colorYellow, 14},
-		{"FoundationDB", len(fdbNodes), colorBlue, 12},
-		{"Meta Service", len(metaNodes), colorPink, 12},
+		{"Storage Nodes", len(serviceNodesMap[ServiceStorage]), colorYellow, 14},
+		{"FoundationDB", len(serviceNodesMap[ServiceFdb]), colorBlue, 12},
+		{"Meta Service", len(serviceNodesMap[ServiceMeta]), colorPink, 12},
 	}
 	g.renderSummaryRow(&buffer, firstRowStats)
 
@@ -284,9 +319,9 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		color string
 		width int
 	}{
-		{"Mgmtd Service", len(mgmtdNodes), colorPurple, 13},
-		{"Monitor Svc", len(monitorNodes), colorPurple, 14},
-		{"Clickhouse", len(clickhouseNodes), colorRed, 12},
+		{"Mgmtd Service", len(serviceNodesMap[ServiceMgmtd]), colorPurple, 13},
+		{"Monitor Svc", len(serviceNodesMap[ServiceMonitor]), colorPurple, 14},
+		{"Clickhouse", len(serviceNodesMap[ServiceClickhouse]), colorRed, 12},
 		{"Total Nodes", len(uniqueNodes), colorCyan, 12},
 	}
 	g.renderSummaryRow(&buffer, secondRowStats)
@@ -319,61 +354,62 @@ func (g *ArchitectureDiagramGenerator) getNodesForService(nodes []string, nodeGr
 	return serviceNodes
 }
 
+// getServiceNodes returns nodes for a specific service type
+func (g *ArchitectureDiagramGenerator) getServiceNodes(serviceType ServiceType) []string {
+	switch serviceType {
+	case ServiceMgmtd:
+		return g.getNodesForService(g.cfg.Services.Mgmtd.Nodes, g.cfg.Services.Mgmtd.NodeGroups)
+	case ServiceMonitor:
+		return g.getNodesForService(g.cfg.Services.Monitor.Nodes, g.cfg.Services.Monitor.NodeGroups)
+	case ServiceStorage:
+		return g.getNodesForService(g.cfg.Services.Storage.Nodes, g.cfg.Services.Storage.NodeGroups)
+	case ServiceFdb:
+		return g.getNodesForService(g.cfg.Services.Fdb.Nodes, g.cfg.Services.Fdb.NodeGroups)
+	case ServiceClickhouse:
+		return g.getNodesForService(g.cfg.Services.Clickhouse.Nodes, g.cfg.Services.Clickhouse.NodeGroups)
+	case ServiceMeta:
+		return g.getNodesForService(g.cfg.Services.Meta.Nodes, g.cfg.Services.Meta.NodeGroups)
+	case ServiceClient:
+		clientNodeNames := g.getNodesForService(g.cfg.Services.Client.Nodes, g.cfg.Services.Client.NodeGroups)
+		if len(clientNodeNames) == 0 {
+			return []string{"default-client"}
+		}
+		return clientNodeNames
+	default:
+		return []string{}
+	}
+}
+
 // getClientNodes returns all client nodes
 func (g *ArchitectureDiagramGenerator) getClientNodes() []string {
-	clientNodeNames := g.getNodesForService(g.cfg.Services.Client.Nodes, g.cfg.Services.Client.NodeGroups)
-
-	if len(clientNodeNames) == 0 {
-		return []string{"default-client"}
-	}
-
-	return clientNodeNames
+	return g.getServiceNodes(ServiceClient)
 }
 
 // getStorageNodes returns all storage nodes
 func (g *ArchitectureDiagramGenerator) getStorageNodes() []string {
-	mgmtdNodes := g.getMgmtdNodes()
-	monitorNodes := g.getMonitorNodes()
-	realStorageNodes := g.getRealStorageNodes()
-	fdbNodes := g.getFdbNodes()
+	// Get all service nodes first, preserving the original order
+	mgmtdNodes := g.getServiceNodes(ServiceMgmtd)
+	monitorNodes := g.getServiceNodes(ServiceMonitor)
+	realStorageNodes := g.getServiceNodes(ServiceStorage)
+	fdbNodes := g.getServiceNodes(ServiceFdb)
 	metaNodes := g.getMetaNodes()
-	clickhouseNodes := g.getClickhouseNodes()
+	clickhouseNodes := g.getServiceNodes(ServiceClickhouse)
 
+	// Create ordered map to preserve node order but avoid duplicates
+	seenNodes := make(map[string]bool)
 	var displayNodes []string
 
-	for _, nodeName := range mgmtdNodes {
-		if !g.isNodeInList(nodeName, displayNodes) {
-			displayNodes = append(displayNodes, nodeName)
-		}
+	// Add nodes in the specific order we want them displayed
+	nodeCollections := [][]string{
+		mgmtdNodes, monitorNodes, fdbNodes, metaNodes, clickhouseNodes, realStorageNodes,
 	}
 
-	for _, nodeName := range monitorNodes {
-		if !g.isNodeInList(nodeName, displayNodes) {
-			displayNodes = append(displayNodes, nodeName)
-		}
-	}
-
-	for _, nodeName := range fdbNodes {
-		if !g.isNodeInList(nodeName, displayNodes) {
-			displayNodes = append(displayNodes, nodeName)
-		}
-	}
-
-	for _, nodeName := range metaNodes {
-		if !g.isNodeInList(nodeName, displayNodes) {
-			displayNodes = append(displayNodes, nodeName)
-		}
-	}
-
-	for _, nodeName := range clickhouseNodes {
-		if !g.isNodeInList(nodeName, displayNodes) {
-			displayNodes = append(displayNodes, nodeName)
-		}
-	}
-
-	for _, nodeName := range realStorageNodes {
-		if !g.isNodeInList(nodeName, displayNodes) {
-			displayNodes = append(displayNodes, nodeName)
+	for _, nodes := range nodeCollections {
+		for _, nodeName := range nodes {
+			if !seenNodes[nodeName] {
+				seenNodes[nodeName] = true
+				displayNodes = append(displayNodes, nodeName)
+			}
 		}
 	}
 
@@ -402,36 +438,36 @@ func (g *ArchitectureDiagramGenerator) isNodeInList(nodeName string, nodeList []
 
 // getMgmtdNodes gets all mgmtd nodes
 func (g *ArchitectureDiagramGenerator) getMgmtdNodes() []string {
-	return g.getNodesForService(g.cfg.Services.Mgmtd.Nodes, g.cfg.Services.Mgmtd.NodeGroups)
+	return g.getServiceNodes(ServiceMgmtd)
 }
 
 // getMonitorNodes gets all monitor nodes
 func (g *ArchitectureDiagramGenerator) getMonitorNodes() []string {
-	return g.getNodesForService(g.cfg.Services.Monitor.Nodes, g.cfg.Services.Monitor.NodeGroups)
+	return g.getServiceNodes(ServiceMonitor)
 }
 
 // getRealStorageNodes gets the actual storage nodes, excluding nodes that only run management services
 func (g *ArchitectureDiagramGenerator) getRealStorageNodes() []string {
-	return g.getNodesForService(g.cfg.Services.Storage.Nodes, g.cfg.Services.Storage.NodeGroups)
+	return g.getServiceNodes(ServiceStorage)
 }
 
 // getFdbNodes gets nodes running foundationdb service
 func (g *ArchitectureDiagramGenerator) getFdbNodes() []string {
-	return g.getNodesForService(g.cfg.Services.Fdb.Nodes, g.cfg.Services.Fdb.NodeGroups)
+	return g.getServiceNodes(ServiceFdb)
 }
 
 // getClickhouseNodes gets nodes running clickhouse service
 func (g *ArchitectureDiagramGenerator) getClickhouseNodes() []string {
-	return g.getNodesForService(g.cfg.Services.Clickhouse.Nodes, g.cfg.Services.Clickhouse.NodeGroups)
+	return g.getServiceNodes(ServiceClickhouse)
 }
 
 // getMetaNodes gets nodes running meta service
 func (g *ArchitectureDiagramGenerator) getMetaNodes() []string {
-	metaNodes := g.getNodesForService(g.cfg.Services.Meta.Nodes, g.cfg.Services.Meta.NodeGroups)
+	metaNodes := g.getServiceNodes(ServiceMeta)
 
 	if len(metaNodes) == 0 {
-		metaNodes = g.getRealStorageNodes()
-		mgmtdNodes := g.getMgmtdNodes()
+		metaNodes = g.getServiceNodes(ServiceStorage)
+		mgmtdNodes := g.getServiceNodes(ServiceMgmtd)
 		for _, nodeName := range mgmtdNodes {
 			if !g.isNodeInList(nodeName, metaNodes) {
 				metaNodes = append(metaNodes, nodeName)
@@ -514,8 +550,11 @@ func (g *ArchitectureDiagramGenerator) getEthernetSpeed() string {
 
 // getColorCode returns the appropriate color code based on whether colors are enabled
 func (g *ArchitectureDiagramGenerator) getColorCode(colorCode string) string {
-	if g.colorEnabled {
-		return colorCode
+	if !g.colorEnabled || colorCode == "" {
+		return ""
 	}
-	return ""
+	if colorCode == colorReset {
+		return colorReset
+	}
+	return colorCode
 }
