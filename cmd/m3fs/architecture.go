@@ -139,33 +139,45 @@ func (g *ArchitectureDiagramGenerator) renderServiceRow(buffer *bytes.Buffer,
 	buffer.WriteString("\n")
 }
 
+// ServiceConfig defines a service configuration for rendering
+type ServiceConfig struct {
+	Type  ServiceType
+	Name  string
+	Color string
+}
+
+// Common service configs for rendering
+var (
+	serviceConfigs = []ServiceConfig{
+		{ServiceStorage, "storage", colorYellow},
+		{ServiceFdb, "foundationdb", colorBlue},
+		{ServiceMeta, "meta", colorPink},
+		{ServiceMgmtd, "mgmtd", colorPurple},
+		{ServiceMonitor, "monitor", colorPurple},
+		{ServiceClickhouse, "clickhouse", colorRed},
+	}
+
+	defaultRowSize = 8
+)
+
 // renderStorageFunc renders all services for storage nodes
 func (g *ArchitectureDiagramGenerator) renderStorageFunc(buffer *bytes.Buffer, _ string, startIndex int) {
 	storageNodes := g.getStorageNodes()
 	
-	// Get services in the same order we need to render them
-	serviceConfigs := []struct {
-		nodes []string
-		name  string
-		color string
-	}{
-		{g.getServiceNodes(ServiceStorage), "storage", colorYellow},
-		{g.getServiceNodes(ServiceFdb), "foundationdb", colorBlue},
-		{g.getMetaNodes(), "meta", colorPink},
-		{g.getServiceNodes(ServiceMgmtd), "mgmtd", colorPurple},
-		{g.getServiceNodes(ServiceMonitor), "monitor", colorPurple},
-		{g.getServiceNodes(ServiceClickhouse), "clickhouse", colorRed},
-	}
-
 	storageCount := len(storageNodes)
-	rowSize := 8
-	endIndex := startIndex + rowSize
+	endIndex := startIndex + defaultRowSize
 	if endIndex > storageCount {
 		endIndex = storageCount
 	}
 
 	for _, cfg := range serviceConfigs {
-		g.renderServiceRow(buffer, storageNodes, cfg.nodes, startIndex, endIndex, cfg.name, cfg.color)
+		var nodes []string
+		if cfg.Type == ServiceMeta {
+			nodes = g.getMetaNodes() // Special case for meta nodes
+		} else {
+			nodes = g.getServiceNodes(cfg.Type)
+		}
+		g.renderServiceRow(buffer, storageNodes, nodes, startIndex, endIndex, cfg.Name, cfg.Color)
 	}
 }
 
@@ -185,11 +197,10 @@ func (g *ArchitectureDiagramGenerator) renderSummaryRow(buffer *bytes.Buffer, st
 
 // renderClientFunc renders client services
 func (g *ArchitectureDiagramGenerator) renderClientFunc(buffer *bytes.Buffer, _ string, startIndex int) {
-	clientNodes := g.getClientNodes()
+	clientNodes := g.getServiceNodes(ServiceClient)
 	clientCount := len(clientNodes)
 
-	rowSize := 8
-	endIndex := startIndex + rowSize
+	endIndex := startIndex + defaultRowSize
 	if endIndex > clientCount {
 		endIndex = clientCount
 	}
@@ -202,54 +213,83 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 	var buffer bytes.Buffer
 
 	clientNodes := g.getServiceNodes(ServiceClient)
-	
-	// Get all storage nodes in the correct order
 	storageNodes := g.getStorageNodes()
 	
-	// Get individual service nodes for display and stats
-	mgmtdNodes := g.getServiceNodes(ServiceMgmtd)
-	monitorNodes := g.getServiceNodes(ServiceMonitor)
-	realStorageNodes := g.getServiceNodes(ServiceStorage)
-	fdbNodes := g.getServiceNodes(ServiceFdb)
-	clickhouseNodes := g.getServiceNodes(ServiceClickhouse)
-	metaNodes := g.getMetaNodes()
+	// Create service nodes map for use in statistics
+	serviceNodesMap := make(map[ServiceType][]string)
 	
-	// Create a map for service lookup in summary
-	serviceNodesMap := map[ServiceType][]string{
-		ServiceMgmtd:      mgmtdNodes,
-		ServiceMonitor:    monitorNodes,
-		ServiceStorage:    realStorageNodes,
-		ServiceFdb:        fdbNodes,
-		ServiceClickhouse: clickhouseNodes,
-		ServiceMeta:       metaNodes,
+	// Fill the map with standard services
+	for _, cfg := range serviceConfigs {
+		if cfg.Type == ServiceMeta {
+			serviceNodesMap[cfg.Type] = g.getMetaNodes()
+		} else {
+			serviceNodesMap[cfg.Type] = g.getServiceNodes(cfg.Type)
+		}
 	}
+	
+	// Add client nodes to the map
+	serviceNodesMap[ServiceClient] = clientNodes
 
 	networkSpeed := g.getNetworkSpeed()
 
+	// Render cluster header
 	buffer.WriteString(fmt.Sprintf("Cluster: %s\n", g.cfg.Name))
 	buffer.WriteString(strings.Repeat("=", 70))
 	buffer.WriteString("\n\n")
 
-	clientCount := len(clientNodes)
-	storageCount := len(storageNodes)
-
+	// Client nodes section
 	buffer.WriteString(g.getColorCode(colorCyan) + "CLIENT NODES:" + g.getColorReset() + "\n")
 	buffer.WriteString(strings.Repeat("-", 70))
 	buffer.WriteString("\n")
 
-	g.renderNodeRow(&buffer, clientNodes, 8, g.renderClientFunc)
-
+	g.renderNodeRow(&buffer, clientNodes, defaultRowSize, g.renderClientFunc)
 	buffer.WriteString("\n")
 
-	arrowCount := clientCount
-	if arrowCount <= 0 {
-		arrowCount = 1
-	} else if arrowCount > 15 {
-		arrowCount = 15
-	}
+	// Calculate appropriate arrow count
+	arrowCount := g.calculateArrowCount(len(clientNodes))
 	buffer.WriteString(strings.Repeat("  ↓ ", arrowCount))
 	buffer.WriteString("\n")
 
+	// Network section
+	g.renderNetworkSection(&buffer, networkSpeed)
+
+	// Calculate storage arrow count
+	arrowCount = g.calculateArrowCount(len(storageNodes))
+	buffer.WriteString(strings.Repeat("  ↓ ", arrowCount))
+	buffer.WriteString("\n\n")
+
+	// Storage nodes section
+	buffer.WriteString(g.getColorCode(colorCyan) + "STORAGE NODES:" + g.getColorReset() + "\n")
+	buffer.WriteString(strings.Repeat("-", 70))
+	buffer.WriteString("\n")
+
+	g.renderNodeRow(&buffer, storageNodes, defaultRowSize, g.renderStorageFunc)
+
+	// Cluster summary section
+	buffer.WriteString("\n" + g.getColorCode(colorCyan) + "CLUSTER SUMMARY:" + g.getColorReset() + "\n")
+	buffer.WriteString(strings.Repeat("-", 70) + "\n")
+
+	// Count unique nodes across client and storage
+	uniqueNodes := g.countUniqueNodes(clientNodes, storageNodes)
+
+	// Render summary statistics
+	g.renderSummaryStatistics(&buffer, serviceNodesMap, uniqueNodes)
+
+	return buffer.String(), nil
+}
+
+// calculateArrowCount calculates appropriate arrow count for display
+func (g *ArchitectureDiagramGenerator) calculateArrowCount(nodeCount int) int {
+	if nodeCount <= 0 {
+		return 1
+	} else if nodeCount > 15 {
+		return 15
+	}
+	return nodeCount
+}
+
+// renderNetworkSection renders the network section of the diagram
+func (g *ArchitectureDiagramGenerator) renderNetworkSection(buffer *bytes.Buffer, networkSpeed string) {
 	networkText := fmt.Sprintf(" %s Network (%s) ", g.cfg.NetworkType, networkSpeed)
 	totalWidth := 70
 
@@ -262,56 +302,42 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		strings.Repeat(" ", rightPadding) +
 		"║\n")
 	buffer.WriteString("╚" + strings.Repeat("═", totalWidth-2) + "╝\n")
+}
 
-	arrowCount = storageCount
-	if arrowCount <= 0 {
-		arrowCount = 1
-	} else if arrowCount > 15 {
-		arrowCount = 15
-	}
-	buffer.WriteString(strings.Repeat("  ↓ ", arrowCount))
-	buffer.WriteString("\n\n")
-
-	buffer.WriteString(g.getColorCode(colorCyan) + "STORAGE NODES:" + g.getColorReset() + "\n")
-	buffer.WriteString(strings.Repeat("-", 70))
-	buffer.WriteString("\n")
-
-	g.renderNodeRow(&buffer, storageNodes, 8, g.renderStorageFunc)
-
-	buffer.WriteString("\n" + g.getColorCode(colorCyan) + "CLUSTER SUMMARY:" + g.getColorReset() + "\n")
-	buffer.WriteString(strings.Repeat("-", 70) + "\n")
-
-	// Combine all unique nodes for calculating total unique node count
-	var uniqueNodes []string
-	allNodesMap := make(map[string]bool)
+// countUniqueNodes counts unique nodes across node lists
+func (g *ArchitectureDiagramGenerator) countUniqueNodes(nodeLists ...[]string) []string {
+	nodeMap := make(map[string]bool)
 	
-	// Add client nodes
-	for _, node := range clientNodes {
-		allNodesMap[node] = true
+	for _, list := range nodeLists {
+		for _, node := range list {
+			nodeMap[node] = true
+		}
 	}
 	
-	// Add storage nodes
-	for _, node := range storageNodes {
-		allNodesMap[node] = true
-	}
-	
-	// Convert to slice
-	for node := range allNodesMap {
+	uniqueNodes := make([]string, 0, len(nodeMap))
+	for node := range nodeMap {
 		uniqueNodes = append(uniqueNodes, node)
 	}
+	
+	return uniqueNodes
+}
 
+// renderSummaryStatistics renders the summary statistics section
+func (g *ArchitectureDiagramGenerator) renderSummaryStatistics(buffer *bytes.Buffer, 
+	serviceNodesMap map[ServiceType][]string, uniqueNodes []string) {
+	
 	firstRowStats := []struct {
 		name  string
 		count int
 		color string
 		width int
 	}{
-		{"Client Nodes", len(clientNodes), colorGreen, 13},
+		{"Client Nodes", len(serviceNodesMap[ServiceClient]), colorGreen, 13},
 		{"Storage Nodes", len(serviceNodesMap[ServiceStorage]), colorYellow, 14},
 		{"FoundationDB", len(serviceNodesMap[ServiceFdb]), colorBlue, 12},
 		{"Meta Service", len(serviceNodesMap[ServiceMeta]), colorPink, 12},
 	}
-	g.renderSummaryRow(&buffer, firstRowStats)
+	g.renderSummaryRow(buffer, firstRowStats)
 
 	secondRowStats := []struct {
 		name  string
@@ -324,9 +350,7 @@ func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
 		{"Clickhouse", len(serviceNodesMap[ServiceClickhouse]), colorRed, 12},
 		{"Total Nodes", len(uniqueNodes), colorCyan, 12},
 	}
-	g.renderSummaryRow(&buffer, secondRowStats)
-
-	return buffer.String(), nil
+	g.renderSummaryRow(buffer, secondRowStats)
 }
 
 // getNodesForService gets nodes for a specific service type
@@ -387,36 +411,44 @@ func (g *ArchitectureDiagramGenerator) getClientNodes() []string {
 
 // getStorageNodes returns all storage nodes
 func (g *ArchitectureDiagramGenerator) getStorageNodes() []string {
-	// Get all service nodes first, preserving the original order
-	mgmtdNodes := g.getServiceNodes(ServiceMgmtd)
-	monitorNodes := g.getServiceNodes(ServiceMonitor)
-	realStorageNodes := g.getServiceNodes(ServiceStorage)
-	fdbNodes := g.getServiceNodes(ServiceFdb)
-	metaNodes := g.getMetaNodes()
-	clickhouseNodes := g.getServiceNodes(ServiceClickhouse)
-
-	// Create ordered map to preserve node order but avoid duplicates
+	// 首先获取配置中所有可能的存储节点
+	var allNodes []string
+	
+	// 收集所有节点信息
+	for _, node := range g.cfg.Nodes {
+		allNodes = append(allNodes, node.Name)
+	}
+	
+	// 检查每个节点是否提供任何存储相关服务
 	seenNodes := make(map[string]bool)
 	var displayNodes []string
-
-	// Add nodes in the specific order we want them displayed
-	nodeCollections := [][]string{
-		mgmtdNodes, monitorNodes, fdbNodes, metaNodes, clickhouseNodes, realStorageNodes,
-	}
-
-	for _, nodes := range nodeCollections {
-		for _, nodeName := range nodes {
-			if !seenNodes[nodeName] {
-				seenNodes[nodeName] = true
-				displayNodes = append(displayNodes, nodeName)
+	
+	// 按照配置中的节点顺序添加，确保保持原始顺序
+	for _, nodeName := range allNodes {
+		// 检查此节点是否运行了任何存储相关服务
+		for _, cfg := range serviceConfigs {
+			var serviceNodes []string
+			if cfg.Type == ServiceMeta {
+				serviceNodes = g.getMetaNodes()
+			} else {
+				serviceNodes = g.getServiceNodes(cfg.Type)
+			}
+			
+			if g.isNodeInList(nodeName, serviceNodes) {
+				if !seenNodes[nodeName] {
+					seenNodes[nodeName] = true
+					displayNodes = append(displayNodes, nodeName)
+				}
+				break
 			}
 		}
 	}
-
+	
+	// 如果没有找到存储节点，返回默认值
 	if len(displayNodes) == 0 {
 		return []string{"default-storage"}
 	}
-
+	
 	return displayNodes
 }
 
@@ -436,38 +468,15 @@ func (g *ArchitectureDiagramGenerator) isNodeInList(nodeName string, nodeList []
 	return false
 }
 
-// getMgmtdNodes gets all mgmtd nodes
-func (g *ArchitectureDiagramGenerator) getMgmtdNodes() []string {
-	return g.getServiceNodes(ServiceMgmtd)
-}
-
-// getMonitorNodes gets all monitor nodes
-func (g *ArchitectureDiagramGenerator) getMonitorNodes() []string {
-	return g.getServiceNodes(ServiceMonitor)
-}
-
-// getRealStorageNodes gets the actual storage nodes, excluding nodes that only run management services
-func (g *ArchitectureDiagramGenerator) getRealStorageNodes() []string {
-	return g.getServiceNodes(ServiceStorage)
-}
-
-// getFdbNodes gets nodes running foundationdb service
-func (g *ArchitectureDiagramGenerator) getFdbNodes() []string {
-	return g.getServiceNodes(ServiceFdb)
-}
-
-// getClickhouseNodes gets nodes running clickhouse service
-func (g *ArchitectureDiagramGenerator) getClickhouseNodes() []string {
-	return g.getServiceNodes(ServiceClickhouse)
-}
-
 // getMetaNodes gets nodes running meta service
 func (g *ArchitectureDiagramGenerator) getMetaNodes() []string {
 	metaNodes := g.getServiceNodes(ServiceMeta)
 
 	if len(metaNodes) == 0 {
+		// If no meta nodes configured, use storage and mgmtd nodes
 		metaNodes = g.getServiceNodes(ServiceStorage)
 		mgmtdNodes := g.getServiceNodes(ServiceMgmtd)
+		
 		for _, nodeName := range mgmtdNodes {
 			if !g.isNodeInList(nodeName, metaNodes) {
 				metaNodes = append(metaNodes, nodeName)
@@ -480,27 +489,24 @@ func (g *ArchitectureDiagramGenerator) getMetaNodes() []string {
 
 // getNetworkSpeed gets the network speed
 func (g *ArchitectureDiagramGenerator) getNetworkSpeed() string {
-	var speed string
-
-	speedIB := g.getIBNetworkSpeed()
-	if speedIB != "" {
-		speed = speedIB
+	// Try to detect speed from the system
+	if speed := g.getIBNetworkSpeed(); speed != "" {
 		return speed
 	}
-
-	speedEth := g.getEthernetSpeed()
-	if speedEth != "" {
-		speed = speedEth
+	
+	if speed := g.getEthernetSpeed(); speed != "" {
 		return speed
 	}
-
-	if g.cfg.NetworkType == config.NetworkTypeIB {
+	
+	// Use default values based on network type
+	switch g.cfg.NetworkType {
+	case config.NetworkTypeIB:
 		return "50 Gb/sec"
-	}
-	if g.cfg.NetworkType == config.NetworkTypeRDMA {
+	case config.NetworkTypeRDMA:
 		return "100 Gb/sec"
+	default:
+		return "10 Gb/sec"
 	}
-	return "10 Gb/sec"
 }
 
 // getIBNetworkSpeed gets InfiniBand network speed
