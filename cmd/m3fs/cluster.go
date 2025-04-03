@@ -15,6 +15,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -113,6 +114,25 @@ var clusterCmd = &cli.Command{
 					Usage:       "Path to the 3fs artifact",
 					Destination: &artifactPath,
 					Required:    false,
+				},
+			},
+		},
+		{
+			Name:   "architecture",
+			Usage:  "Generate architecture diagram of a 3fs cluster",
+			Action: drawClusterArchitecture,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:        "config",
+					Aliases:     []string{"c"},
+					Usage:       "Path to the cluster configuration file",
+					Destination: &configFilePath,
+					Required:    true,
+				},
+				&cli.BoolFlag{
+					Name:        "no-color",
+					Usage:       "Disable colored output in the diagram",
+					Destination: &noColorOutput,
 				},
 			},
 		},
@@ -220,5 +240,23 @@ func prepareCluster(ctx *cli.Context) error {
 		return errors.Annotate(err, "prepare cluster")
 	}
 
+	return nil
+}
+
+func drawClusterArchitecture(ctx *cli.Context) error {
+	cfg, err := loadClusterConfig()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	diagramGenerator := NewArchitectureDiagramGenerator(cfg)
+	diagramGenerator.SetColorEnabled(!noColorOutput)
+
+	diagram, err := diagramGenerator.GenerateBasicASCII()
+	if err != nil {
+		return errors.Annotate(err, "generate architecture diagram")
+	}
+
+	fmt.Println(diagram)
 	return nil
 }

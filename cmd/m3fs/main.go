@@ -38,6 +38,7 @@ var (
 	workDir          string
 	registry         string
 	clusterDeleteAll bool
+	noColorOutput    bool
 )
 
 func main() {
