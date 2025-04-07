@@ -250,7 +250,7 @@ func drawClusterArchitecture(ctx *cli.Context) error {
 		return errors.Trace(err)
 	}
 
-	diagramGenerator := NewArchitectureDiagramGenerator(cfg)
+	diagramGenerator := NewArchDiagram(cfg)
 	diagramGenerator.SetColorEnabled(!noColorOutput)
 
 	diagram := diagramGenerator.Generate()

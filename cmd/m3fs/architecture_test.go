@@ -71,9 +71,9 @@ func createTestConfig() *config.Config {
 	}
 }
 
-func TestArchitectureDiagramGenerator(t *testing.T) {
+func TestArchDiagram(t *testing.T) {
 	cfg := createTestConfig()
-	generator := NewArchitectureDiagramGenerator(cfg)
+	generator := NewArchDiagram(cfg)
 
 	t.Run("Generate", func(t *testing.T) {
 		diagram := generator.Generate()
@@ -105,7 +105,7 @@ func TestNoColorOption(t *testing.T) {
 	cfg := createTestConfig()
 
 	t.Run("DefaultWithColor", func(t *testing.T) {
-		generator := NewArchitectureDiagramGenerator(cfg)
+		generator := NewArchDiagram(cfg)
 		// Colors should be enabled by default
 		assert.True(t, generator.colorEnabled, "Colors should be enabled by default")
 
@@ -116,7 +116,7 @@ func TestNoColorOption(t *testing.T) {
 	})
 
 	t.Run("WithNoColorOption", func(t *testing.T) {
-		generator := NewArchitectureDiagramGenerator(cfg)
+		generator := NewArchDiagram(cfg)
 		// Set the no-color option
 		generator.SetColorEnabled(false)
 		assert.False(t, generator.colorEnabled, "Colors should be disabled after setting colorEnabled to false")
@@ -169,7 +169,7 @@ func TestNodeListFunctions(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				generator := NewArchitectureDiagramGenerator(tc.cfg)
+				generator := NewArchDiagram(tc.cfg)
 				clientNodes := generator.getClientNodes()
 
 				assert.Len(t, clientNodes, tc.expectedCount, "Client nodes count should match expected")
@@ -219,7 +219,7 @@ func TestNodeListFunctions(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				generator := NewArchitectureDiagramGenerator(tc.cfg)
+				generator := NewArchDiagram(tc.cfg)
 				storageNodes := generator.getStorageNodes()
 
 				for _, expectedNode := range tc.expectedNodes {
@@ -243,7 +243,7 @@ func TestNodeListFunctions(t *testing.T) {
 	})
 
 	t.Run("IsNodeInList", func(t *testing.T) {
-		generator := NewArchitectureDiagramGenerator(nil)
+		generator := NewArchDiagram(nil)
 		nodeList := []string{"node1", "node2", "node3"}
 
 		assert.True(t, generator.isNodeInList("node1", nodeList), "node1 should be found in the list")
@@ -291,7 +291,7 @@ func TestExpandNodeGroup(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			generator := NewArchitectureDiagramGenerator(nil)
+			generator := NewArchDiagram(nil)
 			result := generator.expandNodeGroup(&tc.nodeGroup)
 
 			assert.Len(t, result, 1, "expandNodeGroup should return a slice with one element")
@@ -413,7 +413,7 @@ func TestGetTotalActualNodeCount(t *testing.T) {
 				NodeGroups: tt.nodeGroups,
 			}
 
-			generator := NewArchitectureDiagramGenerator(cfg)
+			generator := NewArchDiagram(cfg)
 			actualCount := generator.getTotalActualNodeCount()
 
 			if actualCount != tt.expectedCount {
@@ -466,7 +466,7 @@ func TestServiceNodeCounting(t *testing.T) {
 		},
 	}
 
-	generator := NewArchitectureDiagramGenerator(cfg)
+	generator := NewArchDiagram(cfg)
 
 	// Test the whole diagram generation to ensure correct node counts
 	diagram := generator.Generate()

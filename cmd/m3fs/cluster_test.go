@@ -24,14 +24,14 @@ import (
 
 // TestDrawClusterArchitecture tests the no-color option in the architecture diagram generation
 func TestDrawClusterArchitecture(t *testing.T) {
-	// We'll directly test the ArchitectureDiagramGenerator since we can't mock drawClusterArchitecture
+	// We'll directly test the ArchDiagram since we can't mock drawClusterArchitecture
 	cfg := createTestConfig()
 
 	// Explicit use of config package to avoid unused import error
 	var _ config.NetworkType = cfg.NetworkType
 
 	t.Run("WithColor", func(t *testing.T) {
-		generator := NewArchitectureDiagramGenerator(cfg)
+		generator := NewArchDiagram(cfg)
 		// Default should be with color
 		diagram := generator.Generate()
 		assert.Contains(t, diagram, "\033[", "Output should contain color codes")
@@ -39,7 +39,7 @@ func TestDrawClusterArchitecture(t *testing.T) {
 	})
 
 	t.Run("WithoutColor", func(t *testing.T) {
-		generator := NewArchitectureDiagramGenerator(cfg)
+		generator := NewArchDiagram(cfg)
 		generator.SetColorEnabled(false)
 		diagram := generator.Generate()
 		assert.NotContains(t, diagram, "\033[", "Output should not contain color codes")
