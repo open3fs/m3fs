@@ -111,6 +111,14 @@ func (g *ArchDiagram) getColorReset() string {
 	return g.getColorCode(colorReset)
 }
 
+// getColorCode returns the appropriate color code based on whether colors are enabled
+func (g *ArchDiagram) getColorCode(colorCode string) string {
+	if !g.colorEnabled {
+		return ""
+	}
+	return colorCode
+}
+
 // renderBoxBorder renders a border line for node boxes
 func (g *ArchDiagram) renderBoxBorder(buffer *bytes.Buffer, count int) {
 	for j := 0; j < count; j++ {
@@ -696,12 +704,4 @@ func (g *ArchDiagram) getInterfaceSpeed(interfaceName string) string {
 	}
 
 	return ""
-}
-
-// getColorCode returns the appropriate color code based on whether colors are enabled
-func (g *ArchDiagram) getColorCode(colorCode string) string {
-	if !g.colorEnabled {
-		return ""
-	}
-	return colorCode
 }
