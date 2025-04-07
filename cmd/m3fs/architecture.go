@@ -599,23 +599,10 @@ func (g *ArchDiagram) isNodeInList(nodeName string, nodeList []string) bool {
 	return nodeSet[nodeName]
 }
 
-// getMetaNodes gets nodes running meta service
+// getMetaNodes gets nodes running meta service directly from configuration
 func (g *ArchDiagram) getMetaNodes() []string {
-	metaNodes := g.getServiceNodes(ServiceMeta)
-
-	if len(metaNodes) == 0 {
-		// If no meta nodes configured, use storage and mgmtd nodes
-		metaNodes = g.getServiceNodes(ServiceStorage)
-		mgmtdNodes := g.getServiceNodes(ServiceMgmtd)
-
-		for _, nodeName := range mgmtdNodes {
-			if !g.isNodeInList(nodeName, metaNodes) {
-				metaNodes = append(metaNodes, nodeName)
-			}
-		}
-	}
-
-	return metaNodes
+	// Simply return meta nodes as configured, without any fallback logic
+	return g.getServiceNodes(ServiceMeta)
 }
 
 // getNetworkSpeed gets the network speed
