@@ -119,6 +119,7 @@ var clusterCmd = &cli.Command{
 		},
 		{
 			Name:   "architecture",
+			Aliases: []string{"arch"},
 			Usage:  "Generate architecture diagram of a 3fs cluster",
 			Action: drawClusterArchitecture,
 			Flags: []cli.Flag{
