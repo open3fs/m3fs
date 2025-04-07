@@ -35,7 +35,7 @@ const (
 	colorPurple = "\033[35m"
 	colorCyan   = "\033[36m"
 	colorWhite  = "\033[37m"
-	colorPink   = "\033[38;5;219m" // Light pink color
+	colorPink   = "\033[38;5;219m"
 )
 
 // ServiceType defines the type of service in the 3fs cluster
@@ -85,18 +85,14 @@ func (g *ArchDiagram) SetColorEnabled(enabled bool) {
 
 // Generate generates an architecture diagram
 func (g *ArchDiagram) Generate() string {
-	// Prepare buffer for diagram output
 	var buffer bytes.Buffer
 
-	// Collect node information
 	clientNodes := g.getServiceNodes(ServiceClient)
 	storageNodes := g.getStorageRelatedNodes()
 	serviceNodesMap := g.prepareServiceNodesMap(clientNodes)
 
-	// Get network speed
 	networkSpeed := g.getNetworkSpeed()
 
-	// Generate diagram sections
 	g.renderClusterHeader(&buffer)
 	g.renderClientSection(&buffer, clientNodes)
 	g.renderNetworkSection(&buffer, networkSpeed)
@@ -142,10 +138,8 @@ func (g *ArchDiagram) renderNodeRow(buffer *bytes.Buffer, nodes []string, rowSiz
 			end = nodeCount
 		}
 
-		// Render top border
 		g.renderBoxBorder(buffer, end-i)
 
-		// Render node names
 		for j := i; j < end; j++ {
 			nodeName := nodes[j]
 			if len(nodeName) > g.nodeCellWidth {
@@ -155,10 +149,8 @@ func (g *ArchDiagram) renderNodeRow(buffer *bytes.Buffer, nodes []string, rowSiz
 		}
 		buffer.WriteByte('\n')
 
-		// Render service details
 		renderFunc(buffer, "", i)
 
-		// Render bottom border
 		g.renderBoxBorder(buffer, end-i)
 	}
 }
@@ -221,7 +213,7 @@ func (g *ArchDiagram) renderStorageFunc(buffer *bytes.Buffer, _ string, startInd
 	for _, cfg := range serviceConfigs {
 		var nodes []string
 		if cfg.Type == ServiceMeta {
-			nodes = g.getMetaNodes() // Special case for meta nodes
+			nodes = g.getMetaNodes()
 		} else {
 			nodes = g.getServiceNodes(cfg.Type)
 		}
@@ -266,7 +258,6 @@ func (g *ArchDiagram) renderClientFunc(buffer *bytes.Buffer, _ string, startInde
 func (g *ArchDiagram) prepareServiceNodesMap(clientNodes []string) map[ServiceType][]string {
 	serviceNodesMap := make(map[ServiceType][]string, len(serviceConfigs)+1)
 
-	// Fill the map with standard services
 	for _, cfg := range serviceConfigs {
 		if cfg.Type == ServiceMeta {
 			serviceNodesMap[cfg.Type] = g.getMetaNodes()
@@ -275,7 +266,6 @@ func (g *ArchDiagram) prepareServiceNodesMap(clientNodes []string) map[ServiceTy
 		}
 	}
 
-	// Add client nodes to the map
 	serviceNodesMap[ServiceClient] = clientNodes
 
 	return serviceNodesMap
@@ -304,7 +294,6 @@ func (g *ArchDiagram) renderClientSection(buffer *bytes.Buffer, clientNodes []st
 	g.renderNodeRow(buffer, clientNodes, g.defaultRowSize, g.renderClientFunc)
 	buffer.WriteByte('\n')
 
-	// Calculate appropriate arrow count
 	arrowCount := g.calculateArrowCount(len(clientNodes))
 	buffer.WriteString(strings.Repeat("  ↓ ", arrowCount))
 	buffer.WriteByte('\n')
@@ -312,12 +301,10 @@ func (g *ArchDiagram) renderClientSection(buffer *bytes.Buffer, clientNodes []st
 
 // renderStorageSection renders the storage nodes section
 func (g *ArchDiagram) renderStorageSection(buffer *bytes.Buffer, storageNodes []string) {
-	// Calculate storage arrow count
 	arrowCount := g.calculateArrowCount(len(storageNodes))
 	buffer.WriteString(strings.Repeat("  ↓ ", arrowCount))
 	buffer.WriteString("\n\n")
 
-	// Storage nodes section
 	g.renderSectionHeader(buffer, "STORAGE NODES:")
 
 	g.renderNodeRow(buffer, storageNodes, g.defaultRowSize, g.renderStorageFunc)
@@ -330,7 +317,6 @@ func (g *ArchDiagram) renderSummarySection(buffer *bytes.Buffer,
 	buffer.WriteString("\n")
 	g.renderSectionHeader(buffer, "CLUSTER SUMMARY:")
 
-	// Render summary statistics in two rows for better readability
 	g.renderSummaryStatistics(buffer, serviceNodesMap)
 }
 
@@ -362,28 +348,22 @@ func (g *ArchDiagram) renderNetworkSection(buffer *bytes.Buffer, networkSpeed st
 func (g *ArchDiagram) renderSummaryStatistics(buffer *bytes.Buffer,
 	serviceNodesMap map[ServiceType][]string) {
 
-	// Get node hosts mapping for quick lookup
 	nodeHosts := make(map[string]string)
 	for _, node := range g.cfg.Nodes {
 		nodeHosts[node.Name] = node.Host
 	}
 
-	// Calculate actual node counts for all services
 	serviceNodeCounts := make(map[ServiceType]int)
 
-	// Calculate node counts for each service
 	for svcType, nodeList := range serviceNodesMap {
-		// Use a map to track unique IPs for this service
 		uniqueIPs := make(map[string]struct{})
 
 		for _, nodeName := range nodeList {
-			// Check if this is a node group
 			isNodeGroup := false
 			for _, nodeGroup := range g.cfg.NodeGroups {
 				groupPattern := fmt.Sprintf("%s[%s-%s]", nodeGroup.Name, nodeGroup.IPBegin, nodeGroup.IPEnd)
 				if nodeName == groupPattern {
 					isNodeGroup = true
-					// Add all IPs in this range
 					ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
 					if err == nil {
 						for _, ip := range ipList {
@@ -394,12 +374,10 @@ func (g *ArchDiagram) renderSummaryStatistics(buffer *bytes.Buffer,
 				}
 			}
 
-			// If not a node group, add the node's IP if available
 			if !isNodeGroup {
 				if host, ok := nodeHosts[nodeName]; ok {
 					uniqueIPs[host] = struct{}{}
-				} else if nodeName == "default-client" || nodeName == "default-storage" {
-					// Special case for default nodes
+				} else if nodeName == "default-client" || nodeName == "no storage node" {
 					uniqueIPs[nodeName] = struct{}{}
 				}
 			}
@@ -408,7 +386,6 @@ func (g *ArchDiagram) renderSummaryStatistics(buffer *bytes.Buffer,
 		serviceNodeCounts[svcType] = len(uniqueIPs)
 	}
 
-	// Get actual total node count
 	totalNodeCount := g.getTotalActualNodeCount()
 
 	firstRowStats := []StatInfo{
@@ -458,7 +435,6 @@ func (g *ArchDiagram) getServiceNodes(serviceType ServiceType) []string {
 	var nodes []string
 	var nodeGroups []string
 
-	// Get node and nodeGroup configuration based on service type
 	switch serviceType {
 	case ServiceMgmtd:
 		nodes = g.cfg.Services.Mgmtd.Nodes
@@ -485,10 +461,8 @@ func (g *ArchDiagram) getServiceNodes(serviceType ServiceType) []string {
 		return []string{}
 	}
 
-	// Get nodes from configuration
 	serviceNodes := g.getNodesForService(nodes, nodeGroups)
 
-	// Special case for client nodes
 	if serviceType == ServiceClient && len(serviceNodes) == 0 {
 		return []string{"default-client"}
 	}
@@ -501,12 +475,8 @@ func (g *ArchDiagram) getClientNodes() []string {
 	return g.getServiceNodes(ServiceClient)
 }
 
-// getStorageRelatedNodes returns all nodes that provide storage-related services
-// This includes not only nodes explicitly configured for Storage service,
-// but also nodes running other storage-related services like Meta, FDB, etc.
-// This approach provides a comprehensive view of all nodes contributing to storage functionality.
+// getStorageRelatedNodes returns nodes with storage-related services including Storage, Meta, FDB, etc.
 func (g *ArchDiagram) getStorageRelatedNodes() []string {
-	// Get all configured nodes, preserving original order
 	var allNodes []string
 	nodeMap := make(map[string]struct{})
 
@@ -517,16 +487,14 @@ func (g *ArchDiagram) getStorageRelatedNodes() []string {
 		}
 	}
 
-	// Find nodes that provide any storage-related service
 	var storageNodes []string
 	seenNodes := make(map[string]bool)
 
 	for _, nodeName := range allNodes {
-		// Check if this node runs any storage-related service
 		for _, svcConfig := range serviceConfigs {
 			serviceNodes := g.getServiceNodes(svcConfig.Type)
 			if svcConfig.Type == ServiceMeta {
-				serviceNodes = g.getMetaNodes() // Special case for meta nodes
+				serviceNodes = g.getMetaNodes()
 			}
 
 			if g.isNodeInList(nodeName, serviceNodes) {
@@ -534,12 +502,11 @@ func (g *ArchDiagram) getStorageRelatedNodes() []string {
 					seenNodes[nodeName] = true
 					storageNodes = append(storageNodes, nodeName)
 				}
-				break // Found a service on this node, no need to check others
+				break
 			}
 		}
 	}
 
-	// Return "no storage node" if no storage nodes found
 	if len(storageNodes) == 0 {
 		return []string{"no storage node"}
 	}
@@ -549,22 +516,18 @@ func (g *ArchDiagram) getStorageRelatedNodes() []string {
 
 // expandNodeGroup expands a node group into individual IP addresses
 func (g *ArchDiagram) expandNodeGroup(nodeGroup *config.NodeGroup) []string {
-	// For display purposes, we use a single string to represent the entire group
 	nodeName := fmt.Sprintf("%s[%s-%s]", nodeGroup.Name, nodeGroup.IPBegin, nodeGroup.IPEnd)
 	return []string{nodeName}
 }
 
 // getTotalActualNodeCount calculates the actual total number of physical nodes
 func (g *ArchDiagram) getTotalActualNodeCount() int {
-	// Create a set to track unique nodes by IP address
 	uniqueIPs := make(map[string]struct{})
 
-	// Add regular nodes
 	for _, node := range g.cfg.Nodes {
 		uniqueIPs[node.Host] = struct{}{}
 	}
 
-	// Add nodes from node groups
 	for _, nodeGroup := range g.cfg.NodeGroups {
 		ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
 		if err != nil {
@@ -581,7 +544,6 @@ func (g *ArchDiagram) getTotalActualNodeCount() int {
 
 // isNodeInList checks if a node is in the list
 func (g *ArchDiagram) isNodeInList(nodeName string, nodeList []string) bool {
-	// For short lists, linear search is fastest
 	if len(nodeList) < 10 {
 		for _, n := range nodeList {
 			if n == nodeName {
@@ -591,7 +553,6 @@ func (g *ArchDiagram) isNodeInList(nodeName string, nodeList []string) bool {
 		return false
 	}
 
-	// For longer lists, use map for faster lookup
 	nodeSet := make(map[string]bool, len(nodeList))
 	for _, n := range nodeList {
 		nodeSet[n] = true
@@ -601,13 +562,11 @@ func (g *ArchDiagram) isNodeInList(nodeName string, nodeList []string) bool {
 
 // getMetaNodes gets nodes running meta service directly from configuration
 func (g *ArchDiagram) getMetaNodes() []string {
-	// Simply return meta nodes as configured, without any fallback logic
 	return g.getServiceNodes(ServiceMeta)
 }
 
-// getNetworkSpeed gets the network speed
+// getNetworkSpeed gets network speed
 func (g *ArchDiagram) getNetworkSpeed() string {
-	// Try to detect speed from the system
 	if speed := g.getIBNetworkSpeed(); speed != "" {
 		return speed
 	}
@@ -616,11 +575,10 @@ func (g *ArchDiagram) getNetworkSpeed() string {
 		return speed
 	}
 
-	// Use default values based on network type
 	return g.getDefaultNetworkSpeed()
 }
 
-// getDefaultNetworkSpeed returns the default network speed based on the network type
+// getDefaultNetworkSpeed returns default network speed based on network type
 func (g *ArchDiagram) getDefaultNetworkSpeed() string {
 	switch g.cfg.NetworkType {
 	case config.NetworkTypeIB:
@@ -632,12 +590,11 @@ func (g *ArchDiagram) getDefaultNetworkSpeed() string {
 	}
 }
 
-// getIBNetworkSpeed gets InfiniBand network speed using a safer approach
+// getIBNetworkSpeed gets InfiniBand network speed
 func (g *ArchDiagram) getIBNetworkSpeed() string {
 	cmdIB := exec.Command("ibstatus")
-	output, err := cmdIB.CombinedOutput() // Use CombinedOutput to capture both stdout and stderr
+	output, err := cmdIB.CombinedOutput()
 	if err != nil {
-		// Just silently fail and return empty, the caller will use defaults
 		return ""
 	}
 
@@ -660,7 +617,7 @@ func (g *ArchDiagram) getEthernetSpeed() string {
 	return g.getInterfaceSpeed(interfaceName)
 }
 
-// getDefaultInterface returns the name of the default network interface
+// getDefaultInterface returns name of default network interface
 func (g *ArchDiagram) getDefaultInterface() (string, error) {
 	cmdIp := exec.Command("sh", "-c", "ip route | grep default | awk '{print $5}'")
 	interfaceOutput, err := cmdIp.Output()
@@ -671,14 +628,14 @@ func (g *ArchDiagram) getDefaultInterface() (string, error) {
 	return strings.TrimSpace(string(interfaceOutput)), nil
 }
 
-// getInterfaceSpeed returns the speed of the given network interface with improved error handling
+// getInterfaceSpeed returns speed of given network interface
 func (g *ArchDiagram) getInterfaceSpeed(interfaceName string) string {
 	if interfaceName == "" {
 		return ""
 	}
 
 	cmdEthtool := exec.Command("ethtool", interfaceName)
-	ethtoolOutput, err := cmdEthtool.CombinedOutput() // Capture both stdout and stderr
+	ethtoolOutput, err := cmdEthtool.CombinedOutput()
 	if err != nil {
 		return ""
 	}
