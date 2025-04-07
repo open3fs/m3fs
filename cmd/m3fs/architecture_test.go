@@ -76,18 +76,8 @@ func TestArchitectureDiagramGenerator(t *testing.T) {
 	generator := NewArchitectureDiagramGenerator(cfg)
 
 	t.Run("Generate", func(t *testing.T) {
-		diagram, err := generator.Generate()
-		assert.NoError(t, err, "Generate should not return an error")
+		diagram := generator.Generate()
 		assert.NotEmpty(t, diagram, "Generated diagram should not be empty")
-		assert.Contains(t, diagram, "Cluster: test-cluster", "Diagram should contain cluster name")
-	})
-
-	t.Run("GenerateBasicASCII", func(t *testing.T) {
-		diagram, err := generator.GenerateBasicASCII()
-		assert.NoError(t, err, "GenerateBasicASCII should not return an error")
-		assert.NotEmpty(t, diagram, "Generated ASCII diagram should not be empty")
-
-		// Check cluster name
 		assert.Contains(t, diagram, "Cluster: test-cluster", "Diagram should contain cluster name")
 
 		// Check node sections
@@ -119,8 +109,7 @@ func TestNoColorOption(t *testing.T) {
 		// Colors should be enabled by default
 		assert.True(t, generator.colorEnabled, "Colors should be enabled by default")
 
-		diagram, err := generator.GenerateBasicASCII()
-		assert.NoError(t, err, "GenerateBasicASCII should not return an error")
+		diagram := generator.Generate()
 
 		// Check if the output contains color codes
 		assert.Contains(t, diagram, "\033[", "Diagram should contain color codes when colors are enabled")
@@ -132,8 +121,7 @@ func TestNoColorOption(t *testing.T) {
 		generator.SetColorEnabled(false)
 		assert.False(t, generator.colorEnabled, "Colors should be disabled after setting colorEnabled to false")
 
-		diagram, err := generator.GenerateBasicASCII()
-		assert.NoError(t, err, "GenerateBasicASCII should not return an error")
+		diagram := generator.Generate()
 
 		// Check if the output does not contain color codes
 		assert.NotContains(t, diagram, "\033[", "Diagram should not contain color codes when colors are disabled")
@@ -481,10 +469,7 @@ func TestServiceNodeCounting(t *testing.T) {
 	generator := NewArchitectureDiagramGenerator(cfg)
 
 	// Test the whole diagram generation to ensure correct node counts
-	diagram, err := generator.GenerateBasicASCII()
-	if err != nil {
-		t.Fatalf("GenerateBasicASCII() failed: %v", err)
-	}
+	diagram := generator.Generate()
 
 	// Check that the counts in the summary section are correct
 	expectedCounts := map[string]int{

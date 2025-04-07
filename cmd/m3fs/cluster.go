@@ -118,10 +118,10 @@ var clusterCmd = &cli.Command{
 			},
 		},
 		{
-			Name:   "architecture",
+			Name:    "architecture",
 			Aliases: []string{"arch"},
-			Usage:  "Generate architecture diagram of a 3fs cluster",
-			Action: drawClusterArchitecture,
+			Usage:   "Generate architecture diagram of a 3fs cluster",
+			Action:  drawClusterArchitecture,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:        "config",
@@ -253,10 +253,7 @@ func drawClusterArchitecture(ctx *cli.Context) error {
 	diagramGenerator := NewArchitectureDiagramGenerator(cfg)
 	diagramGenerator.SetColorEnabled(!noColorOutput)
 
-	diagram, err := diagramGenerator.GenerateBasicASCII()
-	if err != nil {
-		return errors.Annotate(err, "generate architecture diagram")
-	}
+	diagram := diagramGenerator.Generate()
 
 	fmt.Println(diagram)
 	return nil

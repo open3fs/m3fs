@@ -33,8 +33,7 @@ func TestDrawClusterArchitecture(t *testing.T) {
 	t.Run("WithColor", func(t *testing.T) {
 		generator := NewArchitectureDiagramGenerator(cfg)
 		// Default should be with color
-		diagram, err := generator.GenerateBasicASCII()
-		assert.NoError(t, err)
+		diagram := generator.Generate()
 		assert.Contains(t, diagram, "\033[", "Output should contain color codes")
 		assert.Contains(t, diagram, "Cluster: test-cluster")
 	})
@@ -42,8 +41,7 @@ func TestDrawClusterArchitecture(t *testing.T) {
 	t.Run("WithoutColor", func(t *testing.T) {
 		generator := NewArchitectureDiagramGenerator(cfg)
 		generator.SetColorEnabled(false)
-		diagram, err := generator.GenerateBasicASCII()
-		assert.NoError(t, err)
+		diagram := generator.Generate()
 		assert.NotContains(t, diagram, "\033[", "Output should not contain color codes")
 		assert.Contains(t, diagram, "Cluster: test-cluster")
 	})

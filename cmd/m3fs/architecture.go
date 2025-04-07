@@ -81,8 +81,26 @@ func (g *ArchitectureDiagramGenerator) SetColorEnabled(enabled bool) {
 }
 
 // Generate generates an architecture diagram
-func (g *ArchitectureDiagramGenerator) Generate() (string, error) {
-	return g.GenerateBasicASCII()
+func (g *ArchitectureDiagramGenerator) Generate() string {
+	// Prepare buffer for diagram output
+	var buffer bytes.Buffer
+
+	// Collect node information
+	clientNodes := g.getServiceNodes(ServiceClient)
+	storageNodes := g.getStorageNodes()
+	serviceNodesMap := g.prepareServiceNodesMap(clientNodes)
+
+	// Get network speed
+	networkSpeed := g.getNetworkSpeed()
+
+	// Generate diagram sections
+	g.renderClusterHeader(&buffer)
+	g.renderClientSection(&buffer, clientNodes)
+	g.renderNetworkSection(&buffer, networkSpeed)
+	g.renderStorageSection(&buffer, storageNodes)
+	g.renderSummarySection(&buffer, serviceNodesMap)
+
+	return buffer.String()
 }
 
 // getColorReset returns the color reset code if colors are enabled
@@ -231,29 +249,6 @@ func (g *ArchitectureDiagramGenerator) renderClientFunc(buffer *bytes.Buffer, _ 
 	}
 
 	g.renderServiceRow(buffer, clientNodes, clientNodes, startIndex, endIndex, "hf3fs_fuse", colorGreen)
-}
-
-// GenerateBasicASCII generates a basic ASCII art representation of the cluster architecture
-func (g *ArchitectureDiagramGenerator) GenerateBasicASCII() (string, error) {
-	// Prepare buffer for diagram output
-	var buffer bytes.Buffer
-
-	// Collect node information
-	clientNodes := g.getServiceNodes(ServiceClient)
-	storageNodes := g.getStorageNodes()
-	serviceNodesMap := g.prepareServiceNodesMap(clientNodes)
-
-	// Get network speed
-	networkSpeed := g.getNetworkSpeed()
-
-	// Generate diagram sections
-	g.renderClusterHeader(&buffer)
-	g.renderClientSection(&buffer, clientNodes)
-	g.renderNetworkSection(&buffer, networkSpeed)
-	g.renderStorageSection(&buffer, storageNodes)
-	g.renderSummarySection(&buffer, serviceNodesMap)
-
-	return buffer.String(), nil
 }
 
 // prepareServiceNodesMap prepares a map of service types to their respective nodes
