@@ -194,7 +194,7 @@ func TestNodeListFunctions(t *testing.T) {
 		}
 	})
 
-	t.Run("GetStorageNodes", func(t *testing.T) {
+	t.Run("GetStorageRelatedNodes", func(t *testing.T) {
 		testCases := []struct {
 			name           string
 			cfg            *config.Config
@@ -212,7 +212,7 @@ func TestNodeListFunctions(t *testing.T) {
 				cfg: &config.Config{
 					Services: config.Services{},
 				},
-				expectedNodes:  []string{"default-storage"},
+				expectedNodes:  []string{"no storage node"},
 				unexpectedNode: "node1",
 			},
 		}
@@ -220,7 +220,7 @@ func TestNodeListFunctions(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				generator := NewArchDiagram(tc.cfg)
-				storageNodes := generator.getStorageNodes()
+				storageNodes := generator.getStorageRelatedNodes()
 
 				for _, expectedNode := range tc.expectedNodes {
 					found := false

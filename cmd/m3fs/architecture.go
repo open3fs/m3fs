@@ -90,7 +90,7 @@ func (g *ArchDiagram) Generate() string {
 
 	// Collect node information
 	clientNodes := g.getServiceNodes(ServiceClient)
-	storageNodes := g.getStorageNodes()
+	storageNodes := g.getStorageRelatedNodes()
 	serviceNodesMap := g.prepareServiceNodesMap(clientNodes)
 
 	// Get network speed
@@ -210,7 +210,7 @@ var (
 
 // renderStorageFunc renders all services for storage nodes
 func (g *ArchDiagram) renderStorageFunc(buffer *bytes.Buffer, _ string, startIndex int) {
-	storageNodes := g.getStorageNodes()
+	storageNodes := g.getStorageRelatedNodes()
 
 	storageCount := len(storageNodes)
 	endIndex := startIndex + g.defaultRowSize
@@ -501,13 +501,15 @@ func (g *ArchDiagram) getClientNodes() []string {
 	return g.getServiceNodes(ServiceClient)
 }
 
-// getStorageNodes returns all storage nodes
-func (g *ArchDiagram) getStorageNodes() []string {
-	// Get all possible storage nodes from config, preserving original order
+// getStorageRelatedNodes returns all nodes that provide storage-related services
+// This includes not only nodes explicitly configured for Storage service,
+// but also nodes running other storage-related services like Meta, FDB, etc.
+// This approach provides a comprehensive view of all nodes contributing to storage functionality.
+func (g *ArchDiagram) getStorageRelatedNodes() []string {
+	// Get all configured nodes, preserving original order
 	var allNodes []string
 	nodeMap := make(map[string]struct{})
 
-	// Collect all node information according to the order in config file
 	for _, node := range g.cfg.Nodes {
 		if _, exists := nodeMap[node.Name]; !exists {
 			nodeMap[node.Name] = struct{}{}
@@ -515,37 +517,34 @@ func (g *ArchDiagram) getStorageNodes() []string {
 		}
 	}
 
-	// Check if each node provides any storage-related services
+	// Find nodes that provide any storage-related service
+	var storageNodes []string
 	seenNodes := make(map[string]bool)
-	var displayNodes []string
 
-	// Add nodes in config order, maintaining the original sequence
 	for _, nodeName := range allNodes {
 		// Check if this node runs any storage-related service
-		for _, cfg := range serviceConfigs {
-			var serviceNodes []string
-			if cfg.Type == ServiceMeta {
-				serviceNodes = g.getMetaNodes()
-			} else {
-				serviceNodes = g.getServiceNodes(cfg.Type)
+		for _, svcConfig := range serviceConfigs {
+			serviceNodes := g.getServiceNodes(svcConfig.Type)
+			if svcConfig.Type == ServiceMeta {
+				serviceNodes = g.getMetaNodes() // Special case for meta nodes
 			}
 
 			if g.isNodeInList(nodeName, serviceNodes) {
 				if !seenNodes[nodeName] {
 					seenNodes[nodeName] = true
-					displayNodes = append(displayNodes, nodeName)
+					storageNodes = append(storageNodes, nodeName)
 				}
-				break
+				break // Found a service on this node, no need to check others
 			}
 		}
 	}
 
-	// Return default value if no storage nodes found
-	if len(displayNodes) == 0 {
-		return []string{"default-storage"}
+	// Return "no storage node" if no storage nodes found
+	if len(storageNodes) == 0 {
+		return []string{"no storage node"}
 	}
 
-	return displayNodes
+	return storageNodes
 }
 
 // expandNodeGroup expands a node group into individual IP addresses
