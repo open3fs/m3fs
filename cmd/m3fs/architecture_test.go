@@ -71,23 +71,13 @@ func createTestConfig() *config.Config {
 	}
 }
 
-func TestArchitectureDiagramGenerator(t *testing.T) {
+func TestArchDiagram(t *testing.T) {
 	cfg := createTestConfig()
-	generator := NewArchitectureDiagramGenerator(cfg)
+	generator := NewArchDiagram(cfg)
 
 	t.Run("Generate", func(t *testing.T) {
-		diagram, err := generator.Generate()
-		assert.NoError(t, err, "Generate should not return an error")
+		diagram := generator.Generate()
 		assert.NotEmpty(t, diagram, "Generated diagram should not be empty")
-		assert.Contains(t, diagram, "Cluster: test-cluster", "Diagram should contain cluster name")
-	})
-
-	t.Run("GenerateBasicASCII", func(t *testing.T) {
-		diagram, err := generator.GenerateBasicASCII()
-		assert.NoError(t, err, "GenerateBasicASCII should not return an error")
-		assert.NotEmpty(t, diagram, "Generated ASCII diagram should not be empty")
-
-		// Check cluster name
 		assert.Contains(t, diagram, "Cluster: test-cluster", "Diagram should contain cluster name")
 
 		// Check node sections
@@ -115,25 +105,23 @@ func TestNoColorOption(t *testing.T) {
 	cfg := createTestConfig()
 
 	t.Run("DefaultWithColor", func(t *testing.T) {
-		generator := NewArchitectureDiagramGenerator(cfg)
+		generator := NewArchDiagram(cfg)
 		// Colors should be enabled by default
 		assert.True(t, generator.colorEnabled, "Colors should be enabled by default")
 
-		diagram, err := generator.GenerateBasicASCII()
-		assert.NoError(t, err, "GenerateBasicASCII should not return an error")
+		diagram := generator.Generate()
 
 		// Check if the output contains color codes
 		assert.Contains(t, diagram, "\033[", "Diagram should contain color codes when colors are enabled")
 	})
 
 	t.Run("WithNoColorOption", func(t *testing.T) {
-		generator := NewArchitectureDiagramGenerator(cfg)
+		generator := NewArchDiagram(cfg)
 		// Set the no-color option
 		generator.SetColorEnabled(false)
 		assert.False(t, generator.colorEnabled, "Colors should be disabled after setting colorEnabled to false")
 
-		diagram, err := generator.GenerateBasicASCII()
-		assert.NoError(t, err, "GenerateBasicASCII should not return an error")
+		diagram := generator.Generate()
 
 		// Check if the output does not contain color codes
 		assert.NotContains(t, diagram, "\033[", "Diagram should not contain color codes when colors are disabled")
@@ -181,7 +169,7 @@ func TestNodeListFunctions(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				generator := NewArchitectureDiagramGenerator(tc.cfg)
+				generator := NewArchDiagram(tc.cfg)
 				clientNodes := generator.getClientNodes()
 
 				assert.Len(t, clientNodes, tc.expectedCount, "Client nodes count should match expected")
@@ -206,7 +194,7 @@ func TestNodeListFunctions(t *testing.T) {
 		}
 	})
 
-	t.Run("GetStorageNodes", func(t *testing.T) {
+	t.Run("GetStorageRelatedNodes", func(t *testing.T) {
 		testCases := []struct {
 			name           string
 			cfg            *config.Config
@@ -224,15 +212,15 @@ func TestNodeListFunctions(t *testing.T) {
 				cfg: &config.Config{
 					Services: config.Services{},
 				},
-				expectedNodes:  []string{"default-storage"},
+				expectedNodes:  []string{"no storage node"},
 				unexpectedNode: "node1",
 			},
 		}
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				generator := NewArchitectureDiagramGenerator(tc.cfg)
-				storageNodes := generator.getStorageNodes()
+				generator := NewArchDiagram(tc.cfg)
+				storageNodes := generator.getStorageRelatedNodes()
 
 				for _, expectedNode := range tc.expectedNodes {
 					found := false
@@ -255,7 +243,7 @@ func TestNodeListFunctions(t *testing.T) {
 	})
 
 	t.Run("IsNodeInList", func(t *testing.T) {
-		generator := NewArchitectureDiagramGenerator(nil)
+		generator := NewArchDiagram(nil)
 		nodeList := []string{"node1", "node2", "node3"}
 
 		assert.True(t, generator.isNodeInList("node1", nodeList), "node1 should be found in the list")
@@ -303,7 +291,7 @@ func TestExpandNodeGroup(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			generator := NewArchitectureDiagramGenerator(nil)
+			generator := NewArchDiagram(nil)
 			result := generator.expandNodeGroup(&tc.nodeGroup)
 
 			assert.Len(t, result, 1, "expandNodeGroup should return a slice with one element")
@@ -425,7 +413,7 @@ func TestGetTotalActualNodeCount(t *testing.T) {
 				NodeGroups: tt.nodeGroups,
 			}
 
-			generator := NewArchitectureDiagramGenerator(cfg)
+			generator := NewArchDiagram(cfg)
 			actualCount := generator.getTotalActualNodeCount()
 
 			if actualCount != tt.expectedCount {
@@ -478,13 +466,10 @@ func TestServiceNodeCounting(t *testing.T) {
 		},
 	}
 
-	generator := NewArchitectureDiagramGenerator(cfg)
+	generator := NewArchDiagram(cfg)
 
 	// Test the whole diagram generation to ensure correct node counts
-	diagram, err := generator.GenerateBasicASCII()
-	if err != nil {
-		t.Fatalf("GenerateBasicASCII() failed: %v", err)
-	}
+	diagram := generator.Generate()
 
 	// Check that the counts in the summary section are correct
 	expectedCounts := map[string]int{
