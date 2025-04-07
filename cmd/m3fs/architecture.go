@@ -52,26 +52,29 @@ const (
 	ServiceClient     ServiceType = "client"
 )
 
-// Common layout constants
-const (
-	defaultRowSize    = 8
-	diagramWidth      = 70
-	nodeCellWidth     = 16
-	serviceBoxPadding = 2  // padding inside service boxes
-	totalCellWidth    = 14 // width inside service cell
-)
-
 // ArchitectureDiagramGenerator generates architecture diagrams for m3fs clusters
 type ArchitectureDiagramGenerator struct {
 	cfg          *config.Config
 	colorEnabled bool
+
+	// Layout constants
+	defaultRowSize    int
+	diagramWidth      int
+	nodeCellWidth     int
+	serviceBoxPadding int
+	totalCellWidth    int
 }
 
 // NewArchitectureDiagramGenerator creates a new ArchitectureDiagramGenerator
 func NewArchitectureDiagramGenerator(cfg *config.Config) *ArchitectureDiagramGenerator {
 	return &ArchitectureDiagramGenerator{
-		cfg:          cfg,
-		colorEnabled: true,
+		cfg:               cfg,
+		colorEnabled:      true,
+		defaultRowSize:    8,
+		diagramWidth:      70,
+		nodeCellWidth:     16,
+		serviceBoxPadding: 2,
+		totalCellWidth:    14,
 	}
 }
 
@@ -137,7 +140,7 @@ func (g *ArchitectureDiagramGenerator) renderNodeRow(buffer *bytes.Buffer, nodes
 		// Render node names
 		for j := i; j < end; j++ {
 			nodeName := nodes[j]
-			if len(nodeName) > nodeCellWidth {
+			if len(nodeName) > g.nodeCellWidth {
 				nodeName = nodeName[:13] + "..."
 			}
 			fmt.Fprintf(buffer, "|%s%-16s%s| ", g.getColorCode(colorCyan), nodeName, g.getColorReset())
@@ -161,7 +164,7 @@ func (g *ArchitectureDiagramGenerator) renderServiceRow(buffer *bytes.Buffer,
 		nodeName := nodes[j]
 		if g.isNodeInList(nodeName, serviceNodes) {
 			serviceLabel := "[" + serviceName + "]"
-			paddingNeeded := totalCellWidth - len(serviceLabel)
+			paddingNeeded := g.totalCellWidth - len(serviceLabel)
 			if paddingNeeded < 0 {
 				paddingNeeded = 0
 			}
@@ -202,7 +205,7 @@ func (g *ArchitectureDiagramGenerator) renderStorageFunc(buffer *bytes.Buffer, _
 	storageNodes := g.getStorageNodes()
 
 	storageCount := len(storageNodes)
-	endIndex := startIndex + defaultRowSize
+	endIndex := startIndex + g.defaultRowSize
 	if endIndex > storageCount {
 		endIndex = storageCount
 	}
@@ -243,7 +246,7 @@ func (g *ArchitectureDiagramGenerator) renderClientFunc(buffer *bytes.Buffer, _ 
 	}
 
 	clientCount := len(clientNodes)
-	endIndex := startIndex + defaultRowSize
+	endIndex := startIndex + g.defaultRowSize
 	if endIndex > clientCount {
 		endIndex = clientCount
 	}
@@ -274,7 +277,7 @@ func (g *ArchitectureDiagramGenerator) prepareServiceNodesMap(clientNodes []stri
 func (g *ArchitectureDiagramGenerator) renderClusterHeader(buffer *bytes.Buffer) {
 	fmt.Fprintf(buffer, "Cluster: %s\n%s\n\n",
 		g.cfg.Name,
-		strings.Repeat("=", diagramWidth))
+		strings.Repeat("=", g.diagramWidth))
 }
 
 // renderSectionHeader renders a section header with the given title
@@ -283,14 +286,14 @@ func (g *ArchitectureDiagramGenerator) renderSectionHeader(buffer *bytes.Buffer,
 		g.getColorCode(colorCyan),
 		title,
 		g.getColorReset(),
-		strings.Repeat("-", diagramWidth))
+		strings.Repeat("-", g.diagramWidth))
 }
 
 // renderClientSection renders the client nodes section
 func (g *ArchitectureDiagramGenerator) renderClientSection(buffer *bytes.Buffer, clientNodes []string) {
 	g.renderSectionHeader(buffer, "CLIENT NODES:")
 
-	g.renderNodeRow(buffer, clientNodes, defaultRowSize, g.renderClientFunc)
+	g.renderNodeRow(buffer, clientNodes, g.defaultRowSize, g.renderClientFunc)
 	buffer.WriteByte('\n')
 
 	// Calculate appropriate arrow count
@@ -309,7 +312,7 @@ func (g *ArchitectureDiagramGenerator) renderStorageSection(buffer *bytes.Buffer
 	// Storage nodes section
 	g.renderSectionHeader(buffer, "STORAGE NODES:")
 
-	g.renderNodeRow(buffer, storageNodes, defaultRowSize, g.renderStorageFunc)
+	g.renderNodeRow(buffer, storageNodes, g.defaultRowSize, g.renderStorageFunc)
 }
 
 // renderSummarySection renders the cluster summary section
@@ -336,15 +339,15 @@ func (g *ArchitectureDiagramGenerator) calculateArrowCount(nodeCount int) int {
 // renderNetworkSection renders the network section of the diagram
 func (g *ArchitectureDiagramGenerator) renderNetworkSection(buffer *bytes.Buffer, networkSpeed string) {
 	networkText := fmt.Sprintf(" %s Network (%s) ", g.cfg.NetworkType, networkSpeed)
-	rightPadding := diagramWidth - 2 - len(networkText)
+	rightPadding := g.diagramWidth - 2 - len(networkText)
 
-	buffer.WriteString("╔" + strings.Repeat("═", diagramWidth-2) + "╗\n")
+	buffer.WriteString("╔" + strings.Repeat("═", g.diagramWidth-2) + "╗\n")
 	fmt.Fprintf(buffer, "║%s%s%s%s║\n",
 		g.getColorCode(colorBlue),
 		networkText,
 		g.getColorReset(),
 		strings.Repeat(" ", rightPadding))
-	buffer.WriteString("╚" + strings.Repeat("═", diagramWidth-2) + "╝\n")
+	buffer.WriteString("╚" + strings.Repeat("═", g.diagramWidth-2) + "╝\n")
 }
 
 // renderSummaryStatistics renders the summary statistics section
