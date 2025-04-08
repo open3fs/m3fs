@@ -833,9 +833,9 @@ func (g *ArchDiagram) calculateRowEndIndex(startIndex, rowSize, totalCount int) 
 func (g *ArchDiagram) renderNodeNames(buffer *strings.Builder, nodes []string, startIndex, endIndex int) {
 	for j := startIndex; j < endIndex; j++ {
 		nodeName := g.formatNodeName(nodes[j])
-			fmt.Fprintf(buffer, "|%s%-16s%s| ", g.getColorCode(colorCyan), nodeName, g.getColorReset())
-		}
-		buffer.WriteByte('\n')
+		fmt.Fprintf(buffer, "|%s%-16s%s| ", g.getColorCode(colorCyan), nodeName, g.getColorReset())
+	}
+	buffer.WriteByte('\n')
 }
 
 // formatNodeName formats a node name, truncating if too long
@@ -971,7 +971,7 @@ func (g *ArchDiagram) countServiceNodes(
 func (g *ArchDiagram) countUniqueIPs(nodeList []string, nodeHosts map[string]string) map[string]struct{} {
 	uniqueIPs := make(map[string]struct{}, len(nodeList))
 
-		for _, nodeName := range nodeList {
+	for _, nodeName := range nodeList {
 		isNodeGroup := g.processNodeGroupIfPresent(nodeName, uniqueIPs)
 
 		if !isNodeGroup {
@@ -984,15 +984,15 @@ func (g *ArchDiagram) countUniqueIPs(nodeList []string, nodeHosts map[string]str
 
 // processNodeGroupIfPresent processes a node group if present, returns true if found
 func (g *ArchDiagram) processNodeGroupIfPresent(nodeName string, uniqueIPs map[string]struct{}) bool {
-			for _, nodeGroup := range g.cfg.NodeGroups {
-				groupPattern := fmt.Sprintf("%s[%s-%s]", nodeGroup.Name, nodeGroup.IPBegin, nodeGroup.IPEnd)
-				if nodeName == groupPattern {
-					ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
-					if err == nil {
-						for _, ip := range ipList {
-							uniqueIPs[ip] = struct{}{}
-						}
-					}
+	for _, nodeGroup := range g.cfg.NodeGroups {
+		groupPattern := fmt.Sprintf("%s[%s-%s]", nodeGroup.Name, nodeGroup.IPBegin, nodeGroup.IPEnd)
+		if nodeName == groupPattern {
+			ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
+			if err == nil {
+				for _, ip := range ipList {
+					uniqueIPs[ip] = struct{}{}
+				}
+			}
 			return true
 		}
 	}
@@ -1005,10 +1005,10 @@ func (g *ArchDiagram) processIndividualNode(
 	nodeHosts map[string]string,
 	uniqueIPs map[string]struct{},
 ) {
-				if host, ok := nodeHosts[nodeName]; ok {
-					uniqueIPs[host] = struct{}{}
-				} else if nodeName == "default-client" || nodeName == "no storage node" {
-					uniqueIPs[nodeName] = struct{}{}
+	if host, ok := nodeHosts[nodeName]; ok {
+		uniqueIPs[host] = struct{}{}
+	} else if nodeName == "default-client" || nodeName == "no storage node" {
+		uniqueIPs[nodeName] = struct{}{}
 	}
 }
 
