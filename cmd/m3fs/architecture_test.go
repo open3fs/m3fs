@@ -31,10 +31,10 @@ func createTestConfig() *config.Config {
 		Name:        "test-cluster",
 		NetworkType: "Ethernet",
 		Nodes: []config.Node{
-			{Name: "node1", Host: "192.168.1.1"},
-			{Name: "node2", Host: "192.168.1.2"},
-			{Name: "node3", Host: "192.168.1.3"},
-			{Name: "very-long-node-name-that-will-be-truncated", Host: "192.168.1.4"},
+			{Name: "192.168.1.1", Host: "192.168.1.1"},
+			{Name: "192.168.1.2", Host: "192.168.1.2"},
+			{Name: "192.168.1.3", Host: "192.168.1.3"},
+			{Name: "192.168.1.4", Host: "192.168.1.4"},
 		},
 		NodeGroups: []config.NodeGroup{
 			{
@@ -45,27 +45,27 @@ func createTestConfig() *config.Config {
 		},
 		Services: config.Services{
 			Mgmtd: config.Mgmtd{
-				Nodes: []string{"node1"},
+				Nodes: []string{"192.168.1.1"},
 			},
 			Meta: config.Meta{
-				Nodes: []string{"node1", "node2"},
+				Nodes: []string{"192.168.1.1", "192.168.1.2"},
 			},
 			Storage: config.Storage{
-				Nodes: []string{"node2", "node3"},
+				Nodes: []string{"192.168.1.2", "192.168.1.3"},
 			},
 			Client: config.Client{
-				Nodes:          []string{"node3", "very-long-node-name-that-will-be-truncated"},
+				Nodes:          []string{"192.168.1.3", "192.168.1.4"},
 				NodeGroups:     []string{"group1"},
 				HostMountpoint: "/mnt/m3fs",
 			},
 			Fdb: config.Fdb{
-				Nodes: []string{"node1"},
+				Nodes: []string{"192.168.1.1"},
 			},
 			Clickhouse: config.Clickhouse{
-				Nodes: []string{"node2"},
+				Nodes: []string{"192.168.1.2"},
 			},
 			Monitor: config.Monitor{
-				Nodes: []string{"node3"},
+				Nodes: []string{"192.168.1.3"},
 			},
 		},
 	}
@@ -84,11 +84,11 @@ func TestArchDiagram(t *testing.T) {
 		assert.Contains(t, diagram, "CLIENT NODES", "Diagram should have CLIENT NODES section")
 		assert.Contains(t, diagram, "STORAGE NODES", "Diagram should have STORAGE NODES section")
 
-		// Check node names are present (including truncated ones)
-		assert.Contains(t, diagram, "node1", "Diagram should show node1")
-		assert.Contains(t, diagram, "node2", "Diagram should show node2")
-		assert.Contains(t, diagram, "node3", "Diagram should show node3")
-		assert.Contains(t, diagram, "very-long-nod...", "Long node name should be truncated")
+		// Check IP addresses are present
+		assert.Contains(t, diagram, "192.168.1.1", "Diagram should show 192.168.1.1")
+		assert.Contains(t, diagram, "192.168.1.2", "Diagram should show 192.168.1.2")
+		assert.Contains(t, diagram, "192.168.1.3", "Diagram should show 192.168.1.3")
+		assert.Contains(t, diagram, "192.168.1.4", "Diagram should show 192.168.1.4")
 
 		// Check service labels are present
 		assert.Contains(t, diagram, "[mgmtd]", "Diagram should show mgmtd service")
@@ -147,23 +147,23 @@ func TestNodeListFunctions(t *testing.T) {
 			{
 				name:           "Standard configuration",
 				cfg:            createTestConfig(),
-				expectedCount:  3, // node3, very-long-node..., and group1[...]
-				expectedNodes:  []string{"node3", "group1"},
-				unexpectedNode: "node2",
+				expectedCount:  5, // 192.168.1.3, 192.168.1.4, and group1 (3 IPs)
+				expectedNodes:  []string{"192.168.1.3", "192.168.1.4", "10.0.0.1", "10.0.0.2", "10.0.0.3"},
+				unexpectedNode: "192.168.1.2",
 			},
 			{
 				name: "Empty client configuration",
 				cfg: &config.Config{
 					Nodes: []config.Node{
-						{Name: "node1", Host: "192.168.1.1"},
+						{Name: "192.168.1.1", Host: "192.168.1.1"},
 					},
 					Services: config.Services{
 						Client: config.Client{},
 					},
 				},
-				expectedCount:  1, // Default client node
-				expectedNodes:  []string{"default-client"},
-				unexpectedNode: "node1",
+				expectedCount:  0, // No client nodes when empty
+				expectedNodes:  []string{},
+				unexpectedNode: "192.168.1.1",
 			},
 		}
 
@@ -204,16 +204,16 @@ func TestNodeListFunctions(t *testing.T) {
 			{
 				name:           "Standard configuration",
 				cfg:            createTestConfig(),
-				expectedNodes:  []string{"node1", "node2", "node3"},
-				unexpectedNode: "",
+				expectedNodes:  []string{"192.168.1.1", "192.168.1.2", "192.168.1.3"},
+				unexpectedNode: "192.168.1.4",
 			},
 			{
 				name: "Empty storage configuration",
 				cfg: &config.Config{
 					Services: config.Services{},
 				},
-				expectedNodes:  []string{"no storage node"},
-				unexpectedNode: "node1",
+				expectedNodes:  []string{},
+				unexpectedNode: "192.168.1.1",
 			},
 		}
 
@@ -244,30 +244,30 @@ func TestNodeListFunctions(t *testing.T) {
 
 	t.Run("IsNodeInList", func(t *testing.T) {
 		generator := NewArchDiagram(nil)
-		nodeList := []string{"node1", "node2", "node3"}
+		nodeList := []string{"192.168.1.1", "192.168.1.2", "192.168.1.3"}
 
-		assert.True(t, generator.isNodeInList("node1", nodeList), "node1 should be found in the list")
-		assert.True(t, generator.isNodeInList("node3", nodeList), "node3 should be found in the list")
-		assert.False(t, generator.isNodeInList("node4", nodeList), "node4 should not be found in the list")
+		assert.True(t, generator.isNodeInList("192.168.1.1", nodeList), "192.168.1.1 should be found in the list")
+		assert.True(t, generator.isNodeInList("192.168.1.3", nodeList), "192.168.1.3 should be found in the list")
+		assert.False(t, generator.isNodeInList("192.168.1.4", nodeList), "192.168.1.4 should not be found in the list")
 		assert.False(t, generator.isNodeInList("", nodeList), "Empty string should not be found in the list")
-		assert.False(t, generator.isNodeInList("node1", []string{}), "Any node should not be found in empty list")
+		assert.False(t, generator.isNodeInList("192.168.1.1", []string{}), "Any node should not be found in empty list")
 	})
 }
 
 func TestExpandNodeGroup(t *testing.T) {
 	testCases := []struct {
-		name         string
-		nodeGroup    config.NodeGroup
-		expectedName string
+		name          string
+		nodeGroup     config.NodeGroup
+		expectedNodes []string
 	}{
 		{
 			name: "Standard node group",
 			nodeGroup: config.NodeGroup{
 				Name:    "test-group",
 				IPBegin: "192.168.1.10",
-				IPEnd:   "192.168.1.20",
+				IPEnd:   "192.168.1.12",
 			},
-			expectedName: "test-group[192.168.1.10-192.168.1.20]",
+			expectedNodes: []string{"192.168.1.10", "192.168.1.11", "192.168.1.12"},
 		},
 		{
 			name: "Single IP node group",
@@ -276,16 +276,16 @@ func TestExpandNodeGroup(t *testing.T) {
 				IPBegin: "10.0.0.1",
 				IPEnd:   "10.0.0.1",
 			},
-			expectedName: "single-ip[10.0.0.1-10.0.0.1]",
+			expectedNodes: []string{"10.0.0.1"},
 		},
 		{
 			name: "Node group with special characters",
 			nodeGroup: config.NodeGroup{
 				Name:    "special-!@#$",
 				IPBegin: "172.16.0.1",
-				IPEnd:   "172.16.0.10",
+				IPEnd:   "172.16.0.3",
 			},
-			expectedName: "special-!@#$[172.16.0.1-172.16.0.10]",
+			expectedNodes: []string{"172.16.0.1", "172.16.0.2", "172.16.0.3"},
 		},
 	}
 
@@ -294,8 +294,7 @@ func TestExpandNodeGroup(t *testing.T) {
 			generator := NewArchDiagram(nil)
 			result := generator.expandNodeGroup(&tc.nodeGroup)
 
-			assert.Len(t, result, 1, "expandNodeGroup should return a slice with one element")
-			assert.Equal(t, tc.expectedName, result[0], "Node group name should match expected format")
+			assert.ElementsMatch(t, tc.expectedNodes, result, "Node group IPs should match expected")
 		})
 	}
 }
@@ -428,39 +427,39 @@ func TestServiceNodeCounting(t *testing.T) {
 	cfg := &config.Config{
 		Name: "test-cluster",
 		Nodes: []config.Node{
-			{Name: "node1", Host: "192.168.1.1"},
-			{Name: "node2", Host: "192.168.1.2"},
+			{Name: "192.168.1.1", Host: "192.168.1.1"},
+			{Name: "192.168.1.2", Host: "192.168.1.2"},
 		},
 		NodeGroups: []config.NodeGroup{
 			{Name: "group1", IPBegin: "192.168.1.10", IPEnd: "192.168.1.15"},
 		},
 		Services: config.Services{
 			Client: config.Client{
-				Nodes:      []string{"node1"},
+				Nodes:      []string{"192.168.1.1"},
 				NodeGroups: []string{"group1"},
 			},
 			Storage: config.Storage{
-				Nodes:      []string{"node1", "node2"},
+				Nodes:      []string{"192.168.1.1", "192.168.1.2"},
 				NodeGroups: []string{"group1"},
 			},
 			Fdb: config.Fdb{
-				Nodes:      []string{"node1"},
+				Nodes:      []string{"192.168.1.1"},
 				NodeGroups: []string{"group1"},
 			},
 			Meta: config.Meta{
-				Nodes:      []string{"node1"},
+				Nodes:      []string{"192.168.1.1"},
 				NodeGroups: []string{"group1"},
 			},
 			Mgmtd: config.Mgmtd{
-				Nodes:      []string{"node1"},
+				Nodes:      []string{"192.168.1.1"},
 				NodeGroups: []string{"group1"},
 			},
 			Monitor: config.Monitor{
-				Nodes:      []string{"node1"},
+				Nodes:      []string{"192.168.1.1"},
 				NodeGroups: []string{"group1"},
 			},
 			Clickhouse: config.Clickhouse{
-				Nodes:      []string{"node1"},
+				Nodes:      []string{"192.168.1.1"},
 				NodeGroups: []string{"group1"},
 			},
 		},
@@ -473,14 +472,14 @@ func TestServiceNodeCounting(t *testing.T) {
 
 	// Check that the counts in the summary section are correct
 	expectedCounts := map[string]int{
-		"Client Nodes":  7, // node1 + group1 (6 nodes)
-		"Storage Nodes": 8, // node1 + node2 + group1 (6 nodes)
-		"FoundationDB":  7, // node1 + group1 (6 nodes)
-		"Meta Service":  7, // node1 + group1 (6 nodes)
-		"Mgmtd Service": 7, // node1 + group1 (6 nodes)
-		"Monitor Svc":   7, // node1 + group1 (6 nodes)
-		"Clickhouse":    7, // node1 + group1 (6 nodes)
-		"Total Nodes":   8, // node1 + node2 + group1 (6 nodes, with some overlap)
+		"Client Nodes":  7, // 192.168.1.1 + group1 (6 nodes)
+		"Storage Nodes": 8, // 192.168.1.1 + 192.168.1.2 + group1 (6 nodes)
+		"FoundationDB":  7, // 192.168.1.1 + group1 (6 nodes)
+		"Meta Service":  7, // 192.168.1.1 + group1 (6 nodes)
+		"Mgmtd Service": 7, // 192.168.1.1 + group1 (6 nodes)
+		"Monitor Svc":   7, // 192.168.1.1 + group1 (6 nodes)
+		"Clickhouse":    7, // 192.168.1.1 + group1 (6 nodes)
+		"Total Nodes":   8, // 192.168.1.1 + 192.168.1.2 + group1 (6 nodes, with some overlap)
 	}
 
 	lines := strings.Split(diagram, "\n")
