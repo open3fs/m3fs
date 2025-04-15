@@ -408,19 +408,38 @@ func (g *ArchDiagram) buildOrderedNodeList() []string {
 		g.putNodeMap(nodeMap)
 	}()
 
+	// Strictly display nodes in order: first individual node IPs, then IPs from each group in order
+	
+	// 1. Add individual node IP addresses
 	for _, node := range g.cfg.Nodes {
-		if _, exists := nodeMap[node.Name]; !exists {
-			nodeMap[node.Name] = struct{}{}
-			allNodes = append(allNodes, node.Name)
+		// Use the node's Host property (IP address)
+		if node.Host != "" && g.isIPLike(node.Host) {
+			if _, exists := nodeMap[node.Host]; !exists {
+				nodeMap[node.Host] = struct{}{}
+				allNodes = append(allNodes, node.Host)
+			}
 		}
 	}
 
+	// 2. Process each node group separately to ensure stable order
+	// Map node group names to their internal IP lists
+	groupIPsMap := make(map[string][]string)
+	
+	// Collect IP lists for all node groups
 	for _, nodeGroup := range g.cfg.NodeGroups {
-		groupNodes := g.expandNodeGroup(&nodeGroup)
-		for _, nodeName := range groupNodes {
-			if _, exists := nodeMap[nodeName]; !exists {
-				nodeMap[nodeName] = struct{}{}
-				allNodes = append(allNodes, nodeName)
+		ipList := g.expandNodeGroup(&nodeGroup)
+		groupIPsMap[nodeGroup.Name] = ipList
+	}
+	
+	// Iterate through node groups in definition order
+	for _, nodeGroup := range g.cfg.NodeGroups {
+		ipList := groupIPsMap[nodeGroup.Name]
+		
+		// Preserve internal order of IP list
+		for _, ip := range ipList {
+			if _, exists := nodeMap[ip]; !exists {
+				nodeMap[ip] = struct{}{}
+				allNodes = append(allNodes, ip)
 			}
 		}
 	}
@@ -619,23 +638,25 @@ func (g *ArchDiagram) getNodesForService(nodes []string, nodeGroups []string) ([
 	serviceNodes := make([]string, 0, len(nodes)+len(nodeGroups))
 	nodeMap := make(map[string]struct{}, len(nodes)+len(nodeGroups))
 
+	// Strictly retrieve nodes in order: first process individual nodes, then node groups
+	
+	// 1. Add individual node IP addresses
 	for _, nodeName := range nodes {
-		found := false
 		for _, node := range g.cfg.Nodes {
 			if node.Name == nodeName {
-				if _, exists := nodeMap[node.Name]; !exists {
-					nodeMap[node.Name] = struct{}{}
-					serviceNodes = append(serviceNodes, node.Name)
+				// Use the node's Host property
+				if node.Host != "" && g.isIPLike(node.Host) {
+					if _, exists := nodeMap[node.Host]; !exists {
+						nodeMap[node.Host] = struct{}{}
+						serviceNodes = append(serviceNodes, node.Host)
+					}
 				}
-				found = true
 				break
 			}
 		}
-		if !found {
-			logrus.Debugf("Node %s not found in configuration", nodeName)
-		}
 	}
 
+	// 2. Add IP addresses from each node group in order
 	for _, groupName := range nodeGroups {
 		found := false
 		for _, nodeGroup := range g.cfg.NodeGroups {
@@ -749,7 +770,19 @@ func (g *ArchDiagram) renderClusterHeader(buffer *strings.Builder) {
 // renderClientSection renders the client nodes section
 func (g *ArchDiagram) renderClientSection(buffer *strings.Builder, clientNodes []string) {
 	g.renderSectionHeader(buffer, "CLIENT NODES:")
-	g.renderNodeRow(buffer, clientNodes, g.defaultRowSize, g.renderClientFunc)
+	
+	// Directly render client nodes instead of using renderNodeRow
+	clientCount := len(clientNodes)
+	for i := 0; i < clientCount; i += g.defaultRowSize {
+		end := i + g.defaultRowSize
+		if end > clientCount {
+			end = clientCount
+		}
+		
+		// Only render nodes within the current range
+		g.renderClientNodes(buffer, clientNodes[i:end])
+	}
+	
 	buffer.WriteByte('\n')
 
 	arrowCount := g.calculateArrowCount(len(clientNodes))
@@ -764,7 +797,18 @@ func (g *ArchDiagram) renderStorageSection(buffer *strings.Builder, storageNodes
 	buffer.WriteString("\n\n")
 
 	g.renderSectionHeader(buffer, "STORAGE NODES:")
-	g.renderNodeRow(buffer, storageNodes, g.defaultRowSize, g.renderStorageFunc)
+	
+	// Directly render storage nodes to avoid duplication from renderNodeRow
+	storageCount := len(storageNodes)
+	for i := 0; i < storageCount; i += g.defaultRowSize {
+		end := i + g.defaultRowSize
+		if end > storageCount {
+			end = storageCount
+		}
+		
+		// Only render nodes within the current range
+		g.renderStorageFunc(buffer, "", i)
+	}
 }
 
 // renderNetworkSection renders the network section
@@ -790,7 +834,8 @@ func (g *ArchDiagram) renderSummarySection(buffer *strings.Builder, serviceNodes
 
 // renderBoxBorder renders a box border with specified count
 func (g *ArchDiagram) renderBoxBorder(buffer *strings.Builder, count int) {
-	g.renderNodeBoxRow(buffer, "+----------------+ ", count)
+	const borderPattern = "+----------------+ "
+	g.renderNodeBoxRow(buffer, borderPattern, count)
 }
 
 // renderNodeBoxRow renders a row of node boxes
@@ -851,51 +896,194 @@ func (g *ArchDiagram) renderServiceRow(buffer *strings.Builder,
 	nodes []string, serviceNodes []string, startIndex int, endIndex int,
 	serviceName string, color string) {
 
+	// Simplify processing logic, directly render service label for each node
+	// Since we have already specified the exact list of nodes to display services in the parameters, no need to check again
 	for j := startIndex; j < endIndex; j++ {
-		nodeName := nodes[j]
-		if g.isNodeInList(nodeName, serviceNodes) {
-			serviceLabel := "[" + serviceName + "]"
-			paddingNeeded := g.totalCellWidth - len(serviceLabel)
-			if paddingNeeded < 0 {
-				paddingNeeded = 0
-			}
-
-			fmt.Fprintf(buffer, "|  %s%s%s%s| ",
-				g.getColorCode(color),
-				serviceLabel,
-				g.getColorReset(),
-				strings.Repeat(" ", paddingNeeded))
-		} else {
-			buffer.WriteString("|                | ")
+		serviceLabel := "[" + serviceName + "]"
+		paddingNeeded := g.totalCellWidth - len(serviceLabel)
+		if paddingNeeded < 0 {
+			paddingNeeded = 0
 		}
+
+		fmt.Fprintf(buffer, "|  %s%s%s%s| ",
+			g.getColorCode(color),
+			serviceLabel,
+			g.getColorReset(),
+			strings.Repeat(" ", paddingNeeded))
 	}
 	buffer.WriteByte('\n')
 }
 
 // renderStorageFunc renders storage nodes
 func (g *ArchDiagram) renderStorageFunc(buffer *strings.Builder, _ string, startIndex int) {
+	// Get all storage nodes
 	storageNodes := g.getStorageRelatedNodes()
 
+	// Calculate the range to display
 	storageCount := len(storageNodes)
 	endIndex := startIndex + g.defaultRowSize
 	if endIndex > storageCount {
 		endIndex = storageCount
 	}
 
+	// Only render nodes within the current row range
+	currentNodes := storageNodes[startIndex:endIndex]
+	nodeCount := len(currentNodes)
+
+	// Define layout format
+	const (
+		cellContent = "                "
+		boxSpacing  = " "
+	)
+
+	// Prepare service nodes for efficient lookup
+	serviceMap := make(map[ServiceType][]string)
 	for _, cfg := range g.serviceConfigs {
-		var nodes []string
+		var serviceNodes []string
 		if cfg.Type == ServiceMeta {
-			nodes = g.getMetaNodes()
+			serviceNodes = g.getMetaNodes()
 		} else {
-			nodes = g.getServiceNodes(cfg.Type)
+			serviceNodes = g.getServiceNodes(cfg.Type)
 		}
-		g.renderServiceRow(buffer, storageNodes, nodes, startIndex, endIndex, cfg.Name, cfg.Color)
+		serviceMap[cfg.Type] = serviceNodes
 	}
+
+	// Render top border for all nodes
+	topBorderLine := ""
+	for i := 0; i < nodeCount; i++ {
+		topBorderLine += "+" + strings.Repeat("-", len(cellContent)) + "+"
+		if i < nodeCount-1 {
+			topBorderLine += boxSpacing
+		}
+	}
+	buffer.WriteString(topBorderLine + "\n")
+
+	// Render node name row
+	nodeNameLine := ""
+	for _, node := range currentNodes {
+		nodeName := g.formatNodeName(node)
+		nodeNameLine += "|" + fmt.Sprintf("%s%-16s%s", g.getColorCode(colorCyan), nodeName, g.getColorReset()) + "|"
+		if nodeNameLine != topBorderLine { // If not the last node
+			nodeNameLine += boxSpacing
+		}
+	}
+	buffer.WriteString(nodeNameLine + "\n")
+
+	// Define service configurations
+	serviceConfigs := []struct {
+		Type  ServiceType
+		Name  string
+		Color string
+	}{
+		{ServiceStorage, "storage", colorYellow},
+		{ServiceFdb, "foundationdb", colorBlue},
+		{ServiceMeta, "meta", colorPink},
+		{ServiceMgmtd, "mgmtd", colorPurple},
+		{ServiceMonitor, "monitor", colorPurple},
+		{ServiceClickhouse, "clickhouse", colorRed},
+	}
+
+	// Render each service row
+	for _, cfg := range serviceConfigs {
+		serviceNodes := serviceMap[cfg.Type]
+		serviceLabel := "[" + cfg.Name + "]"
+		padding := len(cellContent) - len(serviceLabel) - 2 // -2 for the leading spaces
+
+		serviceLine := ""
+		for _, node := range currentNodes {
+			hasService := g.isNodeInList(node, serviceNodes)
+			if hasService {
+				serviceLine += "|" + fmt.Sprintf("  %s%s%s%s", 
+					g.getColorCode(cfg.Color),
+					serviceLabel,
+					g.getColorReset(),
+					strings.Repeat(" ", padding)) + "|"
+			} else {
+				serviceLine += "|" + cellContent + "|"
+			}
+			if serviceLine != topBorderLine { // If not the last node
+				serviceLine += boxSpacing
+			}
+		}
+		buffer.WriteString(serviceLine + "\n")
+	}
+
+	// Render bottom border for all nodes
+	bottomBorderLine := ""
+	for i := 0; i < nodeCount; i++ {
+		bottomBorderLine += "+" + strings.Repeat("-", len(cellContent)) + "+"
+		if i < nodeCount-1 {
+			bottomBorderLine += boxSpacing
+		}
+	}
+	buffer.WriteString(bottomBorderLine + "\n")
+}
+
+// renderClientNodes renders client nodes with independent borders
+func (g *ArchDiagram) renderClientNodes(buffer *strings.Builder, clientNodes []string) {
+	if len(clientNodes) == 0 {
+		return
+	}
+
+	nodeCount := len(clientNodes)
+	
+	// Define layout format
+	const (
+		cellContent = "                "
+		boxSpacing  = " "
+	)
+
+	// Render top border for all nodes
+	topBorderLine := ""
+	for i := 0; i < nodeCount; i++ {
+		topBorderLine += "+" + strings.Repeat("-", len(cellContent)) + "+"
+		if i < nodeCount-1 {
+			topBorderLine += boxSpacing
+		}
+	}
+	buffer.WriteString(topBorderLine + "\n")
+
+	// Render node name row
+	nodeNameLine := ""
+	for _, node := range clientNodes {
+		nodeName := g.formatNodeName(node)
+		nodeNameLine += "|" + fmt.Sprintf("%s%-16s%s", g.getColorCode(colorCyan), nodeName, g.getColorReset()) + "|"
+		if nodeNameLine != topBorderLine { // If not the last node
+			nodeNameLine += boxSpacing
+		}
+	}
+	buffer.WriteString(nodeNameLine + "\n")
+
+	// Render client service row
+	serviceLine := ""
+	for range clientNodes {
+		serviceLabel := "[hf3fs_fuse]"
+		padding := len(cellContent) - len(serviceLabel) - 2 // -2 for the leading spaces
+		serviceLine += "|" + fmt.Sprintf("  %s%s%s%s", 
+			g.getColorCode(colorGreen),
+			serviceLabel,
+			g.getColorReset(),
+			strings.Repeat(" ", padding)) + "|"
+		if serviceLine != topBorderLine { // If not the last node
+			serviceLine += boxSpacing
+		}
+	}
+	buffer.WriteString(serviceLine + "\n")
+
+	// Render bottom border for all nodes
+	bottomBorderLine := ""
+	for i := 0; i < nodeCount; i++ {
+		bottomBorderLine += "+" + strings.Repeat("-", len(cellContent)) + "+"
+		if i < nodeCount-1 {
+			bottomBorderLine += boxSpacing
+		}
+	}
+	buffer.WriteString(bottomBorderLine + "\n")
 }
 
 // renderClientFunc renders client nodes
 func (g *ArchDiagram) renderClientFunc(buffer *strings.Builder, _ string, startIndex int) {
-	clientNodes := g.getServiceNodes(ServiceClient)
+	clientNodes := g.getClientNodes()
 	if len(clientNodes) == 0 {
 		return
 	}
@@ -906,7 +1094,9 @@ func (g *ArchDiagram) renderClientFunc(buffer *strings.Builder, _ string, startI
 		endIndex = clientCount
 	}
 
-	g.renderServiceRow(buffer, clientNodes, clientNodes, startIndex, endIndex, "hf3fs_fuse", colorGreen)
+	// Ensure correct node and service alignment
+	nodes := clientNodes[startIndex:endIndex]
+	g.renderServiceRow(buffer, nodes, clientNodes, 0, len(nodes), "hf3fs_fuse", colorGreen)
 }
 
 // renderSectionHeader renders a section header
@@ -971,29 +1161,32 @@ func (g *ArchDiagram) countServiceNodes(
 func (g *ArchDiagram) countUniqueIPs(nodeList []string, nodeHosts map[string]string) map[string]struct{} {
 	uniqueIPs := make(map[string]struct{}, len(nodeList))
 
-	for _, nodeName := range nodeList {
-		isNodeGroup := g.processNodeGroupIfPresent(nodeName, uniqueIPs)
-
-		if !isNodeGroup {
-			g.processIndividualNode(nodeName, nodeHosts, uniqueIPs)
+	// Node list now contains only IP addresses, directly count them
+	for _, ip := range nodeList {
+		if g.isIPLike(ip) {
+			uniqueIPs[ip] = struct{}{}
 		}
 	}
 
 	return uniqueIPs
 }
 
-// processNodeGroupIfPresent processes a node group if present, returns true if found
+// processNodeGroupIfPresent checks if a node is part of any node group's IP range
 func (g *ArchDiagram) processNodeGroupIfPresent(nodeName string, uniqueIPs map[string]struct{}) bool {
+	// Check if the node name is an IP that's part of any node group's IP range
 	for _, nodeGroup := range g.cfg.NodeGroups {
-		groupPattern := fmt.Sprintf("%s[%s-%s]", nodeGroup.Name, nodeGroup.IPBegin, nodeGroup.IPEnd)
-		if nodeName == groupPattern {
-			ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
-			if err == nil {
-				for _, ip := range ipList {
-					uniqueIPs[ip] = struct{}{}
-				}
+		ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
+		if err != nil {
+			logrus.Errorf("Failed to expand node group %s: %v", nodeGroup.Name, err)
+			continue
+		}
+
+		// Check if the node name is in the expanded IP list
+		for _, ip := range ipList {
+			if ip == nodeName {
+				uniqueIPs[nodeName] = struct{}{}
+				return true
 			}
-			return true
 		}
 	}
 	return false
@@ -1213,8 +1406,21 @@ func (g *ArchDiagram) expandNodeGroup(nodeGroup *config.NodeGroup) []string {
 
 // expandNodeGroupDirect directly expands a node group without caching
 func (g *ArchDiagram) expandNodeGroupDirect(nodeGroup *config.NodeGroup) []string {
-	nodeName := fmt.Sprintf("%s[%s-%s]", nodeGroup.Name, nodeGroup.IPBegin, nodeGroup.IPEnd)
-	return []string{nodeName}
+	// Instead of returning the node group name with IP range, actually expand the IP range
+	ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
+	if err != nil {
+		logrus.Errorf("Failed to expand node group %s: %v", nodeGroup.Name, err)
+		return []string{}
+	}
+
+	return ipList
+}
+
+// isIPLike checks if a string looks like an IP address
+func (g *ArchDiagram) isIPLike(s string) bool {
+	// Simple check for IP address format (contains dots and numbers in correct pattern)
+	ipPattern := regexp.MustCompile(`^\d+\.\d+\.\d+\.\d+$`)
+	return ipPattern.MatchString(s)
 }
 
 // getTotalActualNodeCount returns the total number of actual nodes
