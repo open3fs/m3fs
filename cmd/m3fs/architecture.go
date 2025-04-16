@@ -476,12 +476,12 @@ func (g *ArchDiagram) getNodesForService(nodes []string, nodeGroups []string) ([
 	for _, groupName := range nodeGroups {
 		if nodeGroup, found := nodeGroupMap[groupName]; found {
 			ipList := g.expandNodeGroup(nodeGroup)
-			for _, ip := range ipList {
-				if _, exists := nodeMap[ip]; !exists {
-					nodeMap[ip] = struct{}{}
-					serviceNodes = append(serviceNodes, ip)
+				for _, ip := range ipList {
+					if _, exists := nodeMap[ip]; !exists {
+						nodeMap[ip] = struct{}{}
+						serviceNodes = append(serviceNodes, ip)
+					}
 				}
-			}
 		} else {
 			logrus.Debugf("Node group %s not found in configuration", groupName)
 		}
