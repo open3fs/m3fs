@@ -107,7 +107,7 @@ func TestNoColorOption(t *testing.T) {
 	t.Run("DefaultWithColor", func(t *testing.T) {
 		generator := NewArchDiagram(cfg)
 		// Colors should be enabled by default
-		assert.True(t, generator.colorEnabled, "Colors should be enabled by default")
+		assert.True(t, generator.renderer.ColorEnabled, "Colors should be enabled by default")
 
 		diagram := generator.Generate()
 
@@ -119,7 +119,7 @@ func TestNoColorOption(t *testing.T) {
 		generator := NewArchDiagram(cfg)
 		// Set the no-color option
 		generator.SetColorEnabled(false)
-		assert.False(t, generator.colorEnabled, "Colors should be disabled after setting colorEnabled to false")
+		assert.False(t, generator.renderer.ColorEnabled, "Colors should be disabled after setting ColorEnabled to false")
 
 		diagram := generator.Generate()
 
