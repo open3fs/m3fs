@@ -587,6 +587,17 @@ func (g *ArchDiagram) renderClientSection(buffer *strings.Builder, clientNodes [
 	buffer.WriteByte('\n')
 }
 
+// renderClientNodes renders client nodes
+func (g *ArchDiagram) renderClientNodes(buffer *strings.Builder, clientNodes []string) {
+	if len(clientNodes) == 0 {
+		return
+	}
+
+	g.renderer.RenderNodesRow(buffer, clientNodes, func(node string) []string {
+		return []string{"[hf3fs_fuse]"}
+	})
+}
+
 // renderStorageSection renders the storage nodes section
 func (g *ArchDiagram) renderStorageSection(buffer *strings.Builder, storageNodes []string) {
 	g.renderArrows(buffer, g.calculateArrowCount(len(storageNodes)))
@@ -661,17 +672,6 @@ func (g *ArchDiagram) getNodeServices(node string) []string {
 	return services
 }
 
-// renderClientNodes renders client nodes
-func (g *ArchDiagram) renderClientNodes(buffer *strings.Builder, clientNodes []string) {
-	if len(clientNodes) == 0 {
-		return
-	}
-
-	g.renderer.RenderNodesRow(buffer, clientNodes, func(node string) []string {
-		return []string{"[hf3fs_fuse]"}
-	})
-}
-
 // calculateArrowCount calculates the number of arrows to display
 func (g *ArchDiagram) calculateArrowCount(nodeCount int) int {
 	if nodeCount <= 0 {
@@ -680,6 +680,26 @@ func (g *ArchDiagram) calculateArrowCount(nodeCount int) int {
 		return 15
 	}
 	return nodeCount
+}
+
+// renderArrows renders arrows for the specified count
+func (g *ArchDiagram) renderArrows(buffer *strings.Builder, count int) {
+	if count <= 0 {
+		return
+	}
+
+	const arrowStr = "  ↓ "
+	totalLen := len(arrowStr) * count
+
+	arrowBuilder := g.renderer.GetStringBuilder()
+	arrowBuilder.Grow(totalLen)
+
+	for i := 0; i < count; i++ {
+		arrowBuilder.WriteString(arrowStr)
+	}
+
+	buffer.WriteString(arrowBuilder.String())
+	g.renderer.PutStringBuilder(arrowBuilder)
 }
 
 // renderSummaryStatistics renders the summary statistics
@@ -857,26 +877,6 @@ func (g *ArchDiagram) prepareServiceNodesMap(clientNodes []string) map[config.Se
 	serviceNodesMap[config.ServiceClient] = clientNodes
 
 	return serviceNodesMap
-}
-
-// renderArrows renders arrows for the specified count
-func (g *ArchDiagram) renderArrows(buffer *strings.Builder, count int) {
-	if count <= 0 {
-		return
-	}
-
-	const arrowStr = "  ↓ "
-	totalLen := len(arrowStr) * count
-
-	arrowBuilder := g.renderer.GetStringBuilder()
-	arrowBuilder.Grow(totalLen)
-
-	for i := 0; i < count; i++ {
-		arrowBuilder.WriteString(arrowStr)
-	}
-
-	buffer.WriteString(arrowBuilder.String())
-	g.renderer.PutStringBuilder(arrowBuilder)
 }
 
 // getNodeMap gets a map from the object pool
