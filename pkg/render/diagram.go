@@ -42,6 +42,7 @@ const (
 	DefaultNodeCellWidth         = 16
 	DefaultServiceBoxPadding     = 2
 	DefaultTotalCellWidth        = 14
+	DefaultMinServiceLines       = 6 // Minimum number of service lines to ensure consistent height
 	InitialStringBuilderCapacity = 1024
 	InitialMapCapacity           = 16
 )
@@ -250,7 +251,7 @@ func (r *DiagramRenderer) getServiceColor(service string) string {
 
 // RenderNodesRow renders a row of nodes horizontally
 func (r *DiagramRenderer) RenderNodesRow(sb *strings.Builder, nodes []string,
-	servicesFn func(string) []string) {
+	servicesFn func(string) []string, enforceMinHeight bool) {
 	if len(nodes) == 0 {
 		return
 	}
@@ -264,6 +265,11 @@ func (r *DiagramRenderer) RenderNodesRow(sb *strings.Builder, nodes []string,
 		if len(services) > maxServiceLines {
 			maxServiceLines = len(services)
 		}
+	}
+
+	// Apply minimum height if required for consistency
+	if enforceMinHeight && maxServiceLines < DefaultMinServiceLines {
+		maxServiceLines = DefaultMinServiceLines
 	}
 
 	const cellContent = "                "

@@ -170,7 +170,7 @@ func TestNodeListFunctions(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				generator := NewArchDiagram(tc.cfg)
-				clientNodes := generator.getClientNodes()
+				clientNodes := generator.GetClientNodes()
 
 				assert.Len(t, clientNodes, tc.expectedCount, "Client nodes count should match expected")
 
@@ -194,7 +194,7 @@ func TestNodeListFunctions(t *testing.T) {
 		}
 	})
 
-	t.Run("GetStorageRelatedNodes", func(t *testing.T) {
+	t.Run("GetStorageNodes", func(t *testing.T) {
 		testCases := []struct {
 			name           string
 			cfg            *config.Config
@@ -220,7 +220,7 @@ func TestNodeListFunctions(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				generator := NewArchDiagram(tc.cfg)
-				storageNodes := generator.getStorageRelatedNodes()
+				storageNodes := generator.GetStorageNodes()
 
 				for _, expectedNode := range tc.expectedNodes {
 					found := false
@@ -346,7 +346,7 @@ func TestNetworkSpeed(t *testing.T) {
 	}
 }
 
-func TestGetTotalActualNodeCount(t *testing.T) {
+func TestGetTotalNodeCount(t *testing.T) {
 	tests := []struct {
 		name          string
 		nodes         []config.Node
@@ -413,10 +413,10 @@ func TestGetTotalActualNodeCount(t *testing.T) {
 			}
 
 			generator := NewArchDiagram(cfg)
-			actualCount := generator.getTotalActualNodeCount()
+			actualCount := generator.GetTotalNodeCount()
 
 			if actualCount != tt.expectedCount {
-				t.Errorf("getTotalActualNodeCount() = %v, want %v", actualCount, tt.expectedCount)
+				t.Errorf("GetTotalNodeCount() = %v, want %v", actualCount, tt.expectedCount)
 			}
 		})
 	}
