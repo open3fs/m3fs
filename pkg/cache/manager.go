@@ -21,8 +21,8 @@ import (
 
 // Entry represents a cached value with expiration time
 type Entry struct {
-	value      any
-	expireTime time.Time
+	Value      any
+	ExpireTime time.Time
 }
 
 // Config defines cache configuration parameters
@@ -49,6 +49,11 @@ type Manager struct {
 	// Public fields for direct access
 	TTL     time.Duration
 	Enabled bool
+
+	// Node caches
+	ServiceNodesCache sync.Map
+	MetaNodesCache    sync.Map
+	NodeGroupCache    sync.Map
 }
 
 // NewCacheManager creates a new Manager
@@ -92,12 +97,12 @@ func (cm *Manager) Get(cacheName string, key any) (any, bool) {
 		return value, true
 	}
 
-	if time.Now().After(entry.expireTime) {
+	if time.Now().After(entry.ExpireTime) {
 		cache.Delete(key)
 		return nil, false
 	}
 
-	return entry.value, true
+	return entry.Value, true
 }
 
 // Set stores a value in the cache
@@ -115,8 +120,8 @@ func (cm *Manager) Set(cacheName string, key, value any) {
 	cm.mu.Unlock()
 
 	entry := Entry{
-		value:      value,
-		expireTime: time.Now().Add(cm.config.TTL),
+		Value:      value,
+		ExpireTime: time.Now().Add(cm.config.TTL),
 	}
 
 	cache.Store(key, entry)
@@ -155,7 +160,7 @@ func (cm *Manager) cleanup() {
 		var keysToDelete []any
 		cache.Range(func(key, value any) bool {
 			if entry, ok := value.(Entry); ok {
-				if entry.expireTime.Before(now) {
+				if entry.ExpireTime.Before(now) {
 					keysToDelete = append(keysToDelete, key)
 				}
 			}
@@ -166,4 +171,49 @@ func (cm *Manager) cleanup() {
 			cache.Delete(key)
 		}
 	}
+}
+
+// GetCachedNodes retrieves nodes from cache using the specified key
+func (cm *Manager) GetCachedNodes(cache *sync.Map, key string) []string {
+	if !cm.Enabled {
+		return nil
+	}
+
+	if cached, ok := cache.Load(key); ok {
+		if entry, ok := cached.(Entry); ok {
+			if time.Now().Before(entry.ExpireTime) {
+				if nodes, ok := entry.Value.([]string); ok {
+					return nodes
+				}
+			}
+		} else if nodes, ok := cached.([]string); ok {
+			return nodes
+		}
+	}
+	return nil
+}
+
+// CacheNodes stores nodes in cache using the specified key
+func (cm *Manager) CacheNodes(cache *sync.Map, key string, nodes []string) {
+	if !cm.Enabled || len(nodes) == 0 {
+		return
+	}
+
+	cache.Store(key, Entry{
+		Value:      nodes,
+		ExpireTime: time.Now().Add(cm.TTL),
+	})
+}
+
+// GetCacheKey generates a unified format key for caching
+func (cm *Manager) GetCacheKey(prefix string, parts ...string) string {
+	if len(parts) == 0 {
+		return prefix
+	}
+
+	key := prefix
+	for _, part := range parts {
+		key += ":" + part
+	}
+	return key
 }
