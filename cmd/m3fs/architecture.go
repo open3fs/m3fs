@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -94,48 +95,17 @@ func (e *ServiceError) Error() string {
 	return fmt.Sprintf("service %s error: %v", e.serviceType, e.err)
 }
 
-// nodeResult represents the result of node processing
-type nodeResult struct {
-	index     int
-	nodeName  string
-	isStorage bool
-}
-
-// ================ Caching Types ================
-
-// CacheConfig defines cache configuration parameters
-type CacheConfig struct {
-	TTL             time.Duration
-	CleanupInterval time.Duration
-	Enabled         bool
-}
-
-// ================ Object Pools ================
-
-// nodeResultPool provides a reuse pool for nodeResult objects
-var nodeResultPool = sync.Pool{
-	New: func() any {
-		return &nodeResult{}
-	},
-}
-
-// ================ Core Struct ================
-
 // ArchDiagram generates architecture diagrams for m3fs clusters
 type ArchDiagram struct {
 	cfg          *config.Config
 	renderer     *render.DiagramRenderer
 	archRenderer *render.ArchDiagramRenderer
 	cacheManager *cache.Manager
+	nodeCache    *cache.NodeCache
+	dataProvider *render.ClusterDataProvider
 
-	mu                sync.RWMutex
-	serviceNodesCache sync.Map
+	mu sync.RWMutex
 }
-
-// Ensure ArchDiagram implements render.NodeDataProvider
-var _ render.NodeDataProvider = (*ArchDiagram)(nil)
-
-// ================ Constructor and Core Methods ================
 
 // NewArchDiagram creates a new ArchDiagram with default configuration
 func NewArchDiagram(cfg *config.Config) *ArchDiagram {
@@ -150,12 +120,26 @@ func NewArchDiagram(cfg *config.Config) *ArchDiagram {
 	cfg = setDefaultConfig(cfg)
 
 	baseRenderer := render.NewDiagramRenderer(cfg)
+	cacheManager := cache.NewCacheManager(cache.DefaultCacheConfig)
+	nodeCache := cache.NewNodeCache(cacheManager)
+
 	archDiagram := &ArchDiagram{
 		cfg:          cfg,
 		renderer:     baseRenderer,
 		archRenderer: render.NewArchDiagramRenderer(baseRenderer),
-		cacheManager: cache.NewCacheManager(cache.DefaultCacheConfig),
+		cacheManager: cacheManager,
+		nodeCache:    nodeCache,
 	}
+
+	archDiagram.dataProvider = render.NewClusterDataProvider(
+		archDiagram.GetServiceNodeCounts,
+		archDiagram.GetClientNodes,
+		archDiagram.GetRenderableNodes,
+		archDiagram.getNodeServices,
+		archDiagram.GetTotalNodeCount,
+		archDiagram.getNetworkSpeed,
+		archDiagram.GetNetworkType,
+	)
 
 	return archDiagram
 }
@@ -166,7 +150,7 @@ func (g *ArchDiagram) Generate() string {
 		return "Error: No configuration provided"
 	}
 
-	adapter := render.NewArchDiagramAdapter(g, g.archRenderer)
+	adapter := render.NewArchDiagramAdapter(g.dataProvider, g.archRenderer)
 	return adapter.Generate()
 }
 
@@ -174,8 +158,6 @@ func (g *ArchDiagram) Generate() string {
 func (g *ArchDiagram) SetColorEnabled(enabled bool) {
 	g.renderer.SetColorEnabled(enabled)
 }
-
-// ================ Configuration Methods ================
 
 // setDefaultConfig sets default values for configuration
 func setDefaultConfig(cfg *config.Config) *config.Config {
@@ -190,31 +172,16 @@ func setDefaultConfig(cfg *config.Config) *config.Config {
 
 // ================ Interface Implementation Methods ================
 
-// GetClientNodes implements render.NodeDataProvider
+// GetClientNodes returns client nodes
 func (g *ArchDiagram) GetClientNodes() []string {
 	return g.getServiceNodes(config.ServiceClient)
 }
 
-// GetRenderableNodes implements render.NodeDataProvider
-func (g *ArchDiagram) GetRenderableNodes() []string {
-	return g.getRenderableNodes()
-}
-
-// GetNodeServices implements render.NodeDataProvider
-func (g *ArchDiagram) GetNodeServices(nodeName string) []string {
-	return g.getNodeServices(nodeName)
-}
-
-// GetServiceNodeCounts implements render.NodeDataProvider
+// GetServiceNodeCounts returns counts of nodes by service type
 func (g *ArchDiagram) GetServiceNodeCounts() map[config.ServiceType]int {
 	clientNodes := g.GetClientNodes()
 	serviceNodesMap := g.prepareServiceNodesMap(clientNodes)
 	return g.countServiceNodes(serviceNodesMap)
-}
-
-// GetTotalNodeCount implements render.NodeDataProvider
-func (g *ArchDiagram) GetTotalNodeCount() int {
-	return g.getTotalActualNodeCount()
 }
 
 // GetNetworkSpeed implements render.NodeDataProvider
@@ -241,37 +208,167 @@ func (g *ArchDiagram) GetNetworkType() string {
 
 // ================ Node Processing Methods ================
 
-// getRenderableNodes returns nodes that need to be rendered in the architecture diagram
-func (g *ArchDiagram) getRenderableNodes() []string {
+// GetRenderableNodes returns all service nodes that need to be rendered in the architecture diagram
+// Including nodes with storage, meta, mgmtd, etc. services, but excluding client-only nodes
+func (g *ArchDiagram) GetRenderableNodes() []string {
 	g.mu.RLock()
-	cfg := g.cfg
-	g.mu.RUnlock()
-
-	if cfg == nil {
-		logrus.Error("Configuration is nil")
-		return []string{"no storage node"}
-	}
-
-	if nodes := g.getCachedStorageNodes(); nodes != nil {
-		return nodes
-	}
+	defer g.mu.RUnlock()
 
 	allNodes := g.buildOrderedNodeList()
 	if len(allNodes) == 0 {
-		logrus.Warn("No nodes found in configuration")
-		return []string{"no storage node"}
+		return nil
 	}
 
+	// Process nodes in parallel for better performance
 	results := g.processNodesInParallel(allNodes)
-	storageNodes := g.extractStorageNodes(results)
-
-	if len(storageNodes) == 0 {
-		logrus.Warn("No storage nodes found")
-		return []string{"no storage node"}
+	if len(results) == 0 {
+		return nil
 	}
 
-	g.cacheStorageNodes(storageNodes)
-	return storageNodes
+	// Extract nodes with any service (excluding client-only nodes)
+	allNodes = g.extractRenderableNodes(results)
+
+	clientNodes := g.GetClientNodes()
+	clientNodeMap := make(map[string]struct{}, len(clientNodes))
+	for _, node := range clientNodes {
+		clientNodeMap[node] = struct{}{}
+	}
+
+	// Filter out nodes that are only client nodes and have no other services
+	renderableNodes := make([]string, 0, len(allNodes))
+	for _, node := range allNodes {
+		hasService := false
+		for _, svcType := range serviceTypes {
+			if svcType != config.ServiceClient && g.checkNodeInService(node, svcType) {
+				hasService = true
+				break
+			}
+		}
+
+		if hasService {
+			renderableNodes = append(renderableNodes, node)
+		}
+	}
+
+	// Cache storage nodes for future queries
+	storageNodes := g.filterServiceNodes(renderableNodes, config.ServiceStorage)
+	g.nodeCache.CacheServiceNodes(config.ServiceStorage, storageNodes)
+
+	return renderableNodes
+}
+
+// processNodesInParallel processes nodes concurrently, returning the results
+func (g *ArchDiagram) processNodesInParallel(allNodes []string) []*utils.NodeResult {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	totalNodes := len(allNodes)
+	if totalNodes == 0 {
+		return nil
+	}
+
+	workerCount := min(totalNodes, maxWorkers)
+	jobCh := make(chan int, totalNodes)
+	resultCh := make(chan *utils.NodeResult, totalNodes)
+	var wg sync.WaitGroup
+
+	var activeWorkers int32
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			atomic.AddInt32(&activeWorkers, 1)
+			defer atomic.AddInt32(&activeWorkers, -1)
+
+			for {
+				select {
+				case idx, ok := <-jobCh:
+					if !ok {
+						return
+					}
+
+					nodeName := allNodes[idx]
+					isStorage := g.checkNodeInService(nodeName, config.ServiceStorage)
+
+					nr := utils.GetNodeResult()
+					nr.Index = idx
+					nr.NodeName = nodeName
+					nr.IsStorage = isStorage
+					resultCh <- nr
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	for i := 0; i < totalNodes; i++ {
+		select {
+		case jobCh <- i:
+		case <-ctx.Done():
+			logrus.Warn("Timeout while processing nodes")
+			close(jobCh)
+			goto collectResults
+		}
+	}
+	close(jobCh)
+
+collectResults:
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	results := make([]*utils.NodeResult, 0, totalNodes)
+	for nr := range resultCh {
+		results = append(results, nr)
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Index < results[j].Index
+	})
+
+	return results
+}
+
+// checkNodeInService checks if a node belongs to a specific service
+func (g *ArchDiagram) checkNodeInService(
+	nodeName string,
+	serviceType config.ServiceType,
+) bool {
+	return g.isNodeInList(nodeName, g.getServiceNodes(serviceType))
+}
+
+// extractRenderableNodes extracts all nodes that should be rendered from the results
+func (g *ArchDiagram) extractRenderableNodes(results []*utils.NodeResult) []string {
+	renderableNodes := make([]string, 0, len(results))
+
+	for _, r := range results {
+		renderableNodes = append(renderableNodes, r.NodeName)
+		utils.PutNodeResult(r)
+	}
+
+	return renderableNodes
+}
+
+// filterServiceNodes filters nodes by service type
+func (g *ArchDiagram) filterServiceNodes(allNodes []string, serviceType config.ServiceType) []string {
+	serviceNodes := g.getServiceNodes(serviceType)
+
+	serviceNodeMap := make(map[string]struct{}, len(serviceNodes))
+	for _, node := range serviceNodes {
+		serviceNodeMap[node] = struct{}{}
+	}
+
+	filteredNodes := make([]string, 0, len(allNodes))
+	for _, node := range allNodes {
+		if _, exists := serviceNodeMap[node]; exists {
+			filteredNodes = append(filteredNodes, node)
+		}
+	}
+
+	return filteredNodes
 }
 
 // buildOrderedNodeList builds a list of nodes ordered by config appearance
@@ -317,239 +414,42 @@ func (g *ArchDiagram) buildOrderedNodeList() []string {
 	return allNodes
 }
 
-// processNodesInParallel processes nodes concurrently, returning the results
-func (g *ArchDiagram) processNodesInParallel(allNodes []string) []*nodeResult {
-	serviceNodesCache := &sync.Map{}
-	resultChan := make(chan *nodeResult, utils.Min(len(allNodes), maxWorkers*2))
-	var wg sync.WaitGroup
-
-	semaphore := make(chan struct{}, maxWorkers)
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	var processedCount int32
-
-	for i := 0; i < len(allNodes); i += maxWorkers {
-		end := utils.Min(i+maxWorkers, len(allNodes))
-		batch := allNodes[i:end]
-
-		for j, nodeName := range batch {
-			idx := i + j
-			wg.Add(1)
-			go func(idx int, name string) {
-				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						logrus.Errorf("Recovered from panic in node processing: %v", r)
-					}
-					atomic.AddInt32(&processedCount, 1)
-				}()
-
-				select {
-				case semaphore <- struct{}{}:
-					defer func() { <-semaphore }()
-				case <-ctx.Done():
-					logrus.Errorf("Timeout while processing node %s", name)
-					return
-				}
-
-				result := getNodeResult()
-				result.index = idx
-				result.nodeName = name
-				result.isStorage = false
-
-				for _, svcType := range serviceTypes {
-					if g.checkNodeInService(name, svcType, serviceNodesCache) {
-						result.isStorage = true
-						resultChan <- result
-						return
-					}
-				}
-
-				resultChan <- result
-			}(idx, nodeName)
-		}
-	}
-
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
-
-	results := make([]*nodeResult, len(allNodes))
-	for result := range resultChan {
-		if result != nil && result.index >= 0 && result.index < len(results) {
-			results[result.index] = result
-		}
-	}
-
-	return results
-}
-
-// checkNodeInService checks if a node belongs to a specific service
-func (g *ArchDiagram) checkNodeInService(
-	nodeName string,
-	svcType config.ServiceType,
-	serviceNodesCache *sync.Map,
-) bool {
-	cacheKey := string(svcType)
-	var serviceNodes []string
-
-	if cached, ok := serviceNodesCache.Load(cacheKey); ok {
-		serviceNodes = cached.([]string)
-	} else {
-		if svcType == config.ServiceMeta {
-			serviceNodes = g.getMetaNodes()
-		} else {
-			serviceNodes = g.getServiceNodes(svcType)
-		}
-
-		if len(serviceNodes) > 0 {
-			serviceNodesCache.Store(cacheKey, serviceNodes)
-		}
-	}
-
-	return g.isNodeInList(nodeName, serviceNodes)
-}
-
-// extractStorageNodes extracts storage nodes from the results
-func (g *ArchDiagram) extractStorageNodes(results []*nodeResult) []string {
-	storageNodes := make([]string, 0, len(results)/2)
-	storageNodesMap := make(map[string]struct{}, len(results)/2)
-
-	for _, result := range results {
-		if result != nil && result.isStorage {
-			if _, exists := storageNodesMap[result.nodeName]; !exists {
-				storageNodesMap[result.nodeName] = struct{}{}
-				storageNodes = append(storageNodes, result.nodeName)
-			}
-		}
-		if result != nil {
-			putNodeResult(result)
-		}
-	}
-
-	return storageNodes
-}
-
-// getTotalActualNodeCount returns the total number of actual nodes
-func (g *ArchDiagram) getTotalActualNodeCount() int {
-	g.mu.RLock()
-	cfg := g.cfg
-	g.mu.RUnlock()
-
-	if cfg == nil {
-		return 0
-	}
-
-	uniqueIPs := make(map[string]struct{}, initialMapCapacity)
-
-	g.mu.RLock()
-	for _, node := range cfg.Nodes {
-		uniqueIPs[node.Host] = struct{}{}
-	}
-
-	for _, nodeGroup := range cfg.NodeGroups {
-		ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
-		if err != nil {
-			continue
-		}
-
-		for _, ip := range ipList {
-			uniqueIPs[ip] = struct{}{}
-		}
-	}
-	g.mu.RUnlock()
-
-	return len(uniqueIPs)
-}
-
-// ================ Service Methods ================
-
 // expandNodeGroup expands a node group into individual nodes
 func (g *ArchDiagram) expandNodeGroup(nodeGroup *config.NodeGroup) []string {
-	if !g.cacheManager.Enabled {
-		return g.expandNodeGroupDirect(nodeGroup)
-	}
-
-	key := g.cacheManager.GetCacheKey("nodegroup", nodeGroup.Name, nodeGroup.IPBegin, nodeGroup.IPEnd)
-	if nodes := g.cacheManager.GetCachedNodes(&g.renderer.NodeGroupCache, key); nodes != nil {
-		return nodes
-	}
-
-	nodes := g.expandNodeGroupDirect(nodeGroup)
-	g.cacheManager.CacheNodes(&g.renderer.NodeGroupCache, key, nodes)
-
-	return nodes
-}
-
-// expandNodeGroupDirect directly expands a node group without caching
-func (g *ArchDiagram) expandNodeGroupDirect(nodeGroup *config.NodeGroup) []string {
-	if len(nodeGroup.Nodes) > 0 {
-		ipList := make([]string, 0, len(nodeGroup.Nodes))
-		for _, node := range nodeGroup.Nodes {
-			if node.Host != "" && utils.IsIPAddress(node.Host) {
-				ipList = append(ipList, node.Host)
+	return g.nodeCache.GetNodeGroup(nodeGroup.Name, func() []string {
+		if len(nodeGroup.Nodes) > 0 {
+			ipList := make([]string, 0, len(nodeGroup.Nodes))
+			for _, node := range nodeGroup.Nodes {
+				if node.Host != "" && utils.IsIPAddress(node.Host) {
+					ipList = append(ipList, node.Host)
+				}
+			}
+			if len(ipList) > 0 {
+				return ipList
 			}
 		}
-		if len(ipList) > 0 {
-			return ipList
+
+		ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
+		if err != nil {
+			logrus.Errorf("Failed to expand node group %s: %v", nodeGroup.Name, err)
+			return []string{}
 		}
-	}
 
-	ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
-	if err != nil {
-		logrus.Errorf("Failed to expand node group %s: %v", nodeGroup.Name, err)
-		return []string{}
-	}
-
-	return ipList
+		return ipList
+	})
 }
 
 // getServiceNodes returns nodes for a specific service type with caching
 func (g *ArchDiagram) getServiceNodes(serviceType config.ServiceType) []string {
-	g.mu.RLock()
-	cfg := g.cfg
-	g.mu.RUnlock()
-
-	if cfg == nil {
-		logrus.Error("Cannot get service nodes: configuration is nil")
-		return []string{}
-	}
-
-	if nodes := g.getCachedNodes(serviceType); nodes != nil {
-		return nodes
-	}
-
-	nodes, nodeGroups := g.getServiceConfig(serviceType)
-	serviceNodes, err := g.getNodesForService(nodes, nodeGroups)
-	if err != nil {
-		logrus.Errorf("Failed to get nodes for service %s: %v", serviceType, err)
-		return []string{}
-	}
-
-	if serviceType == config.ServiceClient && len(serviceNodes) == 0 {
-		logrus.Debug("No client nodes found")
-	}
-
-	g.cacheServiceNodes(serviceType, serviceNodes)
-	return serviceNodes
-}
-
-// getMetaNodes returns meta nodes with caching
-func (g *ArchDiagram) getMetaNodes() []string {
-	if !g.cacheManager.Enabled {
-		return g.getServiceNodes(config.ServiceMeta)
-	}
-
-	key := "meta"
-	if nodes := g.cacheManager.GetCachedNodes(&g.renderer.MetaNodesCache, key); nodes != nil {
-		return nodes
-	}
-
-	nodes := g.getServiceNodes(config.ServiceMeta)
-	g.cacheManager.CacheNodes(&g.renderer.MetaNodesCache, key, nodes)
-	return nodes
+	return g.nodeCache.GetServiceNodes(serviceType, func() []string {
+		nodes, nodeGroups := g.getServiceConfig(serviceType)
+		result, err := g.getNodesForService(nodes, nodeGroups)
+		if err != nil {
+			logrus.WithError(err).Errorf("Failed to get nodes for service %s", serviceType)
+			return nil
+		}
+		return result
+	})
 }
 
 // getServiceConfig returns nodes and node groups for a service type
@@ -657,7 +557,7 @@ func (g *ArchDiagram) prepareServiceNodesMap(clientNodes []string) map[config.Se
 
 	for _, cfg := range serviceConfigs {
 		if cfg.Type == config.ServiceMeta {
-			serviceNodesMap[cfg.Type] = g.getMetaNodes()
+			serviceNodesMap[cfg.Type] = g.getServiceNodes(config.ServiceMeta)
 		} else {
 			serviceNodesMap[cfg.Type] = g.getServiceNodes(cfg.Type)
 		}
@@ -679,57 +579,6 @@ func (g *ArchDiagram) countServiceNodes(serviceNodesMap map[config.ServiceType][
 	return counts
 }
 
-// ================ Cache Methods ================
-
-// getCachedStorageNodes retrieves storage nodes from cache
-func (g *ArchDiagram) getCachedStorageNodes() []string {
-	if !g.cacheManager.Enabled {
-		return nil
-	}
-
-	return g.cacheManager.GetCachedNodes(&g.renderer.ServiceNodesCache, "storage_nodes")
-}
-
-// cacheStorageNodes caches storage nodes
-func (g *ArchDiagram) cacheStorageNodes(nodes []string) {
-	if !g.cacheManager.Enabled || len(nodes) == 0 {
-		return
-	}
-
-	g.cacheManager.CacheNodes(&g.renderer.ServiceNodesCache, "storage_nodes", nodes)
-}
-
-// getCachedNodes retrieves nodes from cache
-func (g *ArchDiagram) getCachedNodes(serviceType config.ServiceType) []string {
-	if !g.cacheManager.Enabled {
-		return nil
-	}
-
-	if cached, ok := g.serviceNodesCache.Load(serviceType); ok {
-		return cached.([]string)
-	}
-
-	key := g.cacheManager.GetCacheKey("service", string(serviceType))
-	if nodes := g.cacheManager.GetCachedNodes(&g.renderer.ServiceNodesCache, key); nodes != nil {
-		g.serviceNodesCache.Store(serviceType, nodes)
-		return nodes
-	}
-
-	return nil
-}
-
-// cacheServiceNodes caches service nodes
-func (g *ArchDiagram) cacheServiceNodes(serviceType config.ServiceType, nodes []string) {
-	if !g.cacheManager.Enabled || len(nodes) == 0 {
-		return
-	}
-
-	g.serviceNodesCache.Store(serviceType, nodes)
-
-	key := g.cacheManager.GetCacheKey("service", string(serviceType))
-	g.cacheManager.CacheNodes(&g.renderer.ServiceNodesCache, key, nodes)
-}
-
 // ================ Utility Methods ================
 
 // isNodeInList checks if a node is in a list using a map for O(1) lookup
@@ -741,78 +590,51 @@ func (g *ArchDiagram) isNodeInList(nodeName string, nodeList []string) bool {
 		return nodeList[0] == nodeName
 	}
 
-	if !g.cacheManager.Enabled {
-		return g.checkNodeInListDirect(nodeName, nodeList)
-	}
-
-	key := g.cacheManager.GetCacheKey("nodeinlist", nodeName, fmt.Sprintf("%d", len(nodeList)))
-	nodes := g.cacheManager.GetCachedNodes(&g.renderer.ServiceNodesCache, key)
-	if nodes != nil {
-		return len(nodes) > 0
-	}
-
-	exists := g.checkNodeInListDirect(nodeName, nodeList)
-	var value []string
-	if exists {
-		value = []string{"exists"}
-	} else {
-		value = []string{}
-	}
-	g.cacheManager.CacheNodes(&g.renderer.ServiceNodesCache, key, value)
-
-	return exists
+	return g.nodeCache.IsNodeInList(nodeName, nodeList)
 }
 
-// checkNodeInListDirect directly checks if a node is in list without using cache
-func (g *ArchDiagram) checkNodeInListDirect(nodeName string, nodeList []string) bool {
-	for _, n := range nodeList {
-		if n == nodeName {
-			return true
-		}
+// GetTotalNodeCount returns the total number of actual nodes
+func (g *ArchDiagram) GetTotalNodeCount() int {
+	g.mu.RLock()
+	cfg := g.cfg
+	g.mu.RUnlock()
+
+	if cfg == nil {
+		return 0
 	}
 
-	if len(nodeList) > 10 {
-		nodeSet := g.getNodeMap()
-		defer g.putNodeMap(nodeSet)
+	uniqueIPs := make(map[string]struct{}, initialMapCapacity)
 
-		for _, n := range nodeList {
-			nodeSet[n] = struct{}{}
-		}
-		_, exists := nodeSet[nodeName]
-		return exists
+	g.mu.RLock()
+	for _, node := range cfg.Nodes {
+		uniqueIPs[node.Host] = struct{}{}
 	}
 
-	return false
+	for _, nodeGroup := range cfg.NodeGroups {
+		ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
+		if err != nil {
+			continue
+		}
+
+		for _, ip := range ipList {
+			uniqueIPs[ip] = struct{}{}
+		}
+	}
+	g.mu.RUnlock()
+
+	return len(uniqueIPs)
 }
 
 // ================ Object Pool Methods ================
 
 // getNodeMap gets a map from the object pool
 func (g *ArchDiagram) getNodeMap() map[string]struct{} {
-	if v := g.renderer.NodeMapPool.Get(); v != nil {
-		m := v.(map[string]struct{})
-		for k := range m {
-			delete(m, k)
-		}
-		return m
-	}
 	return make(map[string]struct{}, initialMapCapacity)
 }
 
 // putNodeMap returns a map to the object pool
 func (g *ArchDiagram) putNodeMap(m map[string]struct{}) {
-	g.renderer.NodeMapPool.Put(m)
-}
-
-// getNodeResult gets a nodeResult from the object pool
-func getNodeResult() *nodeResult {
-	return nodeResultPool.Get().(*nodeResult)
-}
-
-// putNodeResult returns a nodeResult to the object pool
-func putNodeResult(nr *nodeResult) {
-	nr.index = 0
-	nr.nodeName = ""
-	nr.isStorage = false
-	nodeResultPool.Put(nr)
+	for k := range m {
+		delete(m, k)
+	}
 }

@@ -14,12 +14,23 @@
 
 package utils
 
+import (
+	"sort"
+)
+
 // Min returns the minimum of two integers
 func Min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
+}
+
+// SortBy sorts a slice using the provided less function
+func SortBy[T any](slice []T, less func(a, b T) bool) {
+	sort.Slice(slice, func(i, j int) bool {
+		return less(slice[i], slice[j])
+	})
 }
 
 // Max returns the maximum of two integers
