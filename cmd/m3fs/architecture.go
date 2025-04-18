@@ -24,6 +24,7 @@ import (
 
 	"github.com/open3fs/m3fs/pkg/cache"
 	"github.com/open3fs/m3fs/pkg/config"
+	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/network"
 	"github.com/open3fs/m3fs/pkg/render"
 	"github.com/open3fs/m3fs/pkg/utils"
@@ -43,10 +44,7 @@ const (
 	initialSliceCapacity         = 16
 )
 
-// Regex patterns
-var ()
-
-// Service display names - use a map for constant-time lookup
+// serviceDisplayNames is a map of service types to their display names
 var serviceDisplayNames = map[config.ServiceType]string{
 	config.ServiceStorage:    "storage",
 	config.ServiceFdb:        "foundationdb",
@@ -66,33 +64,19 @@ var serviceTypes = []config.ServiceType{
 	config.ServiceClickhouse,
 }
 
-// ConfigError represents a configuration-related error
-type ConfigError struct {
-	msg string
+// NewConfigError creates a configuration error
+func NewConfigError(msg string) error {
+	return errors.New(msg)
 }
 
-func (e *ConfigError) Error() string {
-	return e.msg
+// NewNetworkError creates a network error with operation context
+func NewNetworkError(operation string, err error) error {
+	return errors.Annotatef(err, "%s failed", operation)
 }
 
-// NetworkError represents a network-related error with operation context
-type NetworkError struct {
-	operation string
-	err       error
-}
-
-func (e *NetworkError) Error() string {
-	return fmt.Sprintf("%s failed: %v", e.operation, e.err)
-}
-
-// ServiceError represents a service-related error with service type context
-type ServiceError struct {
-	serviceType config.ServiceType
-	err         error
-}
-
-func (e *ServiceError) Error() string {
-	return fmt.Sprintf("service %s error: %v", e.serviceType, e.err)
+// NewServiceError creates a service error with service type context
+func NewServiceError(serviceType config.ServiceType, err error) error {
+	return errors.Annotatef(err, "service %s error", serviceType)
 }
 
 // ArchDiagram generates architecture diagrams for m3fs clusters
@@ -489,7 +473,7 @@ func (g *ArchDiagram) getNodesForService(nodes []string, nodeGroups []string) ([
 	g.mu.RUnlock()
 
 	if cfg == nil {
-		return nil, &ConfigError{msg: "configuration is nil"}
+		return nil, NewConfigError("configuration is nil")
 	}
 
 	serviceNodes := make([]string, 0, len(nodes)+len(nodeGroups)*4)
