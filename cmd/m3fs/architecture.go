@@ -105,9 +105,9 @@ type nodeResult struct {
 
 // CacheConfig defines cache configuration parameters
 type CacheConfig struct {
-	TTL time.Duration
+	TTL             time.Duration
 	CleanupInterval time.Duration
-	Enabled bool
+	Enabled         bool
 }
 
 // ================ Object Pools ================
@@ -220,6 +220,15 @@ func (g *ArchDiagram) GetTotalNodeCount() int {
 // GetNetworkSpeed implements render.NodeDataProvider
 func (g *ArchDiagram) GetNetworkSpeed() string {
 	return g.getNetworkSpeed()
+}
+
+// getNetworkSpeed returns the network speed
+func (g *ArchDiagram) getNetworkSpeed() string {
+	g.mu.RLock()
+	networkType := g.cfg.NetworkType
+	g.mu.RUnlock()
+
+	return network.GetNetworkSpeed(string(networkType))
 }
 
 // GetNetworkType implements render.NodeDataProvider
@@ -457,6 +466,46 @@ func (g *ArchDiagram) getTotalActualNodeCount() int {
 
 // ================ Service Methods ================
 
+// expandNodeGroup expands a node group into individual nodes
+func (g *ArchDiagram) expandNodeGroup(nodeGroup *config.NodeGroup) []string {
+	if !g.cacheManager.Enabled {
+		return g.expandNodeGroupDirect(nodeGroup)
+	}
+
+	key := g.cacheManager.GetCacheKey("nodegroup", nodeGroup.Name, nodeGroup.IPBegin, nodeGroup.IPEnd)
+	if nodes := g.cacheManager.GetCachedNodes(&g.renderer.NodeGroupCache, key); nodes != nil {
+		return nodes
+	}
+
+	nodes := g.expandNodeGroupDirect(nodeGroup)
+	g.cacheManager.CacheNodes(&g.renderer.NodeGroupCache, key, nodes)
+
+	return nodes
+}
+
+// expandNodeGroupDirect directly expands a node group without caching
+func (g *ArchDiagram) expandNodeGroupDirect(nodeGroup *config.NodeGroup) []string {
+	if len(nodeGroup.Nodes) > 0 {
+		ipList := make([]string, 0, len(nodeGroup.Nodes))
+		for _, node := range nodeGroup.Nodes {
+			if node.Host != "" && utils.IsIPAddress(node.Host) {
+				ipList = append(ipList, node.Host)
+			}
+		}
+		if len(ipList) > 0 {
+			return ipList
+		}
+	}
+
+	ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
+	if err != nil {
+		logrus.Errorf("Failed to expand node group %s: %v", nodeGroup.Name, err)
+		return []string{}
+	}
+
+	return ipList
+}
+
 // getServiceNodes returns nodes for a specific service type with caching
 func (g *ArchDiagram) getServiceNodes(serviceType config.ServiceType) []string {
 	g.mu.RLock()
@@ -681,48 +730,6 @@ func (g *ArchDiagram) cacheServiceNodes(serviceType config.ServiceType, nodes []
 	g.cacheManager.CacheNodes(&g.renderer.ServiceNodesCache, key, nodes)
 }
 
-// ================ Node Group Methods ================
-
-// expandNodeGroup expands a node group into individual nodes
-func (g *ArchDiagram) expandNodeGroup(nodeGroup *config.NodeGroup) []string {
-	if !g.cacheManager.Enabled {
-		return g.expandNodeGroupDirect(nodeGroup)
-	}
-
-	key := g.cacheManager.GetCacheKey("nodegroup", nodeGroup.Name, nodeGroup.IPBegin, nodeGroup.IPEnd)
-	if nodes := g.cacheManager.GetCachedNodes(&g.renderer.NodeGroupCache, key); nodes != nil {
-		return nodes
-	}
-
-	nodes := g.expandNodeGroupDirect(nodeGroup)
-	g.cacheManager.CacheNodes(&g.renderer.NodeGroupCache, key, nodes)
-
-	return nodes
-}
-
-// expandNodeGroupDirect directly expands a node group without caching
-func (g *ArchDiagram) expandNodeGroupDirect(nodeGroup *config.NodeGroup) []string {
-	if len(nodeGroup.Nodes) > 0 {
-		ipList := make([]string, 0, len(nodeGroup.Nodes))
-		for _, node := range nodeGroup.Nodes {
-			if node.Host != "" && utils.IsIPAddress(node.Host) {
-				ipList = append(ipList, node.Host)
-			}
-		}
-		if len(ipList) > 0 {
-			return ipList
-		}
-	}
-
-	ipList, err := utils.GenerateIPRange(nodeGroup.IPBegin, nodeGroup.IPEnd)
-	if err != nil {
-		logrus.Errorf("Failed to expand node group %s: %v", nodeGroup.Name, err)
-		return []string{}
-	}
-
-	return ipList
-}
-
 // ================ Utility Methods ================
 
 // isNodeInList checks if a node is in a list using a map for O(1) lookup
@@ -776,17 +783,6 @@ func (g *ArchDiagram) checkNodeInListDirect(nodeName string, nodeList []string) 
 	}
 
 	return false
-}
-
-// ================ Network Methods ================
-
-// getNetworkSpeed returns the network speed
-func (g *ArchDiagram) getNetworkSpeed() string {
-	g.mu.RLock()
-	networkType := g.cfg.NetworkType
-	g.mu.RUnlock()
-
-	return network.GetNetworkSpeed(string(networkType))
 }
 
 // ================ Object Pool Methods ================

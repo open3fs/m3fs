@@ -17,6 +17,7 @@ package render
 import (
 	"strings"
 
+	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/utils"
 )
 
