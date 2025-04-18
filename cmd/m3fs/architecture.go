@@ -105,11 +105,8 @@ type nodeResult struct {
 
 // CacheConfig defines cache configuration parameters
 type CacheConfig struct {
-	// Time-to-live for cache entries
 	TTL time.Duration
-	// Interval for cache cleanup operations
 	CleanupInterval time.Duration
-	// Whether caching is enabled
 	Enabled bool
 }
 

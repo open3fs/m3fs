@@ -62,10 +62,10 @@ type DiagramRenderer struct {
 	RowSize       int
 	NodeCellWidth int
 
-	// Service configurations
 	ServiceConfigs []ServiceConfig
 
-	// Reusable buffers and caches
+	lastClientNodesCount int
+
 	stringBuilderPool sync.Pool
 	NodeMapPool       sync.Pool
 	NodeSlicePool     sync.Pool
@@ -171,20 +171,17 @@ func (r *DiagramRenderer) RenderNodeBox(sb *strings.Builder, nodeName string, se
 	const cellContent = "                "
 	const boxSpacing = " "
 
-	// Render top border
 	topBorder := "+" + strings.Repeat("-", len(cellContent)) + "+"
 	sb.WriteString(topBorder)
 	sb.WriteString(boxSpacing)
 	sb.WriteByte('\n')
 
-	// Render node name
 	nodeNameLine := "|" + fmt.Sprintf("%s%-16s%s", r.GetColorCode(ColorCyan),
 		nodeName, r.GetColorReset()) + "|"
 	sb.WriteString(nodeNameLine)
 	sb.WriteString(boxSpacing)
 	sb.WriteByte('\n')
 
-	// Render services
 	for _, service := range services {
 		serviceLine := "|" + fmt.Sprintf("  %s%s%s%s",
 			r.GetColorCode(ColorGreen),
@@ -230,6 +227,8 @@ func (r *DiagramRenderer) PutStringBuilder(sb *strings.Builder) {
 // getServiceColor returns the appropriate color for a service based on its name
 func (r *DiagramRenderer) getServiceColor(service string) string {
 	switch {
+	case strings.Contains(service, "/mnt/") || strings.Contains(service, "/mount/"):
+		return ColorPink
 	case strings.Contains(service, "storage"):
 		return ColorYellow
 	case strings.Contains(service, "fdb"):

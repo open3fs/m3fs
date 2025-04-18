@@ -17,7 +17,7 @@ package render
 import (
 	"strings"
 
-	"github.com/open3fs/m3fs/pkg/config"
+	"github.com/open3fs/m3fs/pkg/utils"
 )
 
 // ArchDiagramAdapter is an adapter that connects a NodeDataProvider with an ArchDiagramRenderer
@@ -39,23 +39,18 @@ func (a *ArchDiagramAdapter) Generate() string {
 	sb := &strings.Builder{}
 	sb.Grow(1024)
 
-	// Generate each section of the diagram
 	clientNodes := a.dataProvider.GetClientNodes()
 	renderableNodes := a.dataProvider.GetRenderableNodes()
 
-	// Render header
-	a.renderer.RenderHeader(sb)
+	nodeCount := utils.Min(len(clientNodes), a.renderer.Base.RowSize)
+	a.renderer.RenderHeader(sb, nodeCount)
 
-	// Render client section
 	a.renderer.RenderClientSection(sb, clientNodes)
 
-	// Render network section
 	a.renderer.RenderNetworkSection(sb, a.dataProvider.GetNetworkType(), a.dataProvider.GetNetworkSpeed())
 
-	// Render storage section
 	a.renderer.RenderStorageSection(sb, renderableNodes, a.dataProvider.GetNodeServices)
 
-	// Render summary section
 	a.renderer.RenderSummarySection(sb, a.getServiceNodeCountsFunc(), a.dataProvider.GetTotalNodeCount())
 
 	return sb.String()

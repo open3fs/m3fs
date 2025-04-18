@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/open3fs/m3fs/pkg/config"
+	"github.com/open3fs/m3fs/pkg/utils"
 )
 
 // NodeServicesFunc is a function type that returns services for a node
@@ -39,29 +40,55 @@ func NewArchDiagramRenderer(baseRenderer *DiagramRenderer) *ArchDiagramRenderer 
 	}
 }
 
-// CalculateArrowCount calculates the number of arrows to display
-func (r *ArchDiagramRenderer) CalculateArrowCount(nodeCount int) int {
-	if nodeCount <= 0 {
+// CalculateArrowCount calculates the number of arrows to display based on network width
+func (r *ArchDiagramRenderer) CalculateArrowCount(nodeRowWidth int) int {
+	const arrowWidth = 7 // "   ↓   "
+
+	innerWidth := nodeRowWidth - 2
+	arrowCount := innerWidth / arrowWidth
+
+	if arrowCount <= 0 {
 		return 1
-	} else if nodeCount > 15 {
+	} else if arrowCount > 15 {
 		return 15
 	}
-	return nodeCount
+	return arrowCount
 }
 
-// RenderArrows renders arrows for the specified count
-func (r *ArchDiagramRenderer) RenderArrows(sb *strings.Builder, count int) {
-	if count <= 0 {
-		return
+// RenderArrows renders arrows that align with the network frame
+// maxArrows parameter limits the maximum number of arrows to the node count
+func (r *ArchDiagramRenderer) RenderArrows(sb *strings.Builder, networkWidth int, maxArrows int) {
+	const arrowStr = "   ↓   " // Arrow string with equal spaces on both sides
+
+	arrowCount := r.CalculateArrowCount(networkWidth)
+
+	if maxArrows > 0 && arrowCount > maxArrows {
+		arrowCount = maxArrows
 	}
 
-	const arrowStr = "  ↓ "
-	totalLen := len(arrowStr) * count
+	totalArrowWidth := len(arrowStr) * arrowCount
+	innerWidth := networkWidth - 2
+	leftPadding := (innerWidth - totalArrowWidth) / 2
+
+	rightShift := arrowCount
+
+	if arrowCount <= 4 {
+	} else if arrowCount <= 6 {
+		rightShift++
+	} else {
+		rightShift += 2
+	}
+	leftPadding += rightShift
+
+	if leftPadding < 0 {
+		leftPadding = 0
+	}
 
 	arrowBuilder := r.Base.GetStringBuilder()
-	arrowBuilder.Grow(totalLen)
+	arrowBuilder.Grow(networkWidth)
+	arrowBuilder.WriteString(strings.Repeat(" ", leftPadding))
 
-	for i := 0; i < count; i++ {
+	for i := 0; i < arrowCount; i++ {
 		arrowBuilder.WriteString(arrowStr)
 	}
 
@@ -71,26 +98,76 @@ func (r *ArchDiagramRenderer) RenderArrows(sb *strings.Builder, count int) {
 
 // RenderNetworkSection renders the network section
 func (r *ArchDiagramRenderer) RenderNetworkSection(sb *strings.Builder, networkType string, networkSpeed string) {
-	networkText := fmt.Sprintf(" %s Network (%s) ", networkType, networkSpeed)
-	rightPadding := r.Base.Width - 2 - len(networkText)
+	clientNodes := r.Base.lastClientNodesCount
 
-	sb.WriteString("╔" + strings.Repeat("═", r.Base.Width-2) + "╗\n")
-	sb.WriteString("║")
+	// Omit "Network" word when only one client to prevent text overflow
+	networkText := ""
+	if clientNodes == 1 {
+		networkText = fmt.Sprintf("%s (%s)", networkType, networkSpeed)
+	} else {
+		networkText = fmt.Sprintf("%s Network (%s)", networkType, networkSpeed)
+	}
+
+	if clientNodes <= 0 {
+		clientNodes = 3 // Default minimum width
+	}
+
+	actualNodeCount := clientNodes
+	if actualNodeCount > r.Base.RowSize {
+		actualNodeCount = r.Base.RowSize
+	}
+
+	nodeRowWidth := (r.Base.NodeCellWidth + 3) * actualNodeCount
+	totalInnerWidth := nodeRowWidth - 2
+	leftPadding := (totalInnerWidth - len(networkText)) / 2
+	rightPadding := totalInnerWidth - len(networkText) - leftPadding
+
+	if leftPadding < 0 {
+		leftPadding = 0
+	}
+	if rightPadding < 0 {
+		rightPadding = 0
+	}
+
+	sb.WriteString("╔" + strings.Repeat("═", nodeRowWidth-2) + "╗\n")
+	sb.WriteString("║" + strings.Repeat(" ", leftPadding))
 	r.Base.RenderWithColor(sb, networkText, ColorBlue)
 	sb.WriteString(strings.Repeat(" ", rightPadding) + "║\n")
-	sb.WriteString("╚" + strings.Repeat("═", r.Base.Width-2) + "╝\n")
+	sb.WriteString("╚" + strings.Repeat("═", nodeRowWidth-2) + "╝\n")
 }
 
-// RenderHeader renders the diagram header by delegating to the base renderer
-func (r *ArchDiagramRenderer) RenderHeader(sb *strings.Builder) {
-	r.Base.RenderHeader(sb)
+// RenderCustomWidthDivider renders a divider with the specified width
+func (r *ArchDiagramRenderer) RenderCustomWidthDivider(sb *strings.Builder, char string, nodeCount int) {
+	width := (r.Base.NodeCellWidth + 3) * nodeCount
+	sb.WriteString(strings.Repeat(char, width))
+	sb.WriteByte('\n')
+}
+
+// RenderHeader renders the diagram header using a width based on the first row of nodes
+func (r *ArchDiagramRenderer) RenderHeader(sb *strings.Builder, nodeCount int) {
+	replicationFactor := r.Base.cfg.Services.Storage.ReplicationFactor
+	titleText := fmt.Sprintf("Cluster: %s  replicationFactor: %d", r.Base.cfg.Name, replicationFactor)
+
+	r.Base.RenderLine(sb, titleText, "")
+	r.RenderCustomWidthDivider(sb, "=", nodeCount)
+	sb.WriteByte('\n')
+}
+
+// RenderCustomSectionHeader renders a section header with custom width
+func (r *ArchDiagramRenderer) RenderCustomSectionHeader(sb *strings.Builder, title string, nodeCount int) {
+	r.Base.RenderWithColor(sb, title, ColorCyan)
+	sb.WriteByte('\n')
+	r.RenderCustomWidthDivider(sb, "-", nodeCount)
 }
 
 // RenderClientSection renders the client nodes section
 func (r *ArchDiagramRenderer) RenderClientSection(sb *strings.Builder, clientNodes []string) {
-	r.Base.RenderSectionHeader(sb, "CLIENT NODES:")
+	nodeCount := utils.Min(len(clientNodes), r.Base.RowSize)
+	r.RenderCustomSectionHeader(sb, "CLIENT NODES:", nodeCount)
 
 	clientCount := len(clientNodes)
+	r.Base.lastClientNodesCount = clientCount
+
 	for i := 0; i < clientCount; i += r.Base.RowSize {
 		end := i + r.Base.RowSize
 		if end > clientCount {
@@ -100,7 +177,8 @@ func (r *ArchDiagramRenderer) RenderClientSection(sb *strings.Builder, clientNod
 	}
 
 	sb.WriteByte('\n')
-	r.RenderArrows(sb, r.CalculateArrowCount(len(clientNodes)))
+	nodeRowWidth := (r.Base.NodeCellWidth + 3) * nodeCount
+	r.RenderArrows(sb, nodeRowWidth, nodeCount)
 	sb.WriteByte('\n')
 }
 
@@ -110,8 +188,20 @@ func (r *ArchDiagramRenderer) RenderClientNodes(sb *strings.Builder, clientNodes
 		return
 	}
 
+	hostMountpoint := ""
+	if r.Base.cfg != nil && r.Base.cfg.Services.Client.HostMountpoint != "" {
+		hostMountpoint = r.Base.cfg.Services.Client.HostMountpoint
+	} else {
+		hostMountpoint = "/mnt/3fs"
+	}
+
+	mountpointStr := fmt.Sprintf("[%s]", hostMountpoint)
+
 	r.Base.RenderNodesRow(sb, clientNodes, func(node string) []string {
-		return []string{"[hf3fs_fuse]"}
+		return []string{
+			"[hf3fs_fuse]",
+			mountpointStr,
+		}
 	}, false)
 }
 
@@ -121,12 +211,20 @@ func (r *ArchDiagramRenderer) RenderStorageSection(
 	storageNodes []string,
 	nodeServicesFunc NodeServicesFunc,
 ) {
-	r.RenderArrows(sb, r.CalculateArrowCount(len(storageNodes)))
-	sb.WriteString("\n\n")
-
-	r.Base.RenderSectionHeader(sb, "STORAGE NODES:")
-
 	storageCount := len(storageNodes)
+	firstRowCount := storageCount
+	if firstRowCount > r.Base.RowSize {
+		firstRowCount = r.Base.RowSize
+	}
+
+	storageNodeCount := utils.Min(storageCount, r.Base.RowSize)
+	nodeRowWidth := (r.Base.NodeCellWidth + 3) * utils.Min(r.Base.lastClientNodesCount, r.Base.RowSize)
+
+	r.RenderArrows(sb, nodeRowWidth, storageNodeCount)
+
+	sb.WriteString("\n\n")
+	r.RenderCustomSectionHeader(sb, "STORAGE NODES:", firstRowCount)
+
 	for i := 0; i < storageCount; i += r.Base.RowSize {
 		end := i + r.Base.RowSize
 		if end > storageCount {
@@ -168,7 +266,6 @@ func (r *ArchDiagramRenderer) RenderSummaryStatistics(
 ) {
 	serviceNodeCounts := serviceCountsFunc()
 
-	// First row
 	firstRow := []struct {
 		name  string
 		count int
@@ -189,7 +286,6 @@ func (r *ArchDiagramRenderer) RenderSummaryStatistics(
 	}
 	sb.WriteByte('\n')
 
-	// Second row
 	secondRow := []struct {
 		name  string
 		count int
