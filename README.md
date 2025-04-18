@@ -36,6 +36,30 @@ cd m3fs
 curl -sfL https://artifactory.open3fs.com/m3fs/getm3fs | sh
 ```
 
+### View Cluster Architecture
+
+You can generate and view the architecture diagram of your cluster configuration with the `architecture` subcommand:
+
+```
+./m3fs cluster architecture -c cluster.yml
+```
+
+This will display an ASCII art representation of your cluster architecture in the terminal, showing:
+- All client nodes and their services
+- Network connection type and speed
+- All storage nodes and their services (storage, mgmtd, meta, foundationdb, clickhouse, monitor)
+
+For environments that don't support colored output (such as certain terminals, CI/CD pipelines, or when redirecting output to a file), use the `--no-color` option:
+
+```
+./m3fs cluster architecture -c cluster.yml --no-color
+```
+
+This is useful for:
+- Visualizing your cluster configuration before deployment
+- Documenting your cluster layout
+- Troubleshooting node distribution issues
+
 ### Install From Cloud Storage
 
 > If you can not visit  Docker Hub directly.
