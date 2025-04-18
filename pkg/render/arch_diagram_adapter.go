@@ -41,7 +41,7 @@ func (a *ArchDiagramAdapter) Generate() string {
 
 	// Generate each section of the diagram
 	clientNodes := a.dataProvider.GetClientNodes()
-	storageNodes := a.dataProvider.GetStorageNodes()
+	renderableNodes := a.dataProvider.GetRenderableNodes()
 
 	// Render header
 	a.renderer.RenderHeader(sb)
@@ -53,7 +53,7 @@ func (a *ArchDiagramAdapter) Generate() string {
 	a.renderer.RenderNetworkSection(sb, a.dataProvider.GetNetworkType(), a.dataProvider.GetNetworkSpeed())
 
 	// Render storage section
-	a.renderer.RenderStorageSection(sb, storageNodes, a.dataProvider.GetNodeServices)
+	a.renderer.RenderStorageSection(sb, renderableNodes, a.dataProvider.GetNodeServices)
 
 	// Render summary section
 	a.renderer.RenderSummarySection(sb, a.getServiceNodeCountsFunc(), a.dataProvider.GetTotalNodeCount())

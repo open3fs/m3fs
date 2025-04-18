@@ -31,8 +31,8 @@ type NodeDataProvider interface {
 	// GetClientNodes returns client nodes
 	GetClientNodes() []string
 
-	// GetStorageNodes returns storage nodes
-	GetStorageNodes() []string
+	// GetRenderableNodes returns all nodes that should be rendered in the diagram
+	GetRenderableNodes() []string
 
 	// GetNodeServices returns the services running on a node
 	GetNodeServices(nodeName string) []string

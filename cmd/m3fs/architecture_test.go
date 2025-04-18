@@ -194,7 +194,7 @@ func TestNodeListFunctions(t *testing.T) {
 		}
 	})
 
-	t.Run("GetStorageNodes", func(t *testing.T) {
+	t.Run("GetRenderableNodes", func(t *testing.T) {
 		testCases := []struct {
 			name           string
 			cfg            *config.Config
@@ -220,7 +220,7 @@ func TestNodeListFunctions(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				generator := NewArchDiagram(tc.cfg)
-				storageNodes := generator.GetStorageNodes()
+				storageNodes := generator.GetRenderableNodes()
 
 				for _, expectedNode := range tc.expectedNodes {
 					found := false
