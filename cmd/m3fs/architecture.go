@@ -169,6 +169,17 @@ func (g *ArchDiagram) GetServiceNodeCounts() map[config.ServiceType]int {
 	return g.countServiceNodes(serviceNodesMap)
 }
 
+// GetNetworkType implements render.NodeDataProvider
+func (g *ArchDiagram) GetNetworkType() string {
+	if g.cfg == nil {
+		return "ethernet"
+	}
+	g.mu.RLock()
+	networkType := g.cfg.NetworkType
+	g.mu.RUnlock()
+	return string(networkType)
+}
+
 // GetNetworkSpeed implements render.NodeDataProvider
 func (g *ArchDiagram) GetNetworkSpeed() string {
 	return g.getNetworkSpeed()
@@ -183,15 +194,39 @@ func (g *ArchDiagram) getNetworkSpeed() string {
 	return network.GetNetworkSpeed(string(networkType))
 }
 
-// GetNetworkType implements render.NodeDataProvider
-func (g *ArchDiagram) GetNetworkType() string {
-	if g.cfg == nil {
-		return "ethernet"
+// ================ Node Processing Methods ================
+
+// prepareServiceNodesMap prepares a map of service nodes
+func (g *ArchDiagram) prepareServiceNodesMap(clientNodes []string) map[config.ServiceType][]string {
+	g.mu.RLock()
+	serviceConfigs := g.renderer.ServiceConfigs
+	g.mu.RUnlock()
+
+	serviceNodesMap := make(map[config.ServiceType][]string, len(serviceConfigs)+1)
+
+	for _, cfg := range serviceConfigs {
+		if cfg.Type == config.ServiceMeta {
+			serviceNodesMap[cfg.Type] = g.getServiceNodes(config.ServiceMeta)
+		} else {
+			serviceNodesMap[cfg.Type] = g.getServiceNodes(cfg.Type)
+		}
 	}
-	return string(g.cfg.NetworkType)
+
+	serviceNodesMap[config.ServiceClient] = clientNodes
+
+	return serviceNodesMap
 }
 
-// ================ Node Processing Methods ================
+// countServiceNodes counts the number of nodes for each service type
+func (g *ArchDiagram) countServiceNodes(serviceNodesMap map[config.ServiceType][]string) map[config.ServiceType]int {
+	counts := make(map[config.ServiceType]int, len(serviceNodesMap))
+
+	for svcType, nodes := range serviceNodesMap {
+		counts[svcType] = len(nodes)
+	}
+
+	return counts
+}
 
 // GetRenderableNodes returns all service nodes that need to be rendered in the architecture diagram
 // Including nodes with storage, meta, mgmtd, etc. services, but excluding client-only nodes
@@ -501,49 +536,10 @@ func (g *ArchDiagram) getNodeServices(node string) []string {
 	return services
 }
 
-// prepareServiceNodesMap prepares a map of service nodes
-func (g *ArchDiagram) prepareServiceNodesMap(clientNodes []string) map[config.ServiceType][]string {
-	g.mu.RLock()
-	serviceConfigs := g.renderer.ServiceConfigs
-	g.mu.RUnlock()
-
-	serviceNodesMap := make(map[config.ServiceType][]string, len(serviceConfigs)+1)
-
-	for _, cfg := range serviceConfigs {
-		if cfg.Type == config.ServiceMeta {
-			serviceNodesMap[cfg.Type] = g.getServiceNodes(config.ServiceMeta)
-		} else {
-			serviceNodesMap[cfg.Type] = g.getServiceNodes(cfg.Type)
-		}
-	}
-
-	serviceNodesMap[config.ServiceClient] = clientNodes
-
-	return serviceNodesMap
-}
-
-// countServiceNodes counts the number of nodes for each service type
-func (g *ArchDiagram) countServiceNodes(serviceNodesMap map[config.ServiceType][]string) map[config.ServiceType]int {
-	counts := make(map[config.ServiceType]int, len(serviceNodesMap))
-
-	for svcType, nodes := range serviceNodesMap {
-		counts[svcType] = len(nodes)
-	}
-
-	return counts
-}
-
 // ================ Utility Methods ================
 
 // isNodeInList checks if a node is in a list
 func (g *ArchDiagram) isNodeInList(nodeName string, nodeList []string) bool {
-	if len(nodeList) == 0 {
-		return false
-	}
-	if len(nodeList) == 1 {
-		return nodeList[0] == nodeName
-	}
-
 	for _, node := range nodeList {
 		if node == nodeName {
 			return true
