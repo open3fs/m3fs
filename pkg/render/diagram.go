@@ -17,7 +17,6 @@ package render
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/open3fs/m3fs/pkg/config"
 )
@@ -54,7 +53,7 @@ type ServiceConfig struct {
 	Color string
 }
 
-// DiagramRenderer handles the rendering of architecture diagrams
+// DiagramRenderer is responsible for rendering architecture diagrams
 type DiagramRenderer struct {
 	cfg           *config.Config
 	ColorEnabled  bool
@@ -65,18 +64,9 @@ type DiagramRenderer struct {
 	ServiceConfigs []ServiceConfig
 
 	lastClientNodesCount int
-
-	stringBuilderPool sync.Pool
-	NodeMapPool       sync.Pool
-	NodeSlicePool     sync.Pool
-
-	// Caches
-	ServiceNodesCache sync.Map
-	MetaNodesCache    sync.Map
-	NodeGroupCache    sync.Map
 }
 
-// NewDiagramRenderer creates a new DiagramRenderer
+// NewDiagramRenderer creates a new diagram renderer
 func NewDiagramRenderer(cfg *config.Config) *DiagramRenderer {
 	return &DiagramRenderer{
 		cfg:            cfg,
@@ -85,23 +75,6 @@ func NewDiagramRenderer(cfg *config.Config) *DiagramRenderer {
 		RowSize:        DefaultRowSize,
 		NodeCellWidth:  DefaultNodeCellWidth,
 		ServiceConfigs: getDefaultServiceConfigs(),
-		stringBuilderPool: sync.Pool{
-			New: func() any {
-				sb := &strings.Builder{}
-				sb.Grow(InitialStringBuilderCapacity)
-				return sb
-			},
-		},
-		NodeMapPool: sync.Pool{
-			New: func() any {
-				return make(map[string]struct{}, InitialMapCapacity)
-			},
-		},
-		NodeSlicePool: sync.Pool{
-			New: func() any {
-				return make([]string, 0, InitialMapCapacity)
-			},
-		},
 	}
 }
 
@@ -213,15 +186,17 @@ func (r *DiagramRenderer) GetColorReset() string {
 	return r.GetColorCode(ColorReset)
 }
 
-// GetStringBuilder gets a strings.Builder from the pool
+// GetStringBuilder creates a new strings.Builder
 func (r *DiagramRenderer) GetStringBuilder() *strings.Builder {
-	return r.stringBuilderPool.Get().(*strings.Builder)
+	sb := &strings.Builder{}
+	sb.Grow(InitialStringBuilderCapacity)
+	return sb
 }
 
-// PutStringBuilder returns a strings.Builder to the pool
+// PutStringBuilder resets the strings.Builder (no-op for GC)
 func (r *DiagramRenderer) PutStringBuilder(sb *strings.Builder) {
+	// 简单实现，只需重置字符串构建器，让垃圾回收处理内存
 	sb.Reset()
-	r.stringBuilderPool.Put(sb)
 }
 
 // getServiceColor returns the appropriate color for a service based on its name

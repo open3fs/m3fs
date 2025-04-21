@@ -43,6 +43,13 @@ const (
 	initialSliceCapacity         = 16
 )
 
+// NodeResult represents the result of node processing
+type NodeResult struct {
+	Index     int
+	NodeName  string
+	IsStorage bool
+}
+
 // serviceDisplayNames is a map of service types to their display names
 var serviceDisplayNames = map[config.ServiceType]string{
 	config.ServiceStorage:    "storage",
@@ -230,7 +237,7 @@ func (g *ArchDiagram) GetRenderableNodes() []string {
 }
 
 // processNodesInParallel processes nodes concurrently, returning the results
-func (g *ArchDiagram) processNodesInParallel(allNodes []string) []*utils.NodeResult {
+func (g *ArchDiagram) processNodesInParallel(allNodes []string) []*NodeResult {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -241,7 +248,7 @@ func (g *ArchDiagram) processNodesInParallel(allNodes []string) []*utils.NodeRes
 
 	workerCount := min(totalNodes, maxWorkers)
 	jobCh := make(chan int, totalNodes)
-	resultCh := make(chan *utils.NodeResult, totalNodes)
+	resultCh := make(chan *NodeResult, totalNodes)
 	var wg sync.WaitGroup
 
 	var activeWorkers int32
@@ -263,10 +270,12 @@ func (g *ArchDiagram) processNodesInParallel(allNodes []string) []*utils.NodeRes
 					nodeName := allNodes[idx]
 					isStorage := g.checkNodeInService(nodeName, config.ServiceStorage)
 
-					nr := utils.GetNodeResult()
-					nr.Index = idx
-					nr.NodeName = nodeName
-					nr.IsStorage = isStorage
+					// 直接创建结构体而不是从对象池获取
+					nr := &NodeResult{
+						Index:     idx,
+						NodeName:  nodeName,
+						IsStorage: isStorage,
+					}
 					resultCh <- nr
 				case <-ctx.Done():
 					return
@@ -292,7 +301,7 @@ collectResults:
 		close(resultCh)
 	}()
 
-	results := make([]*utils.NodeResult, 0, totalNodes)
+	results := make([]*NodeResult, 0, totalNodes)
 	for nr := range resultCh {
 		results = append(results, nr)
 	}
@@ -313,12 +322,12 @@ func (g *ArchDiagram) checkNodeInService(
 }
 
 // extractRenderableNodes extracts all nodes that should be rendered from the results
-func (g *ArchDiagram) extractRenderableNodes(results []*utils.NodeResult) []string {
+func (g *ArchDiagram) extractRenderableNodes(results []*NodeResult) []string {
 	renderableNodes := make([]string, 0, len(results))
 
 	for _, r := range results {
 		renderableNodes = append(renderableNodes, r.NodeName)
-		utils.PutNodeResult(r)
+		// 不需要返回对象到对象池，让垃圾回收处理
 	}
 
 	return renderableNodes
