@@ -17,6 +17,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
+	"net"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -246,7 +248,7 @@ func (g *ArchDiagram) processNodesInParallel(allNodes []string) []*NodeResult {
 		return nil
 	}
 
-	workerCount := min(totalNodes, maxWorkers)
+	workerCount := int(math.Min(float64(totalNodes), float64(maxWorkers)))
 	jobCh := make(chan int, totalNodes)
 	resultCh := make(chan *NodeResult, totalNodes)
 	var wg sync.WaitGroup
@@ -341,7 +343,7 @@ func (g *ArchDiagram) buildOrderedNodeList() []string {
 	allNodes := make([]string, 0, nodesLen)
 
 	for _, node := range g.cfg.Nodes {
-		if node.Host != "" && utils.IsIPAddress(node.Host) {
+		if node.Host != "" && net.ParseIP(node.Host) != nil {
 			if _, exists := nodeMap[node.Host]; !exists {
 				nodeMap[node.Host] = struct{}{}
 				allNodes = append(allNodes, node.Host)
@@ -375,7 +377,7 @@ func (g *ArchDiagram) expandNodeGroup(nodeGroup *config.NodeGroup) []string {
 	if len(nodeGroup.Nodes) > 0 {
 		ipList := make([]string, 0, len(nodeGroup.Nodes))
 		for _, node := range nodeGroup.Nodes {
-			if node.Host != "" && utils.IsIPAddress(node.Host) {
+			if node.Host != "" && net.ParseIP(node.Host) != nil {
 				ipList = append(ipList, node.Host)
 			}
 		}
@@ -451,7 +453,7 @@ func (g *ArchDiagram) getNodesForService(nodes []string, nodeGroups []string) ([
 	for _, nodeName := range nodes {
 		for _, node := range cfg.Nodes {
 			if node.Name == nodeName {
-				if node.Host != "" && utils.IsIPAddress(node.Host) {
+				if node.Host != "" && net.ParseIP(node.Host) != nil {
 					if _, exists := nodeMap[node.Host]; !exists {
 						nodeMap[node.Host] = struct{}{}
 						serviceNodes = append(serviceNodes, node.Host)

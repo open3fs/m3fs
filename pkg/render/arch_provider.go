@@ -15,10 +15,10 @@
 package render
 
 import (
+	"math"
 	"strings"
 
 	"github.com/open3fs/m3fs/pkg/config"
-	"github.com/open3fs/m3fs/pkg/utils"
 )
 
 // ================ Interfaces ================
@@ -164,7 +164,7 @@ func (a *ArchDiagramAdapter) Generate() string {
 	clientNodes := a.dataProvider.GetClientNodes()
 	renderableNodes := a.dataProvider.GetRenderableNodes()
 
-	nodeCount := utils.Min(len(clientNodes), a.renderer.Base.RowSize)
+	nodeCount := int(math.Min(float64(len(clientNodes)), float64(a.renderer.Base.RowSize)))
 	a.renderer.RenderHeader(sb, nodeCount)
 
 	a.renderer.RenderClientSection(sb, clientNodes)

@@ -16,10 +16,10 @@ package render
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/open3fs/m3fs/pkg/config"
-	"github.com/open3fs/m3fs/pkg/utils"
 )
 
 // NodeServicesFunc is a function type that returns services for a node
@@ -162,7 +162,7 @@ func (r *ArchDiagramRenderer) RenderCustomSectionHeader(sb *strings.Builder, tit
 
 // RenderClientSection renders the client nodes section
 func (r *ArchDiagramRenderer) RenderClientSection(sb *strings.Builder, clientNodes []string) {
-	nodeCount := utils.Min(len(clientNodes), r.Base.RowSize)
+	nodeCount := int(math.Min(float64(len(clientNodes)), float64(r.Base.RowSize)))
 	r.RenderCustomSectionHeader(sb, "CLIENT NODES:", nodeCount)
 
 	clientCount := len(clientNodes)
@@ -217,8 +217,9 @@ func (r *ArchDiagramRenderer) RenderStorageSection(
 		firstRowCount = r.Base.RowSize
 	}
 
-	storageNodeCount := utils.Min(storageCount, r.Base.RowSize)
-	nodeRowWidth := (r.Base.NodeCellWidth + 3) * utils.Min(r.Base.lastClientNodesCount, r.Base.RowSize)
+	storageNodeCount := int(math.Min(float64(storageCount), float64(r.Base.RowSize)))
+	maxClientNodes := int(math.Min(float64(r.Base.lastClientNodesCount), float64(r.Base.RowSize)))
+	nodeRowWidth := (r.Base.NodeCellWidth + 3) * maxClientNodes
 
 	r.RenderArrows(sb, nodeRowWidth, storageNodeCount)
 

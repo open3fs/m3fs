@@ -16,18 +16,9 @@ package utils
 
 import (
 	"net"
-	"regexp"
 
 	"github.com/open3fs/m3fs/pkg/errors"
 )
-
-// IPPattern is a compiled regex for IP validation - only compile once
-var IPPattern = regexp.MustCompile(`^\d+\.\d+\.\d+\.\d+$`)
-
-// IsIPAddress checks if a string is a valid IPv4 address
-func IsIPAddress(s string) bool {
-	return IPPattern.MatchString(s)
-}
 
 // GetLocalIPs returns all local IP addresses.
 func GetLocalIPs() ([]*net.IP, error) {
