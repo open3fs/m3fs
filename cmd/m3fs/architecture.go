@@ -27,7 +27,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// ================ Type Definitions and Constants ================
+// ===== Constants and Type Definitions =====
 
 // NodeResult represents the result of node processing
 type NodeResult struct {
@@ -56,7 +56,7 @@ var serviceTypes = []config.ServiceType{
 	config.ServiceClickhouse,
 }
 
-// NewConfigError creates a configuration error
+// NewConfigError creates a configuration error with the given message
 func NewConfigError(msg string) error {
 	return errors.New(msg)
 }
@@ -81,9 +81,7 @@ type ArchDiagram struct {
 	mu sync.RWMutex
 }
 
-//
-// Core functionality
-//
+// ===== Constructors and Core Functions =====
 
 // NewArchDiagram creates a new ArchDiagram with default configuration
 func NewArchDiagram(cfg *config.Config) *ArchDiagram {
@@ -119,6 +117,17 @@ func NewArchDiagram(cfg *config.Config) *ArchDiagram {
 	return archDiagram
 }
 
+// setDefaultConfig sets default values for configuration
+func setDefaultConfig(cfg *config.Config) *config.Config {
+	if cfg.Name == "" {
+		cfg.Name = "default"
+	}
+	if cfg.NetworkType == "" {
+		cfg.NetworkType = "ethernet"
+	}
+	return cfg
+}
+
 // Generate generates an architecture diagram
 func (g *ArchDiagram) Generate() string {
 	if g.cfg == nil {
@@ -133,22 +142,9 @@ func (g *ArchDiagram) SetColorEnabled(enabled bool) {
 	g.archRenderer.SetColorEnabled(enabled)
 }
 
-// setDefaultConfig sets default values for configuration
-func setDefaultConfig(cfg *config.Config) *config.Config {
-	if cfg.Name == "" {
-		cfg.Name = "default"
-	}
-	if cfg.NetworkType == "" {
-		cfg.NetworkType = "ethernet"
-	}
-	return cfg
-}
+// ===== Network Related Methods =====
 
-//
-// Network related methods
-//
-
-// GetNetworkType implements render.NodeDataProvider
+// GetNetworkType returns the type of network being used
 func (g *ArchDiagram) GetNetworkType() string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -159,12 +155,12 @@ func (g *ArchDiagram) GetNetworkType() string {
 	return string(g.cfg.NetworkType)
 }
 
-// GetNetworkSpeed implements render.NodeDataProvider
+// GetNetworkSpeed returns the network speed for the diagram
 func (g *ArchDiagram) GetNetworkSpeed() string {
 	return g.getNetworkSpeed()
 }
 
-// getNetworkSpeed returns the network speed
+// getNetworkSpeed returns the actual network speed based on network type
 func (g *ArchDiagram) getNetworkSpeed() string {
 	g.mu.RLock()
 	networkType := g.cfg.NetworkType
@@ -173,9 +169,7 @@ func (g *ArchDiagram) getNetworkSpeed() string {
 	return network.GetNetworkSpeed(string(networkType))
 }
 
-//
-// Node basic operations
-//
+// ===== Node Basic Operations =====
 
 // isNodeInList checks if a node is in a list
 func (g *ArchDiagram) isNodeInList(nodeName string, nodeList []string) bool {
@@ -193,36 +187,7 @@ func (g *ArchDiagram) checkNodeService(nodeName string, serviceType config.Servi
 	return g.isNodeInList(nodeName, nodes)
 }
 
-//
-// Node retrieval methods
-//
-
-// GetClientNodes returns client nodes
-func (g *ArchDiagram) GetClientNodes() []string {
-	return g.getServiceNodes(config.ServiceClient)
-}
-
-// getServiceNodes returns nodes for a specific service type
-func (g *ArchDiagram) getServiceNodes(serviceType config.ServiceType) []string {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return g.getServiceNodesInternal(serviceType)
-}
-
-// getServiceNodesInternal returns service nodes without locking
-func (g *ArchDiagram) getServiceNodesInternal(serviceType config.ServiceType) []string {
-	if g.cfg == nil {
-		return nil
-	}
-
-	nodes, nodeGroups := g.getServiceConfig(serviceType)
-	result, err := g.getServiceNodeList(nodes, nodeGroups)
-	if err != nil {
-		logrus.WithError(err).Errorf("Failed to get nodes for service %s", serviceType)
-		return nil
-	}
-	return result
-}
+// ===== Node Count Methods =====
 
 // GetTotalNodeCount returns the total number of actual nodes
 func (g *ArchDiagram) GetTotalNodeCount() int {
@@ -255,9 +220,70 @@ func (g *ArchDiagram) GetTotalNodeCount() int {
 	return len(uniqueIPs)
 }
 
-//
-// Node list building methods
-//
+// GetServiceNodeCounts returns counts of nodes by service type
+func (g *ArchDiagram) GetServiceNodeCounts() map[config.ServiceType]int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	counts := make(map[config.ServiceType]int)
+
+	for _, svcType := range serviceTypes {
+		nodes := g.getServiceNodesInternal(svcType)
+		counts[svcType] = len(nodes)
+	}
+
+	clientNodes := g.getServiceNodesInternal(config.ServiceClient)
+	counts[config.ServiceClient] = len(clientNodes)
+
+	return counts
+}
+
+// ===== Node Retrieval Methods =====
+
+// GetClientNodes returns client nodes
+func (g *ArchDiagram) GetClientNodes() []string {
+	return g.getServiceNodes(config.ServiceClient)
+}
+
+// getServiceNodes returns nodes for a specific service type
+func (g *ArchDiagram) getServiceNodes(serviceType config.ServiceType) []string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.getServiceNodesInternal(serviceType)
+}
+
+// getServiceNodesInternal returns service nodes without locking
+func (g *ArchDiagram) getServiceNodesInternal(serviceType config.ServiceType) []string {
+	if g.cfg == nil {
+		return nil
+	}
+
+	nodes, nodeGroups := g.getServiceConfig(serviceType)
+	result, err := g.getServiceNodeList(nodes, nodeGroups)
+	if err != nil {
+		logrus.WithError(err).Errorf("Failed to get nodes for service %s", serviceType)
+		return nil
+	}
+	return result
+}
+
+// getNodeServices returns the services running on a node
+func (g *ArchDiagram) getNodeServices(node string) []string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	services := make([]string, 0)
+
+	for _, svcType := range serviceTypes {
+		if g.checkNodeService(node, svcType) {
+			displayName := serviceDisplayNames[svcType]
+			services = append(services, fmt.Sprintf("[%s]", displayName))
+		}
+	}
+	return services
+}
+
+// ===== Node List Building Methods =====
 
 // buildOrderedNodeList builds a list of nodes ordered by config appearance
 func (g *ArchDiagram) buildOrderedNodeList() []string {
@@ -315,9 +341,7 @@ func (g *ArchDiagram) expandNodeGroup(nodeGroup *config.NodeGroup) []string {
 	return ipList
 }
 
-//
-// Service configuration methods
-//
+// ===== Service Configuration Methods =====
 
 // getServiceConfig returns nodes and node groups for a service type
 func (g *ArchDiagram) getServiceConfig(serviceType config.ServiceType) ([]string, []string) {
@@ -395,46 +419,9 @@ func (g *ArchDiagram) getServiceNodeList(nodes []string, nodeGroups []string) ([
 	return serviceNodes, nil
 }
 
-// GetServiceNodeCounts returns counts of nodes by service type
-func (g *ArchDiagram) GetServiceNodeCounts() map[config.ServiceType]int {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+// ===== Rendering Related Methods =====
 
-	counts := make(map[config.ServiceType]int)
-
-	for _, svcType := range serviceTypes {
-		nodes := g.getServiceNodesInternal(svcType)
-		counts[svcType] = len(nodes)
-	}
-
-	clientNodes := g.getServiceNodesInternal(config.ServiceClient)
-	counts[config.ServiceClient] = len(clientNodes)
-
-	return counts
-}
-
-// getNodeServices returns the services running on a node
-func (g *ArchDiagram) getNodeServices(node string) []string {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	services := make([]string, 0)
-
-	for _, svcType := range serviceTypes {
-		if g.checkNodeService(node, svcType) {
-			displayName := serviceDisplayNames[svcType]
-			services = append(services, fmt.Sprintf("[%s]", displayName))
-		}
-	}
-	return services
-}
-
-//
-// Rendering related methods
-//
-
-// GetRenderableNodes returns service nodes to render in the architecture diagram
-// excluding client-only nodes
+// GetRenderableNodes returns service nodes to render in the diagram
 func (g *ArchDiagram) GetRenderableNodes() []string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -444,7 +431,6 @@ func (g *ArchDiagram) GetRenderableNodes() []string {
 		return nil
 	}
 
-	// Use simple sequential processing for small node counts
 	renderableNodes := make([]string, 0, len(allNodes))
 	for _, node := range allNodes {
 		hasService := false
