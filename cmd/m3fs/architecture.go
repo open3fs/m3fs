@@ -75,7 +75,7 @@ func NewServiceError(serviceType config.ServiceType, err error) error {
 type ArchDiagram struct {
 	cfg          *config.Config
 	renderer     *render.DiagramRenderer
-	archRenderer *render.ArchDiagramRenderer
+	archRenderer *render.ArchRenderer
 	dataProvider *render.ClusterDataProvider
 
 	mu sync.RWMutex
@@ -99,12 +99,11 @@ func NewArchDiagram(cfg *config.Config) *ArchDiagram {
 	baseRenderer := render.NewDiagramRenderer(cfg)
 
 	archDiagram := &ArchDiagram{
-		cfg:          cfg,
-		renderer:     baseRenderer,
-		archRenderer: render.NewArchDiagramRenderer(baseRenderer),
+		cfg:      cfg,
+		renderer: baseRenderer,
 	}
 
-	archDiagram.dataProvider = render.NewClusterDataProvider(
+	dataProvider := render.NewClusterDataProvider(
 		archDiagram.GetServiceNodeCounts,
 		archDiagram.GetClientNodes,
 		archDiagram.GetRenderableNodes,
@@ -113,6 +112,9 @@ func NewArchDiagram(cfg *config.Config) *ArchDiagram {
 		archDiagram.getNetworkSpeed,
 		archDiagram.GetNetworkType,
 	)
+
+	archDiagram.dataProvider = dataProvider
+	archDiagram.archRenderer = render.NewArchRenderer(baseRenderer, dataProvider)
 
 	return archDiagram
 }
@@ -123,13 +125,12 @@ func (g *ArchDiagram) Generate() string {
 		return "Error: No configuration provided"
 	}
 
-	adapter := render.NewArchDiagramAdapter(g.dataProvider, g.archRenderer)
-	return adapter.Generate()
+	return g.archRenderer.Generate()
 }
 
 // SetColorEnabled enables or disables color output in the diagram
 func (g *ArchDiagram) SetColorEnabled(enabled bool) {
-	g.renderer.SetColorEnabled(enabled)
+	g.archRenderer.SetColorEnabled(enabled)
 }
 
 // setDefaultConfig sets default values for configuration
