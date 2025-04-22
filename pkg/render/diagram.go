@@ -36,14 +36,11 @@ const (
 
 // Layout constants
 const (
-	DefaultRowSize               = 8
-	DefaultDiagramWidth          = 70
-	DefaultNodeCellWidth         = 16
-	DefaultServiceBoxPadding     = 2
-	DefaultTotalCellWidth        = 14
-	DefaultMinServiceLines       = 6 // Minimum number of service lines to ensure consistent height
-	InitialStringBuilderCapacity = 1024
-	InitialMapCapacity           = 16
+	DefaultRowSize         = 8
+	DefaultDiagramWidth    = 70
+	DefaultNodeCellWidth   = 16
+	DefaultTotalCellWidth  = 14
+	DefaultMinServiceLines = 6
 )
 
 // ServiceConfig defines a service configuration for rendering
@@ -139,40 +136,6 @@ func (r *DiagramRenderer) RenderDivider(sb *strings.Builder, char string, width 
 	sb.WriteByte('\n')
 }
 
-// RenderNodeBox renders a box for a node
-func (r *DiagramRenderer) RenderNodeBox(sb *strings.Builder, nodeName string, services []string) {
-	const cellContent = "                "
-	const boxSpacing = " "
-
-	topBorder := "+" + strings.Repeat("-", len(cellContent)) + "+"
-	sb.WriteString(topBorder)
-	sb.WriteString(boxSpacing)
-	sb.WriteByte('\n')
-
-	nodeNameLine := "|" + fmt.Sprintf("%s%-16s%s", r.GetColorCode(ColorCyan),
-		nodeName, r.GetColorReset()) + "|"
-	sb.WriteString(nodeNameLine)
-	sb.WriteString(boxSpacing)
-	sb.WriteByte('\n')
-
-	for _, service := range services {
-		serviceLine := "|" + fmt.Sprintf("  %s%s%s%s",
-			r.GetColorCode(ColorGreen),
-			service,
-			r.GetColorReset(),
-			strings.Repeat(" ", len(cellContent)-len(service)-2)) + "|"
-		sb.WriteString(serviceLine)
-		sb.WriteString(boxSpacing)
-		sb.WriteByte('\n')
-	}
-
-	// Render bottom border
-	bottomBorder := "+" + strings.Repeat("-", len(cellContent)) + "+"
-	sb.WriteString(bottomBorder)
-	sb.WriteString(boxSpacing)
-	sb.WriteByte('\n')
-}
-
 // GetColorCode returns the color code if colors are enabled
 func (r *DiagramRenderer) GetColorCode(color string) string {
 	if !r.ColorEnabled {
@@ -189,61 +152,58 @@ func (r *DiagramRenderer) GetColorReset() string {
 // GetStringBuilder creates a new strings.Builder
 func (r *DiagramRenderer) GetStringBuilder() *strings.Builder {
 	sb := &strings.Builder{}
-	sb.Grow(InitialStringBuilderCapacity)
+	sb.Grow(1024)
 	return sb
 }
 
-// PutStringBuilder resets the strings.Builder (no-op for GC)
+// PutStringBuilder resets the strings.Builder
 func (r *DiagramRenderer) PutStringBuilder(sb *strings.Builder) {
-	// 简单实现，只需重置字符串构建器，让垃圾回收处理内存
 	sb.Reset()
 }
 
-// getServiceColor returns the appropriate color for a service based on its name
+// getServiceColor returns the color for a service
 func (r *DiagramRenderer) getServiceColor(service string) string {
+	// Strip brackets if present for lookup
+	cleanService := strings.Trim(service, "[]")
+
 	switch {
-	case strings.Contains(service, "/mnt/") || strings.Contains(service, "/mount/"):
-		return ColorPink
-	case strings.Contains(service, "storage"):
+	case strings.Contains(cleanService, "storage"):
 		return ColorYellow
-	case strings.Contains(service, "fdb"):
+	case strings.Contains(cleanService, "foundationdb"):
 		return ColorBlue
-	case strings.Contains(service, "meta"):
+	case strings.Contains(cleanService, "meta"):
 		return ColorPink
-	case strings.Contains(service, "mgmtd"):
+	case strings.Contains(cleanService, "mgmtd"):
 		return ColorPurple
-	case strings.Contains(service, "monitor"):
+	case strings.Contains(cleanService, "monitor"):
 		return ColorPurple
-	case strings.Contains(service, "clickhouse"):
+	case strings.Contains(cleanService, "clickhouse"):
 		return ColorRed
-	case strings.Contains(service, "hf3fs_fuse"):
+	case strings.Contains(cleanService, "hf3fs_fuse"):
 		return ColorGreen
+	case strings.Contains(cleanService, "/mnt/") || strings.Contains(cleanService, "/mount/"):
+		return ColorPink
 	default:
-		return ColorWhite
+		return ColorGreen
 	}
 }
 
-// RenderNodesRow renders a row of nodes horizontally
-func (r *DiagramRenderer) RenderNodesRow(sb *strings.Builder, nodes []string,
-	servicesFn func(string) []string, enforceMinHeight bool) {
+// RenderNodesRow renders a row of nodes
+func (r *DiagramRenderer) RenderNodesRow(sb *strings.Builder, nodes []string, servicesFn func(string) []string) {
 	if len(nodes) == 0 {
 		return
 	}
 
-	// Calculate maximum number of rows needed for each node
-	maxServiceLines := 0
+	// Calculate maximum number of service lines
+	maxServiceLines := DefaultMinServiceLines
 	nodeServices := make([][]string, len(nodes))
+
 	for i, node := range nodes {
 		services := servicesFn(node)
 		nodeServices[i] = services
 		if len(services) > maxServiceLines {
 			maxServiceLines = len(services)
 		}
-	}
-
-	// Apply minimum height if required for consistency
-	if enforceMinHeight && maxServiceLines < DefaultMinServiceLines {
-		maxServiceLines = DefaultMinServiceLines
 	}
 
 	const cellContent = "                "
@@ -305,4 +265,27 @@ func (r *DiagramRenderer) RenderNodesRow(sb *strings.Builder, nodes []string,
 		}
 	}
 	sb.WriteByte('\n')
+}
+
+// RenderNodeGroup renders a group of nodes
+func (r *DiagramRenderer) RenderNodeGroup(
+	sb *strings.Builder,
+	title string,
+	nodes []string,
+	servicesFn func(string) []string,
+) {
+	if len(nodes) == 0 {
+		return
+	}
+
+	r.RenderSectionHeader(sb, title)
+
+	for i := 0; i < len(nodes); i += r.RowSize {
+		end := i + r.RowSize
+		if end > len(nodes) {
+			end = len(nodes)
+		}
+		r.RenderNodesRow(sb, nodes[i:end], servicesFn)
+		sb.WriteByte('\n')
+	}
 }

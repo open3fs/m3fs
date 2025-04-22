@@ -202,7 +202,7 @@ func (r *ArchDiagramRenderer) RenderClientNodes(sb *strings.Builder, clientNodes
 			"[hf3fs_fuse]",
 			mountpointStr,
 		}
-	}, false)
+	})
 }
 
 // RenderStorageSection renders the storage nodes section
@@ -245,7 +245,7 @@ func (r *ArchDiagramRenderer) RenderStorageNodes(
 		return
 	}
 
-	r.Base.RenderNodesRow(sb, storageNodes, nodeServicesFunc, true)
+	r.Base.RenderNodesRow(sb, storageNodes, nodeServicesFunc)
 }
 
 // RenderSummarySection renders the summary section
