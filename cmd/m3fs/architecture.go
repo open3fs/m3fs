@@ -117,10 +117,10 @@ func NewArchDiagram(cfg *config.Config) *ArchDiagram {
 	return archDiagram
 }
 
-// setDefaultConfig sets default values for configuration
+// setDefaultConfig sets cluster.yml values for configuration
 func setDefaultConfig(cfg *config.Config) *config.Config {
 	if cfg.Name == "" {
-		cfg.Name = "default"
+		cfg.Name = "cluster.yml"
 	}
 	if cfg.NetworkType == "" {
 		cfg.NetworkType = "ethernet"
