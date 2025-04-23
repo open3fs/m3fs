@@ -18,6 +18,30 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 )
 
+// NodeDataProvider provides node data for architecture diagrams
+type NodeDataProvider interface {
+	// GetClientNodes returns all client nodes
+	GetClientNodes() []string
+
+	// GetRenderableNodes returns nodes to render in the diagram
+	GetRenderableNodes() []string
+
+	// GetNodeServices returns services running on a node
+	GetNodeServices(nodeName string) []string
+
+	// GetServiceNodeCounts returns node counts by service type
+	GetServiceNodeCounts() map[config.ServiceType]int
+
+	// GetTotalNodeCount returns the total number of nodes
+	GetTotalNodeCount() int
+
+	// GetNetworkSpeed returns the network speed
+	GetNetworkSpeed() string
+
+	// GetNetworkType returns the network type
+	GetNetworkType() string
+}
+
 // ClusterDataProvider provides cluster node data for rendering
 type ClusterDataProvider struct {
 	getServiceNodeCountsFunc func() map[config.ServiceType]int
