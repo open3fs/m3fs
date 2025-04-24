@@ -26,6 +26,10 @@ apt install docker.io
 
 For running 3FS with virtual machine only has ethernet nic, you need to install **linux-modules-extra** package.
 
+### avx512 and avx2
+
+m3fs will use 3fs image require avx512. If you machine does not support avx512, you can switch to use avx2 image by appending **-avx2** to the open3fs/3fs image tag.
+
 ## Quick Start
 
 ### Download m3fs

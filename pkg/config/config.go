@@ -515,7 +515,7 @@ func NewConfigWithDefaults() *Config {
 			Registry: "",
 			FFFS: Image{
 				Repo: "open3fs/3fs",
-				Tag:  "20250329",
+				Tag:  "20250410",
 			},
 			Fdb: Image{
 				Repo: "open3fs/foundationdb",
