@@ -27,3 +27,25 @@ const (
 	ServiceMeta       ServiceType = "meta"
 	ServiceClient     ServiceType = "client"
 )
+
+// AllServiceTypes is a list of all service types
+var AllServiceTypes = []ServiceType{
+	ServiceStorage,
+	ServiceFdb,
+	ServiceMeta,
+	ServiceMgmtd,
+	ServiceMonitor,
+	ServiceClickhouse,
+	ServiceClient,
+}
+
+// ServiceDisplayNames is a map of service type to display name
+var ServiceDisplayNames = map[ServiceType]string{
+	ServiceStorage:    "storage",
+	ServiceFdb:        "foundationdb",
+	ServiceMeta:       "meta",
+	ServiceMgmtd:      "mgmtd",
+	ServiceMonitor:    "monitor",
+	ServiceClickhouse: "clickhouse",
+	ServiceClient:     "client",
+}

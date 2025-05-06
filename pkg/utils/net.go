@@ -15,9 +15,7 @@
 package utils
 
 import (
-	"cmp"
 	"net"
-	"strings"
 
 	"github.com/open3fs/m3fs/pkg/errors"
 )
@@ -132,45 +130,4 @@ func intToIPv6(n uint64) net.IP {
 	ip[6] = byte(n >> 8)
 	ip[7] = byte(n)
 	return ip
-}
-
-// CompareIPAddresses compares two IP addresses for sorting
-// Returns:
-//
-//	-1 if ip1 < ip2
-//	 0 if ip1 == ip2
-//	 1 if ip1 > ip2
-func CompareIPAddresses(ip1, ip2 string) int {
-	parsedIP1 := net.ParseIP(ip1)
-	parsedIP2 := net.ParseIP(ip2)
-
-	// Handle parsing failures
-	// Invalid IPs sort after valid ones
-	switch {
-	case parsedIP1 == nil && parsedIP2 == nil:
-		return strings.Compare(ip1, ip2)
-	case parsedIP1 == nil:
-		return 1
-	case parsedIP2 == nil:
-		return -1
-	}
-
-	// Get IP versions
-	ip1v4, ip2v4 := parsedIP1.To4(), parsedIP2.To4()
-
-	// Handle mixed IP versions (IPv4 sorts before IPv6)
-	switch {
-	case ip1v4 != nil && ip2v4 == nil:
-		return -1
-	case ip1v4 == nil && ip2v4 != nil:
-		return 1
-	case ip1v4 != nil && ip2v4 != nil:
-		// Both IPv4: convert to integers and compare
-		num1, num2 := ipToInt(parsedIP1), ipToInt(parsedIP2)
-		return cmp.Compare(num1, num2)
-	default:
-		// Both IPv6: convert to integers and compare
-		num1, num2 := ipv6ToInt(parsedIP1), ipv6ToInt(parsedIP2)
-		return cmp.Compare(num1, num2)
-	}
 }

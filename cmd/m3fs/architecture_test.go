@@ -26,17 +26,17 @@ func TestArchDiagramSuite(t *testing.T) {
 
 type archDiagramSuite struct {
 	Suite
-	cfg       *config.Config
-	generator *ArchDiagram
+	cfg     *config.Config
+	diagram *ArchDiagram
 }
 
 func (s *archDiagramSuite) SetupTest() {
 	s.Suite.SetupTest()
 
 	s.cfg = s.newTestConfig()
-	generator, err := NewArchDiagram(s.cfg)
+	diagram, err := NewArchDiagram(s.cfg, false)
 	s.NoError(err)
-	s.generator = generator
+	s.diagram = diagram
 }
 
 func (s *archDiagramSuite) newTestConfig() *config.Config {
@@ -77,7 +77,7 @@ func (s *archDiagramSuite) newTestConfig() *config.Config {
 }
 
 func (s *archDiagramSuite) TestArchDiagram() {
-	diagram := s.generator.Generate()
+	diagram := s.diagram.Render()
 
 	s.NotEmpty(diagram, "Generated diagram should not be empty")
 	s.Contains(diagram, "Cluster: test-cluster", "Diagram should contain cluster name")
@@ -103,9 +103,9 @@ func (s *archDiagramSuite) TestArchDiagram() {
 }
 
 func (s *archDiagramSuite) TestNoColorOption() {
-	s.generator.SetColorEnabled(false)
+	s.diagram.noColor = true
 
-	diagram := s.generator.Generate()
+	diagram := s.diagram.Render()
 
 	s.NotContains(diagram, "\033[", "Diagram should not contain color codes when colors are disabled")
 
@@ -115,23 +115,4 @@ func (s *archDiagramSuite) TestNoColorOption() {
 	s.Contains(diagram, "STORAGE NODES", "Diagram should still have STORAGE NODES section")
 	s.Contains(diagram, "[storage]", "Diagram should still show storage service label")
 	s.Contains(diagram, "[hf3fs_fuse]", "Diagram should still show hf3fs_fuse service label")
-}
-
-func (s *archDiagramSuite) TestGetClientNodes() {
-	s.Equal(
-		[]string{"192.168.1.3", "192.168.1.4"},
-		s.generator.GetClientNodes(),
-	)
-
-	s.cfg.Services.Client = config.Client{}
-	s.Equal([]string{}, s.generator.GetClientNodes())
-
-}
-
-func (s *archDiagramSuite) TestGetRenderableNodes() {
-	s.Equal(
-		[]string{"192.168.1.1", "192.168.1.2", "192.168.1.3"},
-		s.generator.GetRenderableNodes(),
-	)
-
 }
