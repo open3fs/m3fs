@@ -191,6 +191,7 @@ func (s *prepare3FSConfigStep) genConfigs(tmpDir string) error {
 
 	launcherTmplData := map[string]any{
 		"ClusterID":            s.Runtime.Cfg.Name,
+		"HostMountpoint":       s.Runtime.Cfg.Services.Client.HostMountpoint,
 		"MgmtdServerAddresses": mgmtdServerAddresses,
 	}
 	s.Logger.Debugf("Template data of %s_launcher.toml.tmpl: %v", s.service, launcherTmplData)

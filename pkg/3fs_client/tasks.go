@@ -77,7 +77,7 @@ func (t *Create3FSClientServiceTask) Init(r *task.Runtime, logger log.Interface)
 	if client.HostMountpoint != "" {
 		runContainerVolumes = append(runContainerVolumes, &external.VolumeArgs{
 			Source: client.HostMountpoint,
-			Target: "/mnt/3fs",
+			Target: client.HostMountpoint,
 			Rshare: common.Pointer(true),
 		})
 	}
