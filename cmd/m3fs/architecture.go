@@ -18,12 +18,12 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/network"
-	"github.com/open3fs/m3fs/pkg/render"
 	"github.com/open3fs/m3fs/pkg/utils"
 	"github.com/sirupsen/logrus"
 )
@@ -103,10 +103,8 @@ func NewServiceError(serviceType config.ServiceType, err error) error {
 
 // ArchDiagram generates architecture diagrams for m3fs clusters
 type ArchDiagram struct {
-	cfg          *config.Config
-	renderer     *render.DiagramRenderer
-	archRenderer *render.ArchRenderer
-	dataProvider *render.ClusterDataProvider
+	cfg     *config.Config
+	noColor bool
 
 	mu sync.RWMutex
 }
@@ -117,41 +115,21 @@ func NewArchDiagram(cfg *config.Config) (*ArchDiagram, error) {
 		return nil, errors.Errorf("config is nil")
 	}
 
-	baseRenderer := render.NewDiagramRenderer(cfg)
-
 	archDiagram := &ArchDiagram{
-		cfg:      cfg,
-		renderer: baseRenderer,
+		cfg: cfg,
 	}
-
-	dataProvider := render.NewClusterDataProvider(
-		archDiagram.GetServiceNodeCounts,
-		archDiagram.GetClientNodes,
-		archDiagram.GetRenderableNodes,
-		archDiagram.getNodeServices,
-		archDiagram.GetTotalNodeCount,
-		archDiagram.getNetworkSpeed,
-		archDiagram.GetNetworkType,
-	)
-
-	archDiagram.dataProvider = dataProvider
-	archDiagram.archRenderer = render.NewArchRenderer(baseRenderer, dataProvider)
 
 	return archDiagram, nil
 }
 
 // Generate generates an architecture diagram
 func (g *ArchDiagram) Generate() string {
-	if g.cfg == nil {
-		return "Error: No configuration provided"
-	}
-
-	return g.archRenderer.Generate()
+	return g.Render()
 }
 
 // SetColorEnabled enables or disables color output in the diagram
 func (g *ArchDiagram) SetColorEnabled(enabled bool) {
-	g.archRenderer.SetColorEnabled(enabled)
+	g.noColor = !enabled
 }
 
 // ===== Network Related Methods =====
@@ -498,4 +476,39 @@ func (g *ArchDiagram) GetRenderableNodes() []string {
 	}
 
 	return g.sortNodesByIP(renderableNodes)
+}
+
+// Render renders the architecture diagram
+func (g *ArchDiagram) Render() string {
+	b := &strings.Builder{}
+
+	render := NewDiagramRenderer(g.cfg)
+
+	clientNodes := g.GetClientNodes()
+	storageNodes := g.GetRenderableNodes()
+	serviceCounts := g.GetServiceNodeCounts()
+	totalNodeCount := g.GetTotalNodeCount()
+
+	clientDisplayCount := render.CalculateMaxNodeCount(len(clientNodes))
+	storageDisplayCount := render.CalculateMaxNodeCount(len(storageNodes))
+
+	clientSectionWidth := render.CalculateNodeRowWidth(clientDisplayCount) - 2
+	render.RenderHeader(b, clientSectionWidth)
+
+	if len(clientNodes) > 0 {
+		render.RenderClientSection(b, clientNodes)
+	}
+
+	if len(clientNodes) > 0 && len(storageNodes) > 0 {
+		render.RenderNetworkConnection(b, g.GetNetworkType(), g.GetNetworkSpeed(),
+			clientDisplayCount, storageDisplayCount)
+	}
+
+	if len(storageNodes) > 0 {
+		render.RenderStorageSection(b, storageNodes, g.getNodeServices)
+	}
+
+	render.RenderSummarySection(b, serviceCounts, totalNodeCount)
+
+	return b.String()
 }

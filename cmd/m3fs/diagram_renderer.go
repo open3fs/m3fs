@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package main
 
 import (
 	"fmt"
@@ -21,8 +21,6 @@ import (
 
 	"github.com/open3fs/m3fs/pkg/config"
 )
-
-// ===== Constants =====
 
 // Color constants for terminal output
 const (
@@ -49,8 +47,6 @@ const (
 	CellContent = "                " // 16 spaces
 	BoxSpacing  = " "                // 1 space
 )
-
-// ===== Data Types =====
 
 // ServiceConfig defines a service configuration for rendering
 type ServiceConfig struct {
@@ -242,8 +238,6 @@ func (r *DiagramRenderer) CalculateArrowCount(width, maxArrows int) int {
 	return arrowCount
 }
 
-// ===== Basic Rendering Methods =====
-
 // RenderLine renders a line of text with optional color
 func (r *DiagramRenderer) RenderLine(sb *strings.Builder, text string, color string) {
 	if color != "" {
@@ -297,8 +291,6 @@ func (r *DiagramRenderer) RenderSectionHeader(sb *strings.Builder, title string,
 
 	r.RenderDivider(sb, "-", width)
 }
-
-// ===== Node Rendering Methods =====
 
 // RenderNodeRow renders a row of nodes
 func (r *DiagramRenderer) RenderNodeRow(
@@ -462,8 +454,6 @@ func (r *DiagramRenderer) RenderStorageSection(
 
 	r.RenderNodeSection(sb, "STORAGE NODES:", storageNodes, servicesFn)
 }
-
-// ===== Connection Rendering Methods =====
 
 // RenderConnectionArrows renders arrows that align with the network frame
 func (r *DiagramRenderer) RenderConnectionArrows(sb *strings.Builder, networkWidth, maxArrows int) {
