@@ -15,14 +15,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
+	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/log"
 	"github.com/open3fs/m3fs/pkg/network"
 	"github.com/open3fs/m3fs/pkg/utils"
 	"github.com/sirupsen/logrus"
@@ -105,8 +107,6 @@ func NewServiceError(serviceType config.ServiceType, err error) error {
 type ArchDiagram struct {
 	cfg     *config.Config
 	noColor bool
-
-	mu sync.RWMutex
 }
 
 // NewArchDiagram creates a new ArchDiagram.
@@ -132,33 +132,6 @@ func (g *ArchDiagram) SetColorEnabled(enabled bool) {
 	g.noColor = !enabled
 }
 
-// ===== Network Related Methods =====
-
-// GetNetworkType returns the type of network being used
-func (g *ArchDiagram) GetNetworkType() string {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	if g.cfg == nil {
-		return "ethernet"
-	}
-	return string(g.cfg.NetworkType)
-}
-
-// GetNetworkSpeed returns the network speed for the diagram
-func (g *ArchDiagram) GetNetworkSpeed() string {
-	return g.getNetworkSpeed()
-}
-
-// getNetworkSpeed returns the actual network speed based on network type
-func (g *ArchDiagram) getNetworkSpeed() string {
-	g.mu.RLock()
-	networkType := g.cfg.NetworkType
-	g.mu.RUnlock()
-
-	return network.GetNetworkSpeed(string(networkType))
-}
-
 // ===== Node Basic Operations =====
 
 // isNodeInList checks if a node is in a list
@@ -181,8 +154,6 @@ func (g *ArchDiagram) checkNodeService(nodeName string, serviceType config.Servi
 
 // GetTotalNodeCount returns the total number of actual nodes
 func (g *ArchDiagram) GetTotalNodeCount() int {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
 
 	if g.cfg == nil {
 		return 0
@@ -210,8 +181,6 @@ func (g *ArchDiagram) GetTotalNodeCount() int {
 
 // GetServiceNodeCounts returns counts of nodes by service type
 func (g *ArchDiagram) GetServiceNodeCounts() map[config.ServiceType]int {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
 
 	if g.cfg == nil {
 		return nil
@@ -229,8 +198,6 @@ func (g *ArchDiagram) GetServiceNodeCounts() map[config.ServiceType]int {
 
 // GetServiceNodeCountsDetail returns detailed counts of nodes by service type
 func (g *ArchDiagram) GetServiceNodeCountsDetail() ArchNodeResults {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
 
 	if g.cfg == nil {
 		return nil
@@ -275,8 +242,6 @@ func (g *ArchDiagram) GetClientNodes() []string {
 
 // getServiceNodes returns nodes for a specific service type
 func (g *ArchDiagram) getServiceNodes(serviceType config.ServiceType) []string {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
 	return g.getServiceNodesInternal(serviceType)
 }
 
@@ -297,8 +262,6 @@ func (g *ArchDiagram) getServiceNodesInternal(serviceType config.ServiceType) []
 
 // getNodeServices returns the services running on a node
 func (g *ArchDiagram) getNodeServices(node string) []string {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
 
 	if g.cfg == nil {
 		return nil
@@ -452,8 +415,6 @@ func (g *ArchDiagram) getServiceNodeList(nodes []string, nodeGroups []string) ([
 
 // GetRenderableNodes returns service nodes to render in the diagram
 func (g *ArchDiagram) GetRenderableNodes() []string {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
 
 	allNodes := g.buildOrderedNodeList()
 	if len(allNodes) == 0 {
@@ -483,6 +444,7 @@ func (g *ArchDiagram) Render() string {
 	b := &strings.Builder{}
 
 	render := NewDiagramRenderer(g.cfg)
+	render.ColorEnabled = !g.noColor
 
 	clientNodes := g.GetClientNodes()
 	storageNodes := g.GetRenderableNodes()
@@ -500,8 +462,14 @@ func (g *ArchDiagram) Render() string {
 	}
 
 	if len(clientNodes) > 0 && len(storageNodes) > 0 {
-		render.RenderNetworkConnection(b, g.GetNetworkType(), g.GetNetworkSpeed(),
-			clientDisplayCount, storageDisplayCount)
+		networkType := string(g.cfg.NetworkType)
+		localRunnerCfg := &external.LocalRunnerCfg{
+			Logger:         log.Logger,
+			MaxExitTimeout: g.cfg.CmdMaxExitTimeout,
+		}
+		localRunner := external.NewLocalRunner(localRunnerCfg)
+		speed := network.GetSpeed(context.TODO(), localRunner, g.cfg.NetworkType)
+		render.RenderNetworkConnection(b, networkType, speed, clientDisplayCount, storageDisplayCount)
 	}
 
 	if len(storageNodes) > 0 {

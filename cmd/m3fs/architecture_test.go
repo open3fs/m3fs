@@ -42,7 +42,7 @@ func (s *archDiagramSuite) SetupTest() {
 func (s *archDiagramSuite) newTestConfig() *config.Config {
 	return &config.Config{
 		Name:        "test-cluster",
-		NetworkType: "Ethernet",
+		NetworkType: "RXE",
 		Nodes: []config.Node{
 			{Name: "192.168.1.1", Host: "192.168.1.1"},
 			{Name: "192.168.1.2", Host: "192.168.1.2"},
@@ -78,7 +78,6 @@ func (s *archDiagramSuite) newTestConfig() *config.Config {
 
 func (s *archDiagramSuite) TestArchDiagram() {
 	diagram := s.generator.Generate()
-	s.True(s.generator.renderer.ColorEnabled, "Colors should be enabled by default")
 
 	s.NotEmpty(diagram, "Generated diagram should not be empty")
 	s.Contains(diagram, "Cluster: test-cluster", "Diagram should contain cluster name")
@@ -105,11 +104,9 @@ func (s *archDiagramSuite) TestArchDiagram() {
 
 func (s *archDiagramSuite) TestNoColorOption() {
 	s.generator.SetColorEnabled(false)
-	s.False(s.generator.renderer.ColorEnabled, "Colors should be disabled after setting ColorEnabled to false")
 
 	diagram := s.generator.Generate()
 
-	// Check if the output does not contain color codes
 	s.NotContains(diagram, "\033[", "Diagram should not contain color codes when colors are disabled")
 
 	// Check if the diagram content is still complete

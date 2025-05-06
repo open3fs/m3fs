@@ -16,17 +16,12 @@ package network
 
 import (
 	"context"
-	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
-	"time"
 
-	"github.com/sirupsen/logrus"
-)
-
-const (
-	networkTimeout = 5 * time.Second
+	"github.com/open3fs/m3fs/pkg/config"
+	"github.com/open3fs/m3fs/pkg/errors"
+	"github.com/open3fs/m3fs/pkg/external"
 )
 
 var (
@@ -34,115 +29,95 @@ var (
 	ethSpeedPattern = regexp.MustCompile(`Speed:\s+(\d+)\s*([GMK]b/?s)`)
 )
 
-// GetNetworkSpeed returns the network speed for the given network type
-func GetNetworkSpeed(networkType string) string {
-	if speed := getIBNetworkSpeed(); speed != "" {
-		return speed
-	}
+// GetSpeed returns the speed of the network interface
+func GetSpeed(ctx context.Context, runner external.RunnerInterface, networkType config.NetworkType) string {
 
-	if speed := getEthernetSpeed(); speed != "" {
-		return speed
-	}
-
-	return getDefaultNetworkSpeed(networkType)
-}
-
-// getDefaultNetworkSpeed returns the default network speed
-func getDefaultNetworkSpeed(networkType string) string {
-	switch networkType {
-	case "ib":
-		return "50 Gb/sec"
-	case "rdma":
-		return "100 Gb/sec"
-	default:
-		return "10 Gb/sec"
-	}
-}
-
-// getIBNetworkSpeed returns the InfiniBand network speed
-func getIBNetworkSpeed() string {
-	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
-	defer cancel()
-
-	cmdIB := exec.CommandContext(ctx, "ibstatus")
-	output, err := cmdIB.CombinedOutput()
-	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			logrus.Error("Timeout while getting IB network speed")
-		} else {
-			logrus.Debugf("Failed to get IB network speed: %v", err)
+	if networkType == config.NetworkTypeIB {
+		speed, _ := getIBNetworkSpeed(ctx, runner)
+		if speed != "" {
+			return speed
 		}
-		return ""
 	}
 
-	matches := ibSpeedPattern.FindStringSubmatch(string(output))
-	if len(matches) > 1 {
-		return matches[1] + " Gb/sec"
+	speed, _ := getEthernetSpeed(ctx, runner)
+	if speed != "" {
+		return speed
 	}
 
-	logrus.Debug("No IB network speed found in ibstatus output")
-	return ""
-}
-
-// getEthernetSpeed returns the Ethernet network speed
-func getEthernetSpeed() string {
-	interfaceName, err := getDefaultInterface()
-	if err != nil {
-		logrus.Debugf("Failed to get default interface: %v", err)
-		return ""
-	}
-	if interfaceName == "" {
-		logrus.Debug("No default interface found")
-		return ""
+	if speed == "" || speed == "Unknown!" {
+		switch networkType {
+		case config.NetworkTypeIB:
+			speed = "50 Gbps"
+		case config.NetworkTypeRDMA:
+			speed = "100 Gbps"
+		default:
+			speed = "10 Gbps"
+		}
 	}
 
-	speed := getInterfaceSpeed(interfaceName)
-	if speed == "" {
-		logrus.Debugf("Failed to get speed for interface %s", interfaceName)
-	}
 	return speed
 }
 
-// getDefaultInterface returns the default network interface
-func getDefaultInterface() (string, error) {
-	cmdIp := exec.Command("sh", "-c", "ip route | grep default | awk '{print $5}'")
-	interfaceOutput, err := cmdIp.Output()
+func getIBNetworkSpeed(ctx context.Context, runner external.RunnerInterface) (string, error) {
+	output, err := runner.Exec(ctx, "ibstatus")
 	if err != nil {
-		return "", fmt.Errorf("failed to get default interface: %w", err)
+		return "", errors.Annotate(err, "ibstatus")
 	}
 
-	interfaceName := strings.TrimSpace(string(interfaceOutput))
+	matches := ibSpeedPattern.FindStringSubmatch(output)
+	if len(matches) > 1 {
+		return matches[1] + " Gb/sec", nil
+	}
+
+	return "", nil
+}
+
+// getEthernetSpeed returns the Ethernet network speed
+func getEthernetSpeed(ctx context.Context, runner external.RunnerInterface) (string, error) {
+	interfaceName, err := getDefaultInterface(ctx, runner)
+	if err != nil {
+		return "", errors.Annotate(err, "get default interface")
+	}
 	if interfaceName == "" {
-		return "", fmt.Errorf("no default interface found")
+		return "", errors.New("no default interface found")
+	}
+
+	speed, err := getInterfaceSpeed(ctx, runner, interfaceName)
+	if err != nil {
+		return "", errors.Annotatef(err, "get interface speed for %s", interfaceName)
+	}
+	return speed, nil
+}
+
+// getDefaultInterface returns the default network interface
+func getDefaultInterface(ctx context.Context, runner external.RunnerInterface) (string, error) {
+	output, err := runner.Exec(ctx, "ip route | grep default | awk '{print $5}'")
+	if err != nil {
+		return "", errors.Annotate(err, "failed to get default interface")
+	}
+
+	interfaceName := strings.TrimSpace(output)
+	if interfaceName == "" {
+		return "", errors.New("no default interface found")
 	}
 	return interfaceName, nil
 }
 
 // getInterfaceSpeed returns the speed of a network interface
-func getInterfaceSpeed(interfaceName string) string {
+func getInterfaceSpeed(ctx context.Context, runner external.RunnerInterface, interfaceName string) (string, error) {
 	if interfaceName == "" {
-		return ""
+		return "", errors.New("empty interface name")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
-	defer cancel()
-
-	cmdEthtool := exec.CommandContext(ctx, "ethtool", interfaceName)
-	ethtoolOutput, err := cmdEthtool.CombinedOutput()
+	output, err := runner.Exec(ctx, "ethtool", interfaceName)
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			logrus.Error("Timeout while getting interface speed")
-		} else {
-			logrus.Debugf("Failed to get interface speed for %s: %v", interfaceName, err)
-		}
-		return ""
+		return "", errors.Annotatef(err, "failed to get interface speed for %s", interfaceName)
 	}
 
-	matches := ethSpeedPattern.FindStringSubmatch(string(ethtoolOutput))
+	matches := ethSpeedPattern.FindStringSubmatch(output)
 	if len(matches) > 2 {
-		return matches[1] + " " + matches[2]
+		return strings.TrimSpace(matches[1] + " " + matches[2]), nil
 	}
 
-	logrus.Debugf("No speed found in ethtool output for interface %s", interfaceName)
-	return ""
+	return "", errors.Errorf("no speed found in ethtool output for interface %s", interfaceName)
 }
