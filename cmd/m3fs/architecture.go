@@ -111,19 +111,12 @@ type ArchDiagram struct {
 	mu sync.RWMutex
 }
 
-// ===== Constructors and Core Functions =====
-
-// NewArchDiagram creates a new ArchDiagram with default configuration
-func NewArchDiagram(cfg *config.Config) *ArchDiagram {
+// NewArchDiagram creates a new ArchDiagram.
+func NewArchDiagram(cfg *config.Config) (*ArchDiagram, error) {
 	if cfg == nil {
-		logrus.Warn("Creating ArchDiagram with nil config")
-		cfg = &config.Config{
-			Name:        "default",
-			NetworkType: "ethernet",
-		}
+		return nil, errors.Errorf("config is nil")
 	}
 
-	cfg = setDefaultConfig(cfg)
 	baseRenderer := render.NewDiagramRenderer(cfg)
 
 	archDiagram := &ArchDiagram{
@@ -144,18 +137,7 @@ func NewArchDiagram(cfg *config.Config) *ArchDiagram {
 	archDiagram.dataProvider = dataProvider
 	archDiagram.archRenderer = render.NewArchRenderer(baseRenderer, dataProvider)
 
-	return archDiagram
-}
-
-// setDefaultConfig sets cluster.yml values for configuration
-func setDefaultConfig(cfg *config.Config) *config.Config {
-	if cfg.Name == "" {
-		cfg.Name = "cluster.yml"
-	}
-	if cfg.NetworkType == "" {
-		cfg.NetworkType = "ethernet"
-	}
-	return cfg
+	return archDiagram, nil
 }
 
 // Generate generates an architecture diagram
