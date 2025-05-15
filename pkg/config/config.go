@@ -89,6 +89,14 @@ type Clickhouse struct {
 	TCPPort       int      `yaml:"tcpPort"`
 }
 
+// Grafana is the grafana config definition
+type Grafana struct {
+	ContainerName string `yaml:"containerName"`
+	Nodes         []string
+	NodeGroups    []string `yaml:"nodeGroups"`
+	Port          int      `yaml:"port"`
+}
+
 // Monitor is the monitor config definition
 type Monitor struct {
 	ContainerName string `yaml:"containerName"`
@@ -145,6 +153,7 @@ type Client struct {
 type Services struct {
 	Fdb        Fdb
 	Clickhouse Clickhouse
+	Grafana    Grafana
 	Monitor    Monitor
 	Mgmtd      Mgmtd
 	Meta       Meta
@@ -237,6 +246,12 @@ func (c *Config) parseNodeGroupToNodes(nodeGroupMap map[string]*NodeGroup) {
 		nodeGroup := nodeGroupMap[nodeGroupName]
 		for _, node := range nodeGroup.Nodes {
 			c.Services.Clickhouse.Nodes = append(c.Services.Clickhouse.Nodes, node.Name)
+		}
+	}
+	for _, nodeGroupName := range c.Services.Grafana.NodeGroups {
+		nodeGroup := nodeGroupMap[nodeGroupName]
+		for _, node := range nodeGroup.Nodes {
+			c.Services.Grafana.Nodes = append(c.Services.Grafana.Nodes, node.Name)
 		}
 	}
 	for _, nodeGroupName := range c.Services.Monitor.NodeGroups {
@@ -346,6 +361,12 @@ func (c *Config) SetValidate(workDir, registry string) error {
 			true,
 		},
 		{
+			"grafana",
+			c.Services.Grafana.Nodes,
+			c.Services.Grafana.NodeGroups,
+			true,
+		},
+		{
 			"monitor",
 			c.Services.Monitor.Nodes,
 			c.Services.Monitor.NodeGroups,
@@ -449,6 +470,10 @@ func (c *Config) validImages() error {
 			image:   c.Images.Clickhouse,
 		},
 		{
+			imgName: "grafana",
+			image:   c.Images.Grafana,
+		},
+		{
 			imgName: "3fs",
 			image:   c.Images.FFFS,
 		},
@@ -483,6 +508,10 @@ func NewConfigWithDefaults() *Config {
 				User:          "default",
 				Password:      "password",
 				TCPPort:       8999,
+			},
+			Grafana: Grafana{
+				ContainerName: "3fs-grafana",
+				Port:          3000,
 			},
 			Monitor: Monitor{
 				ContainerName: "3fs-monitor",
@@ -530,6 +559,10 @@ func NewConfigWithDefaults() *Config {
 			Clickhouse: Image{
 				Repo: "open3fs/clickhouse",
 				Tag:  "25.1-jammy",
+			},
+			Grafana: Image{
+				Repo: "open3fs/grafana",
+				Tag:  "12.0.0",
 			},
 		},
 	}

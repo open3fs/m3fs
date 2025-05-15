@@ -1,0 +1,15 @@
+apiVersion: 1
+
+datasources:
+  - name: Clickhouse
+    type: grafana-clickhouse-datasource
+    uid: 3fs_clickhouse_uid
+    jsonData:
+      defaultDatabase: {{.CH_Database}}
+      port: {{.CH_Port}}
+      host: "{{.CH_Host}}"
+      username: "{{.CH_Username}}"
+      tlsSkipVerify: false
+      allowUiUpdates: true
+    secureJsonData:
+      password: "{{.CH_Password}}"

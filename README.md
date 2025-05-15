@@ -288,3 +288,6 @@ Since version 20250410, 3fs image ships with fio and USRBIO engine. You can benc
 ```
 docker exec -it 3fs-client fio -numjobs=1 -fallocate=none -ioengine=external:/usr/lib/hf3fs_usrbio.so -direct=1 -rw=read -bs=4MB -group_reporting -size=200MB -time_based -runtime=300 -iodepth=1  -name=/mnt/3fs/test0 -mountpoint=/mnt/3fs
 ```
+
+## Grafana
+Default username/password of grafana is admin/admin.

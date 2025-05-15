@@ -116,6 +116,10 @@ services:
     password: "password"
     # TCP port for Clickhouse
     tcpPort: 8999
+  grafana:
+    nodes: 
+      - node1
+	port: 3000
 images:
   registry: "{{ .registry }}"
   3fs:
@@ -128,6 +132,9 @@ images:
   clickhouse:
     repo: "open3fs/clickhouse"
     tag: "25.1-jammy"
+  grafana:
+    repo: "open3fs/grafana"
+    tag: "12.0.0"
 `
 
 func createSampleConfig(ctx *cli.Context) error {

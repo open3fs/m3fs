@@ -94,6 +94,7 @@ func (s *downloadImagesStepSuite) SetupTest() {
 	s.images = []*downloadImageInfo{
 		newDownloadImageInfo(s.Runtime, config.ImageNameFdb),
 		newDownloadImageInfo(s.Runtime, config.ImageNameClickhouse),
+		newDownloadImageInfo(s.Runtime, config.ImageNameGrafana),
 		newDownloadImageInfo(s.Runtime, config.ImageName3FS),
 	}
 }
@@ -295,6 +296,7 @@ func (s *importArtifactStepSuite) SetupTest() {
 		newImportImageInfo(s.Runtime, config.ImageNameFdb),
 		newImportImageInfo(s.Runtime, config.ImageNameClickhouse),
 		newImportImageInfo(s.Runtime, config.ImageName3FS),
+		newImportImageInfo(s.Runtime, config.ImageNameGrafana),
 	}
 }
 

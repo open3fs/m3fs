@@ -39,6 +39,7 @@ const (
 	RuntimeArtifactFilePathsKey = "artifact/file_paths"
 
 	RuntimeClickhouseTmpDirKey      = "clickhouse/tmp_dir"
+	RuntimeGrafanaTmpDirKey         = "grafana/tmp_dir"
 	RuntimeMonitorTmpDirKey         = "monitor/tmp_dir"
 	RuntimeFdbClusterFileContentKey = "fdb/cluster_file_content"
 	RuntimeMgmtdServerAddressesKey  = "mgmtd/server_addresses"

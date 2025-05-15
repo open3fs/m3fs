@@ -51,6 +51,7 @@ func (s *configSuite) newConfig() *Config {
 	}
 	cfg.Services.Fdb.Nodes = []string{"node1"}
 	cfg.Services.Clickhouse.Nodes = []string{"node1"}
+	cfg.Services.Grafana.Nodes = []string{"node1"}
 	cfg.Services.Monitor.Nodes = []string{"node1"}
 	cfg.Services.Mgmtd.Nodes = []string{"node1"}
 	cfg.Services.Meta.Nodes = []string{"node1"}
@@ -321,6 +322,7 @@ func (s *configSuite) TestParseNodeGroup() {
 	})
 	cfg.Services.Fdb.NodeGroups = []string{"gp1"}
 	cfg.Services.Clickhouse.NodeGroups = []string{"gp1"}
+	cfg.Services.Grafana.NodeGroups = []string{"gp1"}
 	cfg.Services.Monitor.NodeGroups = []string{"gp1"}
 	cfg.Services.Mgmtd.NodeGroups = []string{"gp1"}
 	cfg.Services.Meta.NodeGroups = []string{"gp1"}
@@ -353,6 +355,7 @@ func (s *configSuite) TestParseNodeGroup() {
 	serviceNodes := []string{"node1", "gp1-node(1.1.1.1)", "gp1-node(1.1.1.2)", "gp1-node(1.1.1.3)"}
 	s.Equal(serviceNodes, cfg.Services.Fdb.Nodes)
 	s.Equal(serviceNodes, cfg.Services.Clickhouse.Nodes)
+	s.Equal(serviceNodes, cfg.Services.Grafana.Nodes)
 	s.Equal(serviceNodes, cfg.Services.Monitor.Nodes)
 	s.Equal(serviceNodes, cfg.Services.Mgmtd.Nodes)
 	s.Equal(serviceNodes, cfg.Services.Meta.Nodes)

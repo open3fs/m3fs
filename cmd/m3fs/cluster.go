@@ -29,6 +29,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/fdb"
+	"github.com/open3fs/m3fs/pkg/grafana"
 	"github.com/open3fs/m3fs/pkg/log"
 	"github.com/open3fs/m3fs/pkg/meta"
 	"github.com/open3fs/m3fs/pkg/mgmtd"
@@ -166,6 +167,7 @@ func createCluster(ctx *cli.Context) error {
 	runner, err := task.NewRunner(cfg,
 		new(fdb.CreateFdbClusterTask),
 		new(clickhouse.CreateClickhouseClusterTask),
+		new(grafana.CreateGrafanaServiceTask),
 		new(monitor.CreateMonitorTask),
 		new(mgmtd.CreateMgmtdServiceTask),
 		new(meta.CreateMetaServiceTask),
@@ -198,6 +200,7 @@ func deleteCluster(ctx *cli.Context) error {
 		new(meta.DeleteMetaServiceTask),
 		new(mgmtd.DeleteMgmtdServiceTask),
 		new(monitor.DeleteMonitorTask),
+		new(grafana.DeleteGrafanaServiceTask),
 		new(clickhouse.DeleteClickhouseClusterTask),
 		new(fdb.DeleteFdbClusterTask),
 	}

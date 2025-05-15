@@ -48,6 +48,7 @@ func (s *downloadImagesStep) Execute(ctx context.Context) error {
 	imageNames := []string{
 		config.ImageNameFdb,
 		config.ImageNameClickhouse,
+		config.ImageNameGrafana,
 		config.ImageName3FS,
 	}
 	for _, imageName := range imageNames {
@@ -219,6 +220,7 @@ func (s *importArtifactStep) Execute(ctx context.Context) error {
 		config.ImageNameFdb,
 		config.ImageNameClickhouse,
 		config.ImageName3FS,
+		config.ImageNameGrafana,
 	}
 	for _, imageName := range imageNames {
 		err := s.loadImage(ctx, imageName, tempDir)

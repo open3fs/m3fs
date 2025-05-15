@@ -26,6 +26,7 @@ const (
 	ImageNameFdb        = "foundationdb"
 	ImageNameClickhouse = "clickhouse"
 	ImageName3FS        = "3fs"
+	ImageNameGrafana    = "grafana"
 )
 
 // Image is component container image config
@@ -39,6 +40,7 @@ type Images struct {
 	Registry   string `yaml:"registry"`
 	FFFS       Image  `yaml:"3fs"` // 3fs cannot used as struct filed name, so we use fffs instead
 	Clickhouse Image  `yaml:"clickhouse"`
+	Grafana    Image  `yaml:"grafana"`
 	Fdb        Image  `yaml:"fdb"`
 }
 
@@ -50,6 +52,8 @@ func (i *Images) getImage(imgName string) (Image, error) {
 		return i.FFFS, nil
 	case ImageNameClickhouse:
 		return i.Clickhouse, nil
+	case ImageNameGrafana:
+		return i.Grafana, nil
 	default:
 		return Image{}, errors.Errorf("invalid image name %s", imgName)
 	}
