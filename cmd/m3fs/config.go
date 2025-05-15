@@ -108,6 +108,14 @@ services:
   clickhouse:
     nodes: 
       - node1
+    # Database name for Clickhouse
+    db: "3fs"
+    # User for Clickhouse authentication
+    user: "default"
+    # Password for Clickhouse authentication
+    password: "password"
+    # TCP port for Clickhouse
+    tcpPort: 8999
 images:
   registry: "{{ .registry }}"
   3fs:

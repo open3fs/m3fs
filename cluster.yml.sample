@@ -151,6 +151,15 @@ services:
     # port defines the tcp listen port of clienthouse.
     # Default value is 8999.
     tcpPort: 8999
+    # Database name for Clickhouse.
+    # Default value is "3fs".
+    db: "3fs"
+    # User for Clickhouse authentication.
+    # Default value is "default".
+    user: "default"
+    # Password for Clickhouse authentication.
+    # Default value is "password".
+    password: "JT-AI-3fs"
     nodes: 
       - node1
     # nodeGroups defines the node groups that deploy the clickhouse service
