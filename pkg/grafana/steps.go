@@ -108,19 +108,19 @@ func (s *genGrafanaYamlStep) Execute(ctx context.Context) error {
 			"CH_Password": s.Runtime.Services.Clickhouse.Password,
 		})
 	if err != nil {
-		return errors.Annotatef(err, "generate datasource provisioning file")
+		return errors.Annotate(err, "generate datasource provisioning file")
 	}
 
 	err = s.genYaml(ctx, path.Join(workdir, "dashboards"), "dashboard.yaml",
 		DashboardProvisionTmpl, nil)
 	if err != nil {
-		return errors.Annotatef(err, "generate dashboard provisioning file")
+		return errors.Annotate(err, "generate dashboard provisioning file")
 	}
 
 	err = s.genYaml(ctx, path.Join(workdir, "dashboards"), "3fs.json",
 		DashboardTmpl, nil)
 	if err != nil {
-		return errors.Annotatef(err, "generate dashboard provisioning file")
+		return errors.Annotate(err, "generate 3fs dashboard json file")
 	}
 
 	return nil

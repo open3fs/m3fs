@@ -31,7 +31,7 @@ import (
 
 var suiteRun = suite.Run
 
-func TestGenGrafanaConfigStep(t *testing.T) {
+func TestGenGrafanaConfigStepSuite(t *testing.T) {
 	suiteRun(t, &genGrafanaConfigStepSuite{})
 }
 
@@ -67,7 +67,7 @@ func (s *genGrafanaConfigStepSuite) Test() {
 	s.MockFS.AssertExpectations(s.T())
 }
 
-func TestStartContainerStep(t *testing.T) {
+func TestStartContainerStepSuite(t *testing.T) {
 	suiteRun(t, &startContainerStepSuite{})
 }
 
@@ -111,7 +111,7 @@ func (s *startContainerStepSuite) TestStartContainerStep() {
 
 	s.MockDocker.AssertExpectations(s.T())
 }
-func TestRmContainerStep(t *testing.T) {
+func TestRmContainerStepSuite(t *testing.T) {
 	suiteRun(t, &rmContainerStepSuite{})
 }
 
