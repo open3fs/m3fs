@@ -159,7 +159,7 @@ services:
     user: "default"
     # Password for Clickhouse authentication.
     # Default value is "password".
-    password: "JT-AI-3fs"
+    password: "Pass@w0rd"
     nodes: 
       - node1
     # nodeGroups defines the node groups that deploy the clickhouse service
