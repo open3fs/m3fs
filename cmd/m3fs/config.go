@@ -119,7 +119,8 @@ services:
   grafana:
     nodes: 
       - node1
-	port: 3000
+    # TCP port for Grafana
+    port: 3000
 images:
   registry: "{{ .registry }}"
   3fs:

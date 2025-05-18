@@ -165,6 +165,13 @@ services:
     # nodeGroups defines the node groups that deploy the clickhouse service
     nodeGroups:
       - group1
+  grafana:
+    # containerName defines the container name of grafana.
+    # Default value is 3fs-grafana.
+    containerName: 3fs-grafana
+    # port defines the listen port of grafana.
+    # Default value is 3000.
+    port: 3000
 images:
   # registry is the domain of image registry.
   registry: ""
