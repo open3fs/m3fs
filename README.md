@@ -291,3 +291,7 @@ docker exec -it 3fs-client fio -numjobs=1 -fallocate=none -ioengine=external:/us
 
 ## Grafana
 Default username/password of grafana is admin/admin.
+
+## Related Projects
+
+[3fs-gcp](https://github.com/knachiketa04/3fs-gcp): A terraform project used to deploy 3FS on Google Cloud using m3fs.
