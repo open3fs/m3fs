@@ -179,19 +179,12 @@ func (s *genAdminCliShellStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	mgmtdServerAddresses, ok := s.Runtime.LoadString(task.RuntimeMgmtdServerAddressesKey)
-	if !ok {
-		return errors.Errorf("Failed to value of %s", task.RuntimeMgmtdServerAddressesKey)
-	}
-
 	t, err := template.New("admin_cli.sh").Parse(string(AdminCliShellTmpl))
 	if err != nil {
 		return errors.Annotatef(err, "parse template of admin_cli.sh.tmpl")
 	}
 	data := new(bytes.Buffer)
-	err = t.Execute(data, map[string]string{
-		"MgmtdServerAddresses": mgmtdServerAddresses,
-	})
+	err = t.Execute(data, nil)
 	if err != nil {
 		return errors.Annotate(err, "execute template of admin_cli.sh.tmpl")
 	}

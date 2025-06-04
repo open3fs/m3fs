@@ -469,7 +469,6 @@ func (s *genAdminCliShellStepSuite) SetupTest() {
 
 	s.step = &genAdminCliShellStep{}
 	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
-	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey, `["RDMA://10.16.28.58:8000"]`)
 }
 
 func (s *genAdminCliShellStepSuite) Test() {
@@ -477,8 +476,7 @@ func (s *genAdminCliShellStepSuite) Test() {
 		Return("/tmp/3fs-mgmtd.xxx", nil)
 	shellContent := `#!/bin/bash
 
-docker exec -it 3fs-mgmtd /opt/3fs/bin/admin_cli -cfg /opt/3fs/etc/admin_cli.toml ` +
-		`--config.mgmtd_client.mgmtd_server_addresses '["RDMA://10.16.28.58:8000"]' \'$@\'
+docker exec -it 3fs-mgmtd /opt/3fs/bin/admin_cli -cfg /opt/3fs/etc/admin_cli.toml -- $@
 `
 	s.MockLocalFS.On("WriteFile", "/tmp/3fs-mgmtd.xxx/admin_cli.sh",
 		[]byte(shellContent), os.FileMode(0777)).Return(nil)
