@@ -143,6 +143,7 @@ def generate_commands(old_map, new_map, new_targets_map):
                 and to_add_with_node_id[node_id] in to_add
             ):
                 add_target = to_add_with_node_id[node_id]
+            node_id, disk_index, _ = new_targets_map[add_target]
             cmds += [
                 f"/opt/3fs/admin_cli.sh create-target --node-id {node_id} --disk-index {disk_index} --target-id {add_target} --chain-id {chain_id}  --use-new-chunk-engine",
                 f"/opt/3fs/admin_cli.sh update-chain --mode add {chain_id} {add_target}",
