@@ -1,0 +1,13 @@
+-- create database {{ .Database }}
+CREATE DATABASE {{ .Database }} WITH OWNER {{ .User }} ENCODING 'UTF8' TEMPLATE template0;
+-- create replica user on new created database
+CREATE USER {{ .ReplicaUsername }} WITH ENCRYPTED PASSWORD '{{ .ReplicaPassword }}';
+GRANT REPLICATION ON DATABASE {{ .Database }} TO {{ .ReplicaUsername }};
+-- create readonly user on new created database
+CREATE USER {{ .ReadOnlyUsername }} WITH ENCRYPTED PASSWORD '{{ .ReadOnlyPassword }}';
+-- grant readonly privileges to {{ .ReadOnlyUsername }} on database {{ .Database }};
+GRANT CONNECT ON DATABASE {{ .Database }} TO {{ .ReadOnlyUsername }};
+\c {{ .Database }};
+GRANT USAGE ON SCHEMA public TO {{ .ReadOnlyUsername }};
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO {{ .ReadOnlyUsername }};
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO {{ .ReadOnlyUsername }};

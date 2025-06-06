@@ -102,6 +102,12 @@ services:
   monitor:
     nodes:
       - node1
+  postgresql:
+    nodes: 
+      - node1
+    username: "postgres"
+    password: "pgpassword"
+    port: 5432
   fdb:
     nodes: 
       - node1
@@ -136,6 +142,9 @@ images:
   grafana:
     repo: "open3fs/grafana"
     tag: "12.0.0"
+  postgresql:
+    repo: "open3fs/postgresql"
+    tag: "17.5.0"
 `
 
 func createSampleConfig(ctx *cli.Context) error {
