@@ -92,6 +92,7 @@ func (s *downloadImagesStepSuite) SetupTest() {
 	s.step.Init(s.Runtime, s.Logger)
 	s.Runtime.Store(task.RuntimeArtifactTmpDirKey, "/tmp/3fs")
 	s.images = []*downloadImageInfo{
+		newDownloadImageInfo(s.Runtime, config.ImageNamePg),
 		newDownloadImageInfo(s.Runtime, config.ImageNameFdb),
 		newDownloadImageInfo(s.Runtime, config.ImageNameClickhouse),
 		newDownloadImageInfo(s.Runtime, config.ImageNameGrafana),
@@ -293,6 +294,7 @@ func (s *importArtifactStepSuite) SetupTest() {
 	s.SetupRuntime()
 	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
 	s.images = []*importImageInfo{
+		newImportImageInfo(s.Runtime, config.ImageNamePg),
 		newImportImageInfo(s.Runtime, config.ImageNameFdb),
 		newImportImageInfo(s.Runtime, config.ImageNameClickhouse),
 		newImportImageInfo(s.Runtime, config.ImageName3FS),

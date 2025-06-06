@@ -69,19 +69,31 @@ type NodeGroup struct {
 	Nodes    []Node  `yaml:"-"`
 }
 
+// Pg is the pg db config definition
+type Pg struct {
+	ContainerName    string   `yaml:"containerName"`
+	Nodes            []string `yaml:"nodes"`
+	NodeGroups       []string `yaml:"nodeGroups"`
+	Port             int      `yaml:"port"`
+	Username         string   `yaml:"username,omitempty"`
+	Password         string   `yaml:"password,omitempty"`
+	ReadOnlyUsername string   `yaml:"readOnlyUsername,omitempty"`
+	ReadOnlyPassword string   `yaml:"readOnlyPassword,omitempty"`
+}
+
 // Fdb is the fdb config definition
 type Fdb struct {
-	ContainerName      string `yaml:"containerName"`
-	Nodes              []string
+	ContainerName      string   `yaml:"containerName"`
+	Nodes              []string `yaml:"nodes"`
 	NodeGroups         []string `yaml:"nodeGroups"`
-	Port               int
+	Port               int      `yaml:"port"`
 	WaitClusterTimeout time.Duration
 }
 
 // Clickhouse is the click house config definition
 type Clickhouse struct {
-	ContainerName string `yaml:"containerName"`
-	Nodes         []string
+	ContainerName string   `yaml:"containerName"`
+	Nodes         []string `yaml:"nodes"`
 	NodeGroups    []string `yaml:"nodeGroups"`
 	Db            string   `yaml:"db"`
 	User          string   `yaml:"user"`
@@ -91,24 +103,24 @@ type Clickhouse struct {
 
 // Grafana is the grafana config definition
 type Grafana struct {
-	ContainerName string `yaml:"containerName"`
-	Nodes         []string
+	ContainerName string   `yaml:"containerName"`
+	Nodes         []string `yaml:"nodes"`
 	NodeGroups    []string `yaml:"nodeGroups"`
 	Port          int      `yaml:"port"`
 }
 
 // Monitor is the monitor config definition
 type Monitor struct {
-	ContainerName string `yaml:"containerName"`
-	Nodes         []string
+	ContainerName string   `yaml:"containerName"`
+	Nodes         []string `yaml:"nodes"`
 	NodeGroups    []string `yaml:"nodeGroups"`
 	Port          int      `yaml:"port"`
 }
 
 // Mgmtd is the 3fs mgmtd service config definition
 type Mgmtd struct {
-	ContainerName  string `yaml:"containerName"`
-	Nodes          []string
+	ContainerName  string   `yaml:"containerName"`
+	Nodes          []string `yaml:"nodes"`
 	NodeGroups     []string `yaml:"nodeGroups"`
 	ChunkSize      int      `yaml:"chunkSize"`
 	StripeSize     int      `yaml:"stripeSize"`
@@ -118,8 +130,8 @@ type Mgmtd struct {
 
 // Meta is the 3fs meta service config definition
 type Meta struct {
-	ContainerName  string `yaml:"containerName"`
-	Nodes          []string
+	ContainerName  string   `yaml:"containerName"`
+	Nodes          []string `yaml:"nodes"`
 	NodeGroups     []string `yaml:"nodeGroups"`
 	RDMAListenPort int      `yaml:"rdmaListenPort,omitempty"`
 	TCPListenPort  int      `yaml:"tcpListenPort,omitempty"`
@@ -127,8 +139,8 @@ type Meta struct {
 
 // Storage is the 3fs storage config definition
 type Storage struct {
-	ContainerName     string `yaml:"containerName"`
-	Nodes             []string
+	ContainerName     string   `yaml:"containerName"`
+	Nodes             []string `yaml:"nodes"`
 	NodeGroups        []string `yaml:"nodeGroups"`
 	DiskType          DiskType `yaml:"diskType,omitempty"`
 	SectorSize        int      `yaml:"sectorSize,omitempty"`
@@ -143,14 +155,15 @@ type Storage struct {
 
 // Client is the 3fs client config definition
 type Client struct {
-	ContainerName  string `yaml:"containerName"`
-	Nodes          []string
+	ContainerName  string   `yaml:"containerName"`
+	Nodes          []string `yaml:"nodes"`
 	NodeGroups     []string `yaml:"nodeGroups"`
 	HostMountpoint string   `yaml:"hostMountpoint"`
 }
 
 // Services is the services config definition
 type Services struct {
+	Pg         Pg `yaml:"postgresql"`
 	Fdb        Fdb
 	Clickhouse Clickhouse
 	Grafana    Grafana
@@ -236,6 +249,12 @@ func (c *Config) parseNodeGroupToNodes(nodeGroupMap map[string]*NodeGroup) {
 		c.Nodes = append(c.Nodes, nodeGroup.Nodes...)
 	}
 
+	for _, nodeGroupName := range c.Services.Pg.NodeGroups {
+		nodeGroup := nodeGroupMap[nodeGroupName]
+		for _, node := range nodeGroup.Nodes {
+			c.Services.Pg.Nodes = append(c.Services.Pg.Nodes, node.Name)
+		}
+	}
 	for _, nodeGroupName := range c.Services.Fdb.NodeGroups {
 		nodeGroup := nodeGroupMap[nodeGroupName]
 		for _, node := range nodeGroup.Nodes {
@@ -337,6 +356,13 @@ func (c *Config) SetValidate(workDir, registry string) error {
 		}
 	}
 
+	if c.Services.Pg.Username == "" {
+		return errors.New("services.postgresql.username is required")
+	}
+	if c.Services.Pg.Password == "" {
+		return errors.New("services.postgresql.password is required")
+	}
+
 	nodeGroupMap, err := c.parseValidateNodeGroups(nodeHostSet)
 	if err != nil {
 		return errors.Trace(err)
@@ -348,6 +374,12 @@ func (c *Config) SetValidate(workDir, registry string) error {
 		nodeGroups []string
 		require    bool
 	}{
+		{
+			"postgresql",
+			c.Services.Pg.Nodes,
+			c.Services.Pg.NodeGroups,
+			true,
+		},
 		{
 			"fdb",
 			c.Services.Fdb.Nodes,
@@ -462,6 +494,10 @@ func (c *Config) validImages() error {
 		image   Image
 	}{
 		{
+			imgName: "pg",
+			image:   c.Images.Pg,
+		},
+		{
 			imgName: "fdb",
 			image:   c.Images.Fdb,
 		},
@@ -497,6 +533,14 @@ func NewConfigWithDefaults() *Config {
 		NetworkType: NetworkTypeRDMA,
 		LogLevel:    "INFO",
 		Services: Services{
+			Pg: Pg{
+				ContainerName:    "3fs-postgres",
+				Port:             5432,
+				Username:         "postgres",
+				Password:         "pgpassword",
+				ReadOnlyUsername: "postgres_readonly",
+				ReadOnlyPassword: "pgpassword_readonly",
+			},
 			Fdb: Fdb{
 				ContainerName:      "3fs-fdb",
 				Port:               4500,
@@ -551,6 +595,10 @@ func NewConfigWithDefaults() *Config {
 			FFFS: Image{
 				Repo: "open3fs/3fs",
 				Tag:  "20250410",
+			},
+			Pg: Image{
+				Repo: "open3fs/postgresql",
+				Tag:  "17.5.0",
 			},
 			Fdb: Image{
 				Repo: "open3fs/foundationdb",
