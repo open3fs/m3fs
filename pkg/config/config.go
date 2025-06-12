@@ -77,6 +77,7 @@ type Pg struct {
 	Port             int      `yaml:"port"`
 	Username         string   `yaml:"username,omitempty"`
 	Password         string   `yaml:"password,omitempty"`
+	Database         string   `yaml:"database,omitempty"`
 	ReadOnlyUsername string   `yaml:"readOnlyUsername,omitempty"`
 	ReadOnlyPassword string   `yaml:"readOnlyPassword,omitempty"`
 }
@@ -538,6 +539,7 @@ func NewConfigWithDefaults() *Config {
 				Port:             5432,
 				Username:         "postgres",
 				Password:         "pgpassword",
+				Database:         "open3fs",
 				ReadOnlyUsername: "postgres_readonly",
 				ReadOnlyPassword: "pgpassword_readonly",
 			},

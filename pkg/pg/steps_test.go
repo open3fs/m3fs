@@ -20,17 +20,20 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	"gorm.io/gorm"
 
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
+	"github.com/open3fs/m3fs/pkg/task"
 	ttask "github.com/open3fs/m3fs/tests/task"
 )
 
 var suiteRun = suite.Run
 
-func TestRunContainerStep(t *testing.T) {
+func TestRunContainerStepSuite(t *testing.T) {
 	suiteRun(t, &runContainerStepSuite{})
 }
 
@@ -193,7 +196,7 @@ func (s *runContainerStepSuite) TestMkdirDirFailed() {
 	s.MockFS.AssertExpectations(s.T())
 }
 
-func TestRmContainerStep(t *testing.T) {
+func TestRmContainerStepSuite(t *testing.T) {
 	suiteRun(t, &rmContainerStepSuite{})
 }
 
@@ -240,4 +243,74 @@ func (s *rmContainerStepSuite) TestRmDirFailed() {
 
 	s.MockRunner.AssertExpectations(s.T())
 	s.MockDocker.AssertExpectations(s.T())
+}
+
+func TestInitResourceModelsStepSuite(t *testing.T) {
+	suiteRun(t, &initResourceModelsStepSuite{})
+}
+
+type initResourceModelsStepSuite struct {
+	ttask.StepSuite
+
+	step *initResourceModelsStep
+}
+
+func (s *initResourceModelsStepSuite) SetupSuite() {
+
+	s.StepSuite.SetupSuite()
+	s.CreateTables = false
+}
+
+func (s *initResourceModelsStepSuite) SetupTest() {
+	s.StepSuite.SetupTest()
+
+	s.step = &initResourceModelsStep{}
+	connArgs := s.ConnectionArgs()
+	s.Cfg.Nodes = []config.Node{{Name: "test", Host: connArgs.Host}}
+	s.Cfg.Services.Pg.Nodes = []string{"test"}
+	s.Cfg.Services.Pg.Port = connArgs.Port
+	s.Cfg.Services.Pg.Username = connArgs.User
+	s.Cfg.Services.Pg.Password = connArgs.Password
+	s.Cfg.Services.Pg.Database = s.ConnectionArgs().DBName
+	s.SetupRuntime()
+	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
+}
+
+func (s *initResourceModelsStepSuite) TestInitResourceModelsStep() {
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	db := s.NewDB()
+	var clusterDB model.Cluster
+	s.NoError(db.First(&clusterDB).Error)
+	clusterExp := model.Cluster{
+		Model:             clusterDB.Model,
+		Name:              s.Cfg.Name,
+		NetworkType:       string(s.Cfg.NetworkType),
+		DiskType:          string(s.Cfg.Services.Storage.DiskType),
+		ReplicationFactor: s.Cfg.Services.Storage.ReplicationFactor,
+		DiskNumPerNode:    s.Cfg.Services.Storage.DiskNumPerNode,
+	}
+	s.Equal(clusterExp, clusterDB)
+
+	var nodeDB model.Node
+	s.NoError(db.First(&nodeDB).Error)
+	nodeExp := model.Node{
+		Model: nodeDB.Model,
+		Name:  s.Cfg.Nodes[0].Name,
+		Host:  s.Cfg.Nodes[0].Host,
+	}
+	s.Equal(nodeExp, nodeDB)
+
+	var pgServiceDB model.PgService
+	s.NoError(db.First(&pgServiceDB).Error)
+	pgServiceExp := model.PgService{
+		Model:  pgServiceDB.Model,
+		Name:   s.Cfg.Services.Pg.ContainerName,
+		NodeID: nodeExp.ID,
+	}
+	s.Equal(pgServiceExp, pgServiceDB)
+
+	cacheDB, ok := s.step.Runtime.Load(task.RuntimeDbKey)
+	s.True(ok)
+	s.NoError(model.CloseDB(cacheDB.(*gorm.DB)))
 }

@@ -45,6 +45,7 @@ const (
 	RuntimeMgmtdServerAddressesKey  = "mgmtd/server_addresses"
 	RuntimeUserTokenKey             = "user_token"
 	RuntimeAdminCliTomlKey          = "admin_cli_toml"
+	RuntimeDbKey                    = "db"
 )
 
 // Runtime contains task run info
