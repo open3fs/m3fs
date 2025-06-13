@@ -26,6 +26,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 )
 
@@ -172,6 +173,74 @@ func (s *rmContainerStep) Execute(ctx context.Context) error {
 		return errors.Annotatef(err, "rm %s", workDir)
 	}
 	s.Logger.Infof("Removed postgresql container work dir %s", workDir)
+
+	return nil
+}
+
+type initResourceModelsStep struct {
+	task.BaseStep
+}
+
+func (s *initResourceModelsStep) Execute(ctx context.Context) error {
+	node := s.Runtime.Nodes[s.Runtime.Services.Pg.Nodes[0]]
+	pgCfg := s.Runtime.Cfg.Services.Pg
+	connArg := &model.ConnectionArgs{
+		Host:     node.Host,
+		Port:     pgCfg.Port,
+		User:     pgCfg.Username,
+		Password: pgCfg.Password,
+		DBName:   pgCfg.Database,
+	}
+	db, err := model.NewDB(connArg)
+	if err != nil {
+		return errors.Annotatef(err, "create db connection to %s", connArg)
+	}
+
+	if err = model.SyncTables(db); err != nil {
+		return errors.Trace(err)
+	}
+
+	cfg := s.Runtime.Cfg
+	storCfg := cfg.Services.Storage
+	cluster := &model.Cluster{
+		Name:              cfg.Name,
+		NetworkType:       string(cfg.NetworkType),
+		DiskType:          string(storCfg.DiskType),
+		ReplicationFactor: storCfg.ReplicationFactor,
+		DiskNumPerNode:    storCfg.DiskNumPerNode,
+	}
+	if err = db.Model(new(model.Cluster)).Create(cluster).Error; err != nil {
+		return errors.Annotatef(err, "create cluster")
+	}
+
+	nodes := make([]*model.Node, 0, len(s.Runtime.Nodes))
+	for _, node := range s.Runtime.Nodes {
+		nodes = append(nodes, &model.Node{
+			Name: node.Name,
+			Host: node.Host,
+		})
+	}
+	if err = db.Model(new(model.Node)).CreateInBatches(nodes, len(nodes)).Error; err != nil {
+		return errors.Annotatef(err, "create nodes")
+	}
+
+	for _, nodeName := range cfg.Services.Pg.Nodes {
+		var node model.Node
+		err = db.Model(new(model.Node)).First(&node, "name = ?", nodeName).Error
+		if err != nil {
+			return errors.Annotatef(err, "query node %s", nodeName)
+		}
+
+		pgService := &model.PgService{
+			Name:   cfg.Services.Pg.ContainerName,
+			NodeID: node.ID,
+		}
+		if err = db.Model(new(model.PgService)).Create(pgService).Error; err != nil {
+			return errors.Annotatef(err, "create pg server of node %s", nodeName)
+		}
+	}
+
+	s.Runtime.Store(task.RuntimeDbKey, db)
 
 	return nil
 }

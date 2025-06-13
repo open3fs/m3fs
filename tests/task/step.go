@@ -18,13 +18,13 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/external"
 	"github.com/open3fs/m3fs/pkg/task"
-	"github.com/open3fs/m3fs/tests/base"
 	texternal "github.com/open3fs/m3fs/tests/external"
+	tmodel "github.com/open3fs/m3fs/tests/model"
 )
 
 // StepSuite is the base Suite for all step suites.
 type StepSuite struct {
-	base.Suite
+	tmodel.Suite
 
 	Cfg        *config.Config
 	Runtime    *task.Runtime
