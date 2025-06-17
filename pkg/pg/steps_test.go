@@ -88,6 +88,8 @@ func (s *runContainerStepSuite) testRunContainerStep(
 		Envs:        env,
 		Volumes:     vols,
 	}).Return("", nil)
+	s.MockDocker.On("Exec", "3fs-postgres", "pg_isready",
+		[]string{"-U", s.Cfg.Services.Pg.Username}).Return("", nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
 
@@ -313,4 +315,12 @@ func (s *initResourceModelsStepSuite) TestInitResourceModelsStep() {
 	cacheDB, ok := s.step.Runtime.Load(task.RuntimeDbKey)
 	s.True(ok)
 	s.NoError(model.CloseDB(cacheDB.(*gorm.DB)))
+
+	nodesMap := s.Runtime.LoadNodesMap()
+	s.True(ok)
+	s.Len(nodesMap, 1)
+	nodeCache, ok := nodesMap[nodeExp.Name]
+	s.True(ok)
+	s.Equal(nodeExp.Name, nodeCache.Name)
+	s.Equal(nodeExp.ID, nodeCache.ID)
 }

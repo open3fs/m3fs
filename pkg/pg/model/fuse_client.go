@@ -16,13 +16,10 @@ package model
 
 import "gorm.io/gorm"
 
-// Disk is the model of node disk.
-type Disk struct {
+// FuseClient is the model of 3fs fuse client.
+type FuseClient struct {
 	gorm.Model
-	Name             string
-	NodeID           uint
-	StorageServiceID uint
-	Index            int
-	SizeByte         int64
-	SerialNum        string
+	Name           string
+	NodeID         uint
+	HostMountpoint string
 }

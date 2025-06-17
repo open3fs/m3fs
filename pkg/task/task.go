@@ -176,6 +176,11 @@ func (s *BaseStep) GetErdmaSoPathKey() string {
 	return fmt.Sprintf("%s-erdma-so", s.Node.Host)
 }
 
+// GetNodeModelID returns the model ID of the node.
+func (s *BaseStep) GetNodeModelID() uint {
+	return s.Runtime.LoadNodesMap()[s.Node.Name].ID
+}
+
 // Init initializes the step with the external manager and the configuration.
 func (s *BaseStep) Init(r *Runtime, em *external.Manager, node config.Node, logger log.Interface) {
 	s.Em = em

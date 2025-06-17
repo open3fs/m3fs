@@ -22,11 +22,13 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
 	"github.com/open3fs/m3fs/pkg/log"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/utils"
 )
 
@@ -45,7 +47,8 @@ const (
 	RuntimeMgmtdServerAddressesKey  = "mgmtd/server_addresses"
 	RuntimeUserTokenKey             = "user_token"
 	RuntimeAdminCliTomlKey          = "admin_cli_toml"
-	RuntimeDbKey                    = "db"
+	RuntimeDbKey                    = "model/db"
+	RuntimeNodesMapKey              = "model/nodes_map"
 )
 
 // Runtime contains task run info
@@ -94,6 +97,24 @@ func (r *Runtime) LoadInt(key any) (int, bool) {
 	}
 
 	return valI.(int), true
+}
+
+// LoadDB retrieves the gorm.DB instance from the runtime cache.
+func (r *Runtime) LoadDB() *gorm.DB {
+	db, ok := r.Load(RuntimeDbKey)
+	if !ok {
+		return nil
+	}
+	return db.(*gorm.DB)
+}
+
+// LoadNodesMap retrieves the nodes map from the runtime cache.
+func (r *Runtime) LoadNodesMap() map[string]*model.Node {
+	nodes, ok := r.Load(RuntimeNodesMapKey)
+	if !ok {
+		return nil
+	}
+	return nodes.(map[string]*model.Node)
 }
 
 // Runner is a task runner.

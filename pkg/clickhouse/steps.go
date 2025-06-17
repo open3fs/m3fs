@@ -30,6 +30,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 )
 
@@ -183,6 +184,17 @@ func (s *startContainerStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	time.Sleep(time.Second * 5)
+
+	nodes := s.Runtime.LoadNodesMap()
+	db := s.Runtime.LoadDB()
+	err = db.Create(&model.ChService{
+		Name:   s.Runtime.Services.Clickhouse.ContainerName,
+		NodeID: nodes[s.Node.Name].ID,
+	}).Error
+	if err != nil {
+		return errors.Annotatef(err, "create ch-service of node %s in db",
+			s.Node.Name)
+	}
 
 	s.Logger.Infof("Started clickhouse container %s successfully",
 		s.Runtime.Services.Clickhouse.ContainerName)

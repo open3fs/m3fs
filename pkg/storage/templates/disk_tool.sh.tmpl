@@ -96,7 +96,9 @@ function clear_nvme_disk() {
                 # Check if disk is already mounted
                 if grep -q "${MOUNT_POINT}" /proc/mounts; then
                         echo "Unmounting ${MOUNT_POINT}..."
+                        device=$(findmnt -n -o SOURCE --target ${MOUNT_POINT})
                         umount ${MOUNT_POINT}
+                        wipefs -a $device
                 else
                         echo "${MOUNT_POINT} is not mounted. Skipping..."
                 fi

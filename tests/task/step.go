@@ -17,6 +17,7 @@ package task
 import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 	texternal "github.com/open3fs/m3fs/tests/external"
 	tmodel "github.com/open3fs/m3fs/tests/model"
@@ -31,6 +32,7 @@ type StepSuite struct {
 	MockEm     *external.Manager
 	MockRunner *texternal.MockRunner
 	MockDocker *texternal.MockDocker
+	MockDisk   *texternal.MockDisk
 	MockFS     *texternal.MockFS
 	// NOTE: external.FSInterface is not implemented for remote runner.
 	// MockFS          *texternal.MockFS
@@ -50,11 +52,13 @@ func (s *StepSuite) SetupTest() {
 
 	s.MockRunner = new(texternal.MockRunner)
 	s.MockDocker = new(texternal.MockDocker)
+	s.MockDisk = new(texternal.MockDisk)
 	s.MockFS = new(texternal.MockFS)
 	s.MockEm = &external.Manager{
 		Runner: s.MockRunner,
 		Docker: s.MockDocker,
 		FS:     s.MockFS,
+		Disk:   s.MockDisk,
 	}
 
 	s.MockLocalDocker = new(texternal.MockDocker)
@@ -78,8 +82,20 @@ func (s *StepSuite) SetupRuntime() {
 		LocalEm:  s.MockLocalEm,
 	}
 	s.Runtime.Nodes = make(map[string]config.Node, len(s.Cfg.Nodes))
+	nodesMap := make(map[string]*model.Node, len(s.Cfg.Nodes))
+	db := s.NewDB()
 	for _, node := range s.Cfg.Nodes {
 		s.Runtime.Nodes[node.Name] = node
+		nodeModel := &model.Node{
+			Name: node.Name,
+			Host: node.Host,
+		}
+		if s.CreateTables {
+			s.NoError(db.Create(nodeModel).Error)
+			nodesMap[node.Name] = nodeModel
+		}
 	}
+	s.Runtime.Store(task.RuntimeNodesMapKey, nodesMap)
+	s.Runtime.Store(task.RuntimeDbKey, db)
 	s.Runtime.Services = &s.Cfg.Services
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 )
 
@@ -100,6 +101,22 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	_, err = s.Em.Docker.Run(ctx, args)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	db := s.Runtime.LoadDB()
+	if s.Node.Name == s.Runtime.Services.Fdb.Nodes[0] {
+		if err = db.Create(new(model.FdbCluster)).Error; err != nil {
+			return errors.Annotatef(err, "create fdb cluster in db")
+		}
+	}
+
+	nodes := s.Runtime.LoadNodesMap()
+	err = db.Create(&model.FdbProcess{
+		Name:   s.Runtime.Services.Fdb.ContainerName,
+		NodeID: nodes[s.Node.Name].ID,
+	}).Error
+	if err != nil {
+		return errors.Annotatef(err, "create fdb-process of node %s in db", s.Node.Name)
 	}
 
 	s.Logger.Infof("Started fdb container %s successfully", s.Runtime.Services.Fdb.ContainerName)

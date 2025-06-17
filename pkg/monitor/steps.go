@@ -28,6 +28,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 )
 
@@ -155,6 +156,15 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	_, err = s.Em.Docker.Run(ctx, args)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	nodes := s.Runtime.LoadNodesMap()
+	db := s.Runtime.LoadDB()
+	if err = db.Create(&model.MonService{
+		Name:   s.Runtime.Services.Monitor.ContainerName,
+		NodeID: nodes[s.Node.Name].ID,
+	}).Error; err != nil {
+		return errors.Annotatef(err, "create monitor service in db")
 	}
 
 	s.Logger.Infof("Started monitor container %s successfully",

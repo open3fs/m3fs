@@ -32,7 +32,8 @@ import (
 	"github.com/open3fs/m3fs/pkg/task"
 )
 
-func getNodeIDKey(service, name string) string {
+// GetNodeIDKey returns the key for storing node ID in the runtime store.
+func GetNodeIDKey(service, name string) string {
 	return fmt.Sprintf("%s-node-%s-id-", service, name)
 }
 
@@ -56,7 +57,7 @@ func (s *gen3FSNodeIDStep) Execute(context.Context) error {
 
 	nodeIDMap := make(map[string]int, len(nodes))
 	for i, node := range nodes {
-		s.Runtime.Store(getNodeIDKey(s.service, node.Name), s.idBegin+i)
+		s.Runtime.Store(GetNodeIDKey(s.service, node.Name), s.idBegin+i)
 		nodeIDMap[node.Name] = s.idBegin + i
 	}
 	s.Logger.Debugf("Node ID map: %v", nodeIDMap)
@@ -171,7 +172,7 @@ func (s *prepare3FSConfigStep) genConfig(path, tmplName string, tmpl []byte, tmp
 }
 
 func (s *prepare3FSConfigStep) genConfigs(tmpDir string) error {
-	nodeID, _ := s.Runtime.LoadInt(getNodeIDKey(s.service, s.Node.Name))
+	nodeID, _ := s.Runtime.LoadInt(GetNodeIDKey(s.service, s.Node.Name))
 	mgmtdServerAddresses, _ := s.Runtime.LoadString(task.RuntimeMgmtdServerAddressesKey)
 
 	mainAppToml := path.Join(tmpDir, fmt.Sprintf("%s_app.toml", s.service))
@@ -291,6 +292,7 @@ type run3FSContainerStep struct {
 	serviceWorkDir string
 	extraVolumes   []*external.VolumeArgs
 	useRdmaNetwork bool
+	modelObjFunc   func(r *task.BaseStep) any
 }
 
 func (s *run3FSContainerStep) Execute(ctx context.Context) error {
@@ -341,6 +343,15 @@ func (s *run3FSContainerStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
+	if s.modelObjFunc != nil {
+		obj := s.modelObjFunc(&s.BaseStep)
+		db := s.Runtime.LoadDB()
+		if err = db.Create(obj).Error; err != nil {
+			return errors.Annotatef(err, "create %s service of node %s in db",
+				s.service, s.Node.Name)
+		}
+	}
+
 	s.Logger.Infof("Started %s container %s successfully", s.service, s.containerName)
 	return nil
 }
@@ -353,6 +364,7 @@ type Run3FSContainerStepSetup struct {
 	WorkDir        string
 	ExtraVolumes   []*external.VolumeArgs
 	UseRdmaNetwork bool
+	ModelObjFunc   func(r *task.BaseStep) any
 }
 
 // NewRun3FSContainerStepFunc is run3FSContainer factory func.
@@ -365,6 +377,7 @@ func NewRun3FSContainerStepFunc(setup *Run3FSContainerStepSetup) func() task.Ste
 			serviceWorkDir: setup.WorkDir,
 			extraVolumes:   setup.ExtraVolumes,
 			useRdmaNetwork: setup.UseRdmaNetwork,
+			modelObjFunc:   setup.ModelObjFunc,
 		}
 	}
 }

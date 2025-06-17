@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"path"
 	"text/template"
+	"time"
 
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
@@ -138,9 +139,10 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	pgCfg := s.Runtime.Services.Pg
 	args := &external.RunArgs{
 		Image:       img,
-		Name:        &s.Runtime.Services.Pg.ContainerName,
+		Name:        &pgCfg.ContainerName,
 		HostNetwork: true,
 		Detach:      common.Pointer(true),
 		Envs:        s.getContainerEvs(),
@@ -149,6 +151,22 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	_, err = s.Em.Docker.Run(ctx, args)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	timer := time.NewTimer(pgCfg.WaitReadyTimeout)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			return errors.Errorf("wait postgresql container %s ready timeout", pgCfg.ContainerName)
+		default:
+			_, err := s.Em.Docker.Exec(ctx, pgCfg.ContainerName, "pg_isready", "-U", pgCfg.Username)
+			if err != nil {
+				time.Sleep(time.Second)
+				continue
+			}
+		}
+		break
 	}
 
 	s.Logger.Infof("Started postgresql container %s successfully", s.Runtime.Services.Pg.ContainerName)
@@ -214,15 +232,19 @@ func (s *initResourceModelsStep) Execute(ctx context.Context) error {
 	}
 
 	nodes := make([]*model.Node, 0, len(s.Runtime.Nodes))
+	nodesMap := make(map[string]*model.Node, len(s.Runtime.Nodes))
 	for _, node := range s.Runtime.Nodes {
-		nodes = append(nodes, &model.Node{
+		node := &model.Node{
 			Name: node.Name,
 			Host: node.Host,
-		})
+		}
+		nodes = append(nodes, node)
+		nodesMap[node.Name] = node
 	}
 	if err = db.Model(new(model.Node)).CreateInBatches(nodes, len(nodes)).Error; err != nil {
 		return errors.Annotatef(err, "create nodes")
 	}
+	s.Runtime.Store(task.RuntimeNodesMapKey, nodesMap)
 
 	for _, nodeName := range cfg.Services.Pg.Nodes {
 		var node model.Node

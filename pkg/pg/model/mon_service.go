@@ -19,7 +19,6 @@ import "gorm.io/gorm"
 // MonService is the model of 3fs monitoring service.
 type MonService struct {
 	gorm.Model
-	Name     string
-	NodeID   uint
-	FsNodeID string
+	Name   string
+	NodeID uint
 }

@@ -34,6 +34,7 @@ type Suite struct {
 func (s *Suite) SetupSuite() {
 	s.Suite.SetupSuite()
 	s.NoError(SetupEnv())
+	s.CreateTables = true
 }
 
 // SetupTest runs before each case.

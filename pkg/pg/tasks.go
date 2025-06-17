@@ -48,6 +48,13 @@ func (t *CreatePgClusterTask) Init(r *task.Runtime, logger log.Interface) {
 				}
 			},
 		},
+		{
+			Nodes:    []config.Node{nodes[0]},
+			Parallel: true,
+			NewStep: func() task.Step {
+				return &initResourceModelsStep{}
+			},
+		},
 	})
 }
 

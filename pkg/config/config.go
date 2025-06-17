@@ -71,15 +71,16 @@ type NodeGroup struct {
 
 // Pg is the pg db config definition
 type Pg struct {
-	ContainerName    string   `yaml:"containerName"`
-	Nodes            []string `yaml:"nodes"`
-	NodeGroups       []string `yaml:"nodeGroups"`
-	Port             int      `yaml:"port"`
-	Username         string   `yaml:"username,omitempty"`
-	Password         string   `yaml:"password,omitempty"`
-	Database         string   `yaml:"database,omitempty"`
-	ReadOnlyUsername string   `yaml:"readOnlyUsername,omitempty"`
-	ReadOnlyPassword string   `yaml:"readOnlyPassword,omitempty"`
+	ContainerName    string        `yaml:"containerName"`
+	Nodes            []string      `yaml:"nodes"`
+	NodeGroups       []string      `yaml:"nodeGroups"`
+	Port             int           `yaml:"port"`
+	Username         string        `yaml:"username,omitempty"`
+	Password         string        `yaml:"password,omitempty"`
+	Database         string        `yaml:"database,omitempty"`
+	ReadOnlyUsername string        `yaml:"readOnlyUsername,omitempty"`
+	ReadOnlyPassword string        `yaml:"readOnlyPassword,omitempty"`
+	WaitReadyTimeout time.Duration `yaml:"waitReadyTimeout,omitempty"`
 }
 
 // Fdb is the fdb config definition
@@ -120,13 +121,14 @@ type Monitor struct {
 
 // Mgmtd is the 3fs mgmtd service config definition
 type Mgmtd struct {
-	ContainerName  string   `yaml:"containerName"`
-	Nodes          []string `yaml:"nodes"`
-	NodeGroups     []string `yaml:"nodeGroups"`
-	ChunkSize      int      `yaml:"chunkSize"`
-	StripeSize     int      `yaml:"stripeSize"`
-	RDMAListenPort int      `yaml:"rdmaListenPort,omitempty"`
-	TCPListenPort  int      `yaml:"tcpListenPort,omitempty"`
+	ContainerName           string        `yaml:"containerName"`
+	Nodes                   []string      `yaml:"nodes"`
+	NodeGroups              []string      `yaml:"nodeGroups"`
+	ChunkSize               int           `yaml:"chunkSize"`
+	StripeSize              int           `yaml:"stripeSize"`
+	RDMAListenPort          int           `yaml:"rdmaListenPort,omitempty"`
+	TCPListenPort           int           `yaml:"tcpListenPort,omitempty"`
+	WaitTargetOnlineTimeout time.Duration `yaml:"waitTargetOnlineTimeout,omitempty"`
 }
 
 // Meta is the 3fs meta service config definition
@@ -542,6 +544,7 @@ func NewConfigWithDefaults() *Config {
 				Database:         "open3fs",
 				ReadOnlyUsername: "postgres_readonly",
 				ReadOnlyPassword: "pgpassword_readonly",
+				WaitReadyTimeout: 30 * time.Second,
 			},
 			Fdb: Fdb{
 				ContainerName:      "3fs-fdb",
@@ -564,11 +567,12 @@ func NewConfigWithDefaults() *Config {
 				Port:          10000,
 			},
 			Mgmtd: Mgmtd{
-				ContainerName:  "3fs-mgmtd",
-				ChunkSize:      1048576,
-				StripeSize:     16,
-				RDMAListenPort: 8000,
-				TCPListenPort:  9000,
+				ContainerName:           "3fs-mgmtd",
+				ChunkSize:               1048576,
+				StripeSize:              16,
+				RDMAListenPort:          8000,
+				TCPListenPort:           9000,
+				WaitTargetOnlineTimeout: 30 * time.Second,
 			},
 			Meta: Meta{
 				ContainerName:  "3fs-meta",

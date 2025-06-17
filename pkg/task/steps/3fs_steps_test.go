@@ -15,6 +15,7 @@
 package steps
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 	ttask "github.com/open3fs/m3fs/tests/task"
 )
@@ -64,11 +66,11 @@ func (s *gen3FSNodeIDStepSuite) SetupTest() {
 func (s *gen3FSNodeIDStepSuite) TestGenNodeID() {
 	s.NoError(s.step.Execute(s.Ctx()))
 
-	idI, ok := s.Runtime.Load(getNodeIDKey("mgmtd_main", s.Cfg.Nodes[0].Name))
+	idI, ok := s.Runtime.Load(GetNodeIDKey("mgmtd_main", s.Cfg.Nodes[0].Name))
 	s.True(ok)
 	s.Equal(1, idI.(int))
 
-	idI2, ok := s.Runtime.Load(getNodeIDKey("mgmtd_main", s.Cfg.Nodes[1].Name))
+	idI2, ok := s.Runtime.Load(GetNodeIDKey("mgmtd_main", s.Cfg.Nodes[1].Name))
 	s.True(ok)
 	s.Equal(2, idI2.(int))
 }
@@ -119,7 +121,7 @@ listen_port = {{ .TCPListenPort }}
 listen_port_rdma = {{ .RDMAListenPort }}`),
 	})().(*prepare3FSConfigStep)
 	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
-	s.Runtime.Store(getNodeIDKey("mgmtd_main", s.Cfg.Nodes[0].Name), 1)
+	s.Runtime.Store(GetNodeIDKey("mgmtd_main", s.Cfg.Nodes[0].Name), 1)
 	s.fdbContent = "xxxx,xxxxx,xxxx"
 	s.Runtime.Store(task.RuntimeFdbClusterFileContentKey, s.fdbContent)
 	s.Runtime.Store(task.RuntimeAdminCliTomlKey, []byte("admin_cli"))
@@ -194,6 +196,11 @@ func (s *run3FSContainerStepSuite) SetupTest() {
 
 	s.configDir = "/root/3fs/mgmtd/config.d"
 	s.logDir = "/root/3fs/mgmtd/log"
+	s.Cfg.Nodes = append(s.Cfg.Nodes, config.Node{
+		Name: "test-node",
+		Host: "1.1.1.1",
+	})
+	s.Cfg.Services.Mgmtd.Nodes = []string{"test-node"}
 	s.SetupRuntime()
 	s.step = NewRun3FSContainerStepFunc(
 		&Run3FSContainerStepSetup{
@@ -201,8 +208,17 @@ func (s *run3FSContainerStepSuite) SetupTest() {
 			ContainerName: s.Runtime.Services.Mgmtd.ContainerName,
 			Service:       "mgmtd_main",
 			WorkDir:       "/root/3fs/mgmtd",
+			ModelObjFunc: func(s *task.BaseStep) any {
+				fsNodeID, _ := s.Runtime.LoadInt(
+					GetNodeIDKey("mgmtd_main", s.Node.Name))
+				return &model.MgmtService{
+					Name:     s.Runtime.Services.Mgmtd.ContainerName,
+					NodeID:   s.GetNodeModelID(),
+					FsNodeID: fmt.Sprintf("%d", fsNodeID),
+				}
+			},
 		})().(*run3FSContainerStep)
-	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
+	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
 	s.Runtime.Store(task.RuntimeFdbClusterFileContentKey, "xxxx")
 }
 
@@ -249,6 +265,16 @@ func (s *run3FSContainerStepSuite) testRunContainer(
 	s.MockDocker.On("Run", args).Return("", nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
+
+	var mgmtService model.MgmtService
+	s.NoError(s.NewDB().Model(new(model.MgmtService)).First(&mgmtService).Error)
+	mgmtServiceExp := model.MgmtService{
+		Model:    mgmtService.Model,
+		Name:     s.Runtime.Services.Mgmtd.ContainerName,
+		NodeID:   s.Runtime.LoadNodesMap()[s.step.Node.Name].ID,
+		FsNodeID: "0",
+	}
+	s.Equal(mgmtServiceExp, mgmtService)
 
 	s.MockRunner.AssertExpectations(s.T())
 	s.MockDocker.AssertExpectations(s.T())
@@ -425,7 +451,7 @@ func (s *remoteRunScriptStepSuite) SetupTest() {
 		},
 	)().(*remoteRunScriptStep)
 	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
-	s.Runtime.Store(getNodeIDKey("storage_main", s.Cfg.Nodes[0].Name), 1)
+	s.Runtime.Store(GetNodeIDKey("storage_main", s.Cfg.Nodes[0].Name), 1)
 	s.fdbContent = "xxxx,xxxxx,xxxx"
 	s.Runtime.Store(task.RuntimeFdbClusterFileContentKey, s.fdbContent)
 	s.Runtime.Store(task.RuntimeAdminCliTomlKey, []byte("admin_cli"))

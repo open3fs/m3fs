@@ -12,17 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package model
+package external
 
-import "gorm.io/gorm"
+import (
+	"context"
 
-// Disk is the model of node disk.
-type Disk struct {
-	gorm.Model
-	Name             string
-	NodeID           uint
-	StorageServiceID uint
-	Index            int
-	SizeByte         int64
-	SerialNum        string
+	"github.com/stretchr/testify/mock"
+
+	"github.com/open3fs/m3fs/pkg/external"
+)
+
+// MockDisk is an mock type for the DiskInterface
+type MockDisk struct {
+	mock.Mock
+	external.DiskInterface
+}
+
+// ListBlockDevices mock.
+func (m *MockDisk) ListBlockDevices(context.Context) ([]external.BlockDevice, error) {
+	arg := m.Called()
+	err1 := arg.Error(1)
+	if err1 != nil {
+		return nil, err1
+	}
+	return arg.Get(0).([]external.BlockDevice), nil
 }

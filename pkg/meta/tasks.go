@@ -15,10 +15,12 @@
 package meta
 
 import (
+	"fmt"
 	"path"
 
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/log"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 	"github.com/open3fs/m3fs/pkg/task/steps"
 )
@@ -86,6 +88,15 @@ func (t *CreateMetaServiceTask) Init(r *task.Runtime, logger log.Interface) {
 					Service:        ServiceName,
 					WorkDir:        workDir,
 					UseRdmaNetwork: true,
+					ModelObjFunc: func(s *task.BaseStep) any {
+						fsNodeID, _ := s.Runtime.LoadInt(
+							steps.GetNodeIDKey(ServiceName, s.Node.Name))
+						return &model.MetaService{
+							Name:     r.Services.Meta.ContainerName,
+							NodeID:   s.GetNodeModelID(),
+							FsNodeID: fmt.Sprintf("%d", fsNodeID),
+						}
+					},
 				},
 			),
 		},

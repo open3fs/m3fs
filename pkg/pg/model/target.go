@@ -19,6 +19,7 @@ import "gorm.io/gorm"
 // Target is the model of 3fs target.
 type Target struct {
 	gorm.Model
+	Name    string
 	DiskID  uint
 	NodeID  uint
 	ChainID uint

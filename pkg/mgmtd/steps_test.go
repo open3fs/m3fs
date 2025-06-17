@@ -24,6 +24,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 	ttask "github.com/open3fs/m3fs/tests/task"
 )
@@ -566,4 +567,181 @@ SupplementaryGids`, nil)
 	}).Return("", nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
+}
+
+func TestCreateChainAndTargetModelStepSuite(t *testing.T) {
+	suiteRun(t, &createChainAndTargetModelStepSuite{})
+}
+
+type createChainAndTargetModelStepSuite struct {
+	ttask.StepSuite
+
+	node1 *model.Node
+	node2 *model.Node
+	stor1 *model.StorageService
+	stor2 *model.StorageService
+	disk1 *model.Disk
+	disk2 *model.Disk
+	disk3 *model.Disk
+	step  *createChainAndTargetModelStep
+}
+
+func (s *createChainAndTargetModelStepSuite) SetupTest() {
+	s.StepSuite.SetupTest()
+
+	s.SetupRuntime()
+	s.node1 = &model.Node{
+		Name: "node1",
+	}
+	db := s.NewDB()
+	s.NoError(db.Model(new(model.Node)).Create(s.node1).Error)
+	s.node2 = &model.Node{
+		Name: "node2",
+	}
+	s.NoError(db.Model(new(model.Node)).Create(s.node2).Error)
+	s.stor1 = &model.StorageService{
+		NodeID:   s.node1.ID,
+		FsNodeID: "10001",
+	}
+	s.NoError(db.Model(new(model.StorageService)).Create(s.stor1).Error)
+	s.stor2 = &model.StorageService{
+		NodeID:   s.node2.ID,
+		FsNodeID: "10002",
+	}
+	s.NoError(db.Model(new(model.StorageService)).Create(s.stor2).Error)
+	s.disk1 = &model.Disk{
+		Name:             "disk1",
+		NodeID:           s.node1.ID,
+		StorageServiceID: s.stor1.ID,
+		Index:            0,
+	}
+	s.NoError(db.Model(new(model.Disk)).Create(s.disk1).Error)
+	s.disk2 = &model.Disk{
+		Name:             "disk2",
+		NodeID:           s.node2.ID,
+		StorageServiceID: s.stor2.ID,
+		Index:            0,
+	}
+	s.NoError(db.Model(new(model.Disk)).Create(s.disk2).Error)
+	s.disk3 = &model.Disk{
+		Name:             "disk3",
+		NodeID:           s.node2.ID,
+		StorageServiceID: s.stor2.ID,
+		Index:            1,
+	}
+	s.NoError(db.Model(new(model.Disk)).Create(s.disk3).Error)
+
+	s.step = &createChainAndTargetModelStep{}
+	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
+}
+
+func (s *createChainAndTargetModelStepSuite) testCreate(isDir bool) {
+	s.MockDocker.On("Exec", s.Cfg.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		`list-chains`,
+	}).Return(`ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target                          Target
+900100001  1       1             SERVING  []      101000100101(SERVING-UPTODATE)  101000200101(SERVING-UPTODATE)
+900100002  1       1             SERVING  []      101000100102(SERVING-UPTODATE)  101000200102(SERVING-UPTODATE)`, nil)
+	s.MockDocker.On("Exec", s.Cfg.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		`list-targets`,
+	}).Return(`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000100116  900100001  HEAD  SERVING      UPTODATE    10001   0          0
+101000200116  900100002  TAIL  SERVING      UPTODATE    10002   0          0
+101000100110  900100002  HEAD  SERVING      UPTODATE    10002   1          0`, nil)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	var chains []model.Chain
+	db := s.NewDB()
+	s.NoError(db.Model(new(model.Chain)).Order("id ASC").Find(&chains).Error)
+	s.Len(chains, 2)
+	chain1Exp := &model.Chain{
+		Model: chains[0].Model,
+		Name:  "900100001",
+	}
+	s.Equal(chain1Exp, &chains[0])
+	chain2Exp := &model.Chain{
+		Model: chains[1].Model,
+		Name:  "900100002",
+	}
+	s.Equal(chain2Exp, &chains[1])
+
+	var targets []model.Target
+	s.NoError(db.Model(new(model.Target)).Order("id ASC").Find(&targets).Error)
+	s.Len(targets, 3)
+	target1Exp := &model.Target{
+		Model:   targets[0].Model,
+		Name:    "101000100116",
+		DiskID:  s.disk1.ID,
+		NodeID:  s.node1.ID,
+		ChainID: chains[0].ID,
+	}
+	target2Exp := &model.Target{
+		Model:   targets[1].Model,
+		Name:    "101000200116",
+		DiskID:  s.disk2.ID,
+		NodeID:  s.node2.ID,
+		ChainID: chains[1].ID,
+	}
+	target3Exp := &model.Target{
+		Model:   targets[2].Model,
+		Name:    "101000100110",
+		DiskID:  s.disk3.ID,
+		NodeID:  s.node2.ID,
+		ChainID: chains[1].ID,
+	}
+	if isDir {
+		target1Exp.DiskID = 0
+		target2Exp.DiskID = 0
+		target3Exp.DiskID = 0
+	}
+	s.Equal(target1Exp, &targets[0])
+	s.Equal(target2Exp, &targets[1])
+	s.Equal(target3Exp, &targets[2])
+
+	s.MockDocker.AssertExpectations(s.T())
+}
+
+func (s *createChainAndTargetModelStepSuite) TestCreateWithNvme() {
+	s.testCreate(false)
+}
+
+func (s *createChainAndTargetModelStepSuite) TestCreateWithDir() {
+	s.Runtime.Cfg.Services.Storage.DiskType = config.DiskTypeDirectory
+	s.testCreate(true)
+}
+
+func (s *createChainAndTargetModelStepSuite) TestWithTargetStorServiceNotFound() {
+	s.MockDocker.On("Exec", s.Cfg.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		`list-chains`,
+	}).Return(`ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target                          Target
+900100002  1      1        SERVING  []       101000100102(SERVING-UPTODATE)  101000200102(SERVING-UPTODATE)`, nil)
+	s.MockDocker.On("Exec", s.Cfg.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		`list-targets`,
+	}).Return(`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000100110  900100002  HEAD  SERVING      UPTODATE    10003   1          0`, nil)
+
+	s.Error(s.step.Execute(s.Ctx()), "storage service not found")
+
+	s.MockDocker.AssertExpectations(s.T())
+}
+
+func (s *createChainAndTargetModelStepSuite) TestWithTargetDiskNotFound() {
+	s.MockDocker.On("Exec", s.Cfg.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		`list-chains`,
+	}).Return(`ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target                          Target
+900100002  1     1      SERVING  []       101000100102(SERVING-UPTODATE)  101000200102(SERVING-UPTODATE)`, nil)
+	s.MockDocker.On("Exec", s.Cfg.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		`list-targets`,
+	}).Return(`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000100110  900100002  HEAD  SERVING      UPTODATE    10002   3          0`, nil)
+
+	s.Error(s.step.Execute(s.Ctx()), "disk not found for storage service")
+
+	s.MockDocker.AssertExpectations(s.T())
 }
