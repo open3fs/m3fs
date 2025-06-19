@@ -123,6 +123,7 @@ services:
     port: 3000
 images:
   registry: "{{ .registry }}"
+  arch: "amd64"
   3fs:
     # If you want to run on environment not support avx512, add -avx2 to the end of the image tag, e.g. 20250410-avx2.
     repo: "open3fs/3fs"

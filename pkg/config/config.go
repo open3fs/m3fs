@@ -457,6 +457,12 @@ func (c *Config) validServiceNodes(
 }
 
 func (c *Config) validImages() error {
+	supportedArchs := []string{"amd64", "arm64"}
+	if !utils.NewSet(supportedArchs...).Contains(c.Images.Arch) {
+		return errors.Errorf("unsupported arch of images: %s, supported archs: %s",
+			c.Images.Arch, strings.Join(supportedArchs, ", "))
+	}
+
 	imgs := []struct {
 		imgName string
 		image   Image
@@ -548,6 +554,7 @@ func NewConfigWithDefaults() *Config {
 		},
 		Images: Images{
 			Registry: "",
+			Arch:     "amd64",
 			FFFS: Image{
 				Repo: "open3fs/3fs",
 				Tag:  "20250410",
