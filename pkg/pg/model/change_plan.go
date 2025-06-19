@@ -15,6 +15,7 @@
 package model
 
 import (
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -37,10 +38,15 @@ type ChangePlan struct {
 	FinishAt *time.Time
 }
 
+// String return string format of change plan
+func (p *ChangePlan) String() string {
+	return fmt.Sprintf("ChangePlan(ID=%d,Type=%s)", p.ID, p.Type)
+}
+
 // GetSteps returns steps of change plan.
-func (c *ChangePlan) GetSteps(db *gorm.DB) ([]*ChangePlanStep, error) {
+func (p *ChangePlan) GetSteps(db *gorm.DB) ([]*ChangePlanStep, error) {
 	var ret []*ChangePlanStep
-	err := db.Model(new(ChangePlanStep)).Order("id ASC").Find(&ret, "change_plan_id = ?", c.ID).Error
+	err := db.Model(new(ChangePlanStep)).Order("id ASC").Find(&ret, "change_plan_id = ?", p.ID).Error
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -53,7 +59,7 @@ func GetProcessingChangePlan(db *gorm.DB) (*ChangePlan, error) {
 	var changePlan ChangePlan
 	err := db.Model(new(ChangePlan)).First(&changePlan, "finish_at IS NULL").Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, errors.Trace(err)

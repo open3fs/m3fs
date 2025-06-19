@@ -38,6 +38,13 @@ func (m *MockDocker) Run(ctx context.Context, args *external.RunArgs) (string, e
 	return arg.String(0), nil
 }
 
+// Cp mock.
+func (m *MockDocker) Cp(ctx context.Context, src, container, containerPath string) error {
+	arg := m.Called(src, container, containerPath)
+	return arg.Error(0)
+
+}
+
 // Rm mock.
 func (m *MockDocker) Rm(ctx context.Context, name string, force bool) (string, error) {
 	arg := m.Called(name, force)

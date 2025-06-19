@@ -15,6 +15,7 @@
 package model
 
 import (
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -51,4 +52,9 @@ type ChangePlanStep struct {
 	OperationData string
 	StartAt       *time.Time
 	FinishAt      *time.Time
+}
+
+// String return string format of change plan step
+func (s *ChangePlanStep) String() string {
+	return fmt.Sprintf("ChangePlanStep(ID=%d,OperationType=%s)", s.ID, s.OperationType)
 }

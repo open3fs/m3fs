@@ -31,7 +31,7 @@ function clear_dir_disk() {
 function prepare_nvme_disk() {
         # Find NVMe disks
         NVME_DISKS=()
-        for disk in $(lsblk -d -n -o NAME,TYPE,SIZE | grep -i "nvme" | grep -i "disk" | awk '{print $1}'|sort -V);do
+        for disk in $(lsblk -d -n -o NAME,TYPE,SIZE | grep -i "disk" | awk '{print $1}'|sort -V);do
                 # Check if disk is already mounted
                 if grep -q "/dev/${disk}" /proc/mounts; then
                         echo "Disk ${disk} is already mounted. Skipping..."

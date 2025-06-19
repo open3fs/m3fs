@@ -245,6 +245,17 @@ func (s *BaseStep) GetRdmaVolumes() []*external.VolumeArgs {
 	return volumes
 }
 
+// RunAdminCli run admin cli in container
+func (s *BaseStep) RunAdminCli(ctx context.Context, container, cmd string) (string, error) {
+	out, err := s.Em.Docker.Exec(ctx, container,
+		"/opt/3fs/bin/admin_cli", "-cfg", "/opt/3fs/etc/admin_cli.toml", fmt.Sprintf("%q", cmd))
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	return out, nil
+}
+
 // LocalStep is an interface that defines the methods that all local steps must implement,
 type LocalStep interface {
 	Init(*Runtime, log.Interface)

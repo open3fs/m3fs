@@ -26,6 +26,7 @@ import (
 type DockerInterface interface {
 	GetContainer(string) string
 	Run(ctx context.Context, args *RunArgs) (out string, err error)
+	Cp(ctx context.Context, src, container, containerPath string) error
 	Rm(ctx context.Context, name string, force bool) (out string, err error)
 	Exec(context.Context, string, string, ...string) (out string, err error)
 	Load(ctx context.Context, path string) (out string, err error)
@@ -126,6 +127,15 @@ func (de *dockerExternal) Run(ctx context.Context, args *RunArgs) (out string, e
 	}
 	out, err = de.run(ctx, "docker", params...)
 	return out, errors.Trace(err)
+}
+
+func (de *dockerExternal) Cp(ctx context.Context, src, container, containerPath string) error {
+	_, err := de.run(ctx, "docker", []string{"cp", src, fmt.Sprintf("%s:%s", container, containerPath)}...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 func (de *dockerExternal) Rm(ctx context.Context, name string, force bool) (out string, err error) {

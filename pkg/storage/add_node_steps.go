@@ -15,17 +15,22 @@
 package storage
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
+	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
@@ -50,10 +55,10 @@ type fsChain struct {
 }
 
 type fsTarget struct {
-	id        targetID
-	nodeID    nodeID
-	diskIndex diskIndex
-	chainID   chainID
+	ID        targetID  `json:"id"`
+	NodeID    nodeID    `json:"node_id"`
+	DiskIndex diskIndex `json:"disk_index"`
+	ChainID   chainID   `json:"chain_id"`
 }
 
 type createTargetOpData struct {
@@ -83,7 +88,8 @@ type removeTargetOpData struct {
 }
 
 type uploadChainsOpData struct {
-	ChainsFile string `json:"chains_file"`
+	TargetChainMapping map[targetID]chainID `json:"target_chain_mapping"`
+	ChainsFile         string               `json:"chains_file"`
 }
 
 type uploadChainTableOpData struct {
@@ -109,9 +115,9 @@ func newTargetPool(targetPrefix int64, targets []fsTarget) *targetPool {
 	}
 
 	for _, target := range targets {
-		node := target.nodeID
-		disk := target.diskIndex
-		index := target.id
+		node := target.NodeID
+		disk := target.DiskIndex
+		index := target.ID
 		if _, ok := tp.currentTargetMap[node]; !ok {
 			tp.currentTargetMap[node] = make(map[diskIndex]*utils.Set[targetID])
 		}
@@ -160,15 +166,6 @@ type prepareChangePlanStep struct {
 }
 
 func (s *prepareChangePlanStep) Execute(ctx context.Context) error {
-	// TODO: check has processing change plan
-	if err := s.generateNewChangePlan(ctx); err != nil {
-		return errors.Trace(err)
-	}
-
-	return nil
-}
-
-func (s *prepareChangePlanStep) generateNewChangePlan(ctx context.Context) error {
 	db := s.Runtime.LoadDB()
 	var storServices []*model.StorService
 	err := db.Model(new(model.StorService)).Find(&storServices).Error
@@ -183,19 +180,6 @@ func (s *prepareChangePlanStep) generateNewChangePlan(ctx context.Context) error
 	var newNodes []*model.Node
 	err = db.Model(new(model.Node)).Find(&newNodes, "name IN (?) AND id NOT IN (?)",
 		storCfg.Nodes, storServiceNodeIDs).Error
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	newNodeIDs := make([]uint, len(newNodes))
-	for i, newNode := range newNodes {
-		newNodeIDs[i] = newNode.ID
-	}
-
-	planData := map[string][]uint{
-		"new_node_ids": newNodeIDs,
-	}
-	data, err := json.Marshal(planData)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -223,11 +207,23 @@ func (s *prepareChangePlanStep) generateNewChangePlan(ctx context.Context) error
 		return errors.Annotate(err, "generate change plan steps")
 	}
 
+	newNodeIDs := make([]uint, len(newNodes))
+	for i, newNode := range newNodes {
+		newNodeIDs[i] = newNode.ID
+	}
+
+	planData := map[string][]uint{
+		"new_node_ids": newNodeIDs,
+	}
+	data, err := json.Marshal(planData)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	changePlan := &model.ChangePlan{
+		Type: model.ChangePlanTypeAddStorNodes,
+		Data: string(data),
+	}
 	err = db.Transaction(func(tx *gorm.DB) error {
-		changePlan := &model.ChangePlan{
-			Type: model.ChangePlanTypeAddStorNodes,
-			Data: string(data),
-		}
 		err = tx.Model(new(model.ChangePlan)).Create(changePlan).Error
 		if err != nil {
 			return errors.Trace(err)
@@ -246,6 +242,9 @@ func (s *prepareChangePlanStep) generateNewChangePlan(ctx context.Context) error
 		return errors.Trace(err)
 	}
 
+	s.Runtime.Store(task.RuntimeChangePlanKey, changePlan)
+	s.Runtime.Store(task.RuntimeChangePlanStepsKey, steps)
+
 	return nil
 }
 
@@ -254,18 +253,20 @@ func (s *prepareChangePlanStep) generateSteps(
 	newDistribution chainDistribution,
 	currentTargets []fsTarget,
 	newTargets []fsTarget,
-) ([]model.ChangePlanStep, error) {
+) ([]*model.ChangePlanStep, error) {
 
 	storCfg := s.Runtime.Cfg.Services.Storage
 	targetPool := newTargetPool(storCfg.TargetIDPrefix, currentTargets)
 	currentTargetMap := make(map[string]fsTarget)
+	newTargetChainMap := make(map[targetID]chainID)
 	for _, target := range currentTargets {
 		// key = chainID:nodeID:diskIndex
-		key := fmt.Sprintf("%d:%d:%d", target.chainID, target.nodeID, target.diskIndex)
+		key := fmt.Sprintf("%d:%d:%d", target.ChainID, target.NodeID, target.DiskIndex)
 		currentTargetMap[key] = target
+		newTargetChainMap[target.ID] = target.ChainID
 	}
 
-	steps := []model.ChangePlanStep{{OperationType: model.ChangePlanStepOpType.CreateStorService}}
+	steps := []*model.ChangePlanStep{{OperationType: model.ChangePlanStepOpType.CreateStorService}}
 	for chainID, currentNodes := range currentDistribution {
 		newNodes, has := newDistribution[chainID]
 		if !has || currentNodes.Equal(newNodes) {
@@ -299,11 +300,12 @@ func (s *prepareChangePlanStep) generateSteps(
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
+			newTargetChainMap[targetID] = chainID
 
-			steps = append(steps, model.ChangePlanStep{
+			steps = append(steps, &model.ChangePlanStep{
 				OperationType: model.ChangePlanStepOpType.CreateTarget,
 				OperationData: createTargetData,
-			}, model.ChangePlanStep{
+			}, &model.ChangePlanStep{
 				OperationType: model.ChangePlanStepOpType.AddTargetToChain,
 				OperationData: addTargetToChainData,
 			})
@@ -317,36 +319,37 @@ func (s *prepareChangePlanStep) generateSteps(
 			}
 
 			offlineTargetData, err := utils.JsonMarshalString(offlineTargetOpData{
-				TargetID: target.id,
+				TargetID: target.ID,
 			})
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			removeTargetFromChainData, err := utils.JsonMarshalString(removeTargetFromChainOpData{
 				ChainID:  chainID,
-				TargetID: target.id,
+				TargetID: target.ID,
 			})
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 			removeTargetData, err := utils.JsonMarshalString(removeTargetOpData{
-				NodeID:   target.nodeID,
-				TargetID: target.id,
+				NodeID:   target.NodeID,
+				TargetID: target.ID,
 			})
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			if err = targetPool.Remove(target.nodeID, target.diskIndex, target.id); err != nil {
+			if err = targetPool.Remove(target.NodeID, target.DiskIndex, target.ID); err != nil {
 				return nil, errors.Trace(err)
 			}
 
-			steps = append(steps, model.ChangePlanStep{
+			delete(newTargetChainMap, target.ID)
+			steps = append(steps, &model.ChangePlanStep{
 				OperationType: model.ChangePlanStepOpType.OfflineTarget,
 				OperationData: offlineTargetData,
-			}, model.ChangePlanStep{
+			}, &model.ChangePlanStep{
 				OperationType: model.ChangePlanStepOpType.RemoveTargetFromChain,
 				OperationData: removeTargetFromChainData,
-			}, model.ChangePlanStep{
+			}, &model.ChangePlanStep{
 				OperationType: model.ChangePlanStepOpType.RemoveTarget,
 				OperationData: removeTargetData,
 			})
@@ -370,31 +373,23 @@ func (s *prepareChangePlanStep) generateSteps(
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			addTargetToChainData, err := utils.JsonMarshalString(addTargetToChainOpData{
-				TargetID: targetID,
-				ChainID:  chainID,
-			})
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
 
-			steps = append(steps, model.ChangePlanStep{
+			newTargetChainMap[targetID] = chainID
+			steps = append(steps, &model.ChangePlanStep{
 				OperationType: model.ChangePlanStepOpType.CreateTarget,
 				OperationData: createTargetData,
-			}, model.ChangePlanStep{
-				OperationType: model.ChangePlanStepOpType.AddTargetToChain,
-				OperationData: addTargetToChainData,
 			})
 		}
 	}
 
 	updateChainsData, err := utils.JsonMarshalString(uploadChainsOpData{
-		ChainsFile: "output/generated_chains.csv",
+		TargetChainMapping: newTargetChainMap,
+		ChainsFile:         "output/generated_chains.csv",
 	})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	steps = append(steps, model.ChangePlanStep{
+	steps = append(steps, &model.ChangePlanStep{
 		OperationType: model.ChangePlanStepOpType.UploadChains,
 		OperationData: updateChainsData,
 	})
@@ -406,7 +401,7 @@ func (s *prepareChangePlanStep) generateSteps(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	steps = append(steps, model.ChangePlanStep{
+	steps = append(steps, &model.ChangePlanStep{
 		OperationType: model.ChangePlanStepOpType.UploadChainTable,
 		OperationData: uploadChainTableData,
 	})
@@ -424,7 +419,7 @@ func (s *prepareChangePlanStep) generateSteps(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	steps = append(steps, model.ChangePlanStep{
+	steps = append(steps, &model.ChangePlanStep{
 		OperationType: model.ChangePlanStepOpType.CreateNewChainAndTargetModel,
 		OperationData: data,
 	})
@@ -493,10 +488,10 @@ func (s *prepareChangePlanStep) getCurrentDistribution() (chainDistribution, []f
 			return nil, nil, errors.Trace(err)
 		}
 		fsTargets[i] = fsTarget{
-			id:        targetIDI,
-			nodeID:    storService.FsNodeID,
-			diskIndex: disk.Index,
-			chainID:   chainIDI,
+			ID:        targetIDI,
+			NodeID:    storService.FsNodeID,
+			DiskIndex: disk.Index,
+			ChainID:   chainIDI,
 		}
 	}
 
@@ -566,15 +561,15 @@ func (s *prepareChangePlanStep) parseDataPlacementModel(ctx context.Context, mod
 		}
 
 		targets = append(targets, fsTarget{
-			id:        id,
-			nodeID:    nodeID,
-			diskIndex: int(diskIndex),
-			chainID:   chainID,
+			ID:        id,
+			NodeID:    nodeID,
+			DiskIndex: int(diskIndex),
+			ChainID:   chainID,
 		})
 	}
 	targetMap := make(map[int64]fsTarget)
 	for _, target := range targets {
-		targetMap[target.id] = target
+		targetMap[target.ID] = target
 	}
 
 	generatedChainsCmd, err := s.Em.Docker.Exec(ctx,
@@ -624,7 +619,7 @@ func (s *prepareChangePlanStep) parseDataPlacementModel(ctx context.Context, mod
 			if !ok {
 				return nil, nil, errors.Errorf("target not found: %d", targetID)
 			}
-			nodes.Add(diskOnNode{target.nodeID, target.diskIndex})
+			nodes.Add(diskOnNode{target.NodeID, target.DiskIndex})
 		}
 		nodeDistribution[chain.id] = nodes
 	}
@@ -650,7 +645,7 @@ func (s *prepareChangePlanStep) execDataPlacementScript(
 
 	output, err := s.Em.Docker.Exec(ctx,
 		s.Runtime.Cfg.Services.Mgmtd.ContainerName,
-		"bash", "-c", strings.Join(args, " "),
+		"bash", "-c", fmt.Sprintf("%q", strings.Join(args, " ")),
 	)
 	if err != nil {
 		return "", errors.Trace(err)
@@ -666,4 +661,420 @@ func (s *prepareChangePlanStep) execDataPlacementScript(
 	}
 	modelPath := filepath.Join(matches[1], "incidence_matrix.pickle")
 	return modelPath, nil
+}
+
+var chainTargetRe = regexp.MustCompile(`(\d+)\((\S+)\)`)
+
+type runChangePlanStep struct {
+	task.BaseStep
+}
+
+func (s *runChangePlanStep) Execute(ctx context.Context) error {
+	changePlan := s.Runtime.LoadChangePlan()
+	steps := s.Runtime.LoadChangePlanSteps()
+
+	s.Logger.Infof("Start %s", changePlan)
+
+	db := s.Runtime.LoadDB()
+	if changePlan.StartAt == nil {
+		changePlan.StartAt = common.Pointer(time.Now())
+		if err := db.Model(changePlan).Update("start_at", changePlan.StartAt).Error; err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	for _, step := range steps {
+		if step.StartAt == nil {
+			s.Logger.Infof("Running %s with %s", step, step.OperationData)
+			step.StartAt = common.Pointer(time.Now())
+			if err := db.Model(step).Update("start_at", step.StartAt).Error; err != nil {
+				return errors.Trace(err)
+			}
+		} else if step.FinishAt == nil {
+			s.Logger.Infof("Continue %s with %s", step, step.OperationData)
+		}
+		if step.FinishAt != nil {
+			s.Logger.Infof("%s already finished", step)
+			continue
+		}
+
+		err := func() error {
+			switch step.OperationType {
+			case model.ChangePlanStepOpType.CreateStorService:
+				// create storage service finished in previous task
+				return nil
+			case model.ChangePlanStepOpType.OfflineTarget:
+				return s.checkOfflineTarget(ctx, step)
+			case model.ChangePlanStepOpType.RemoveTargetFromChain:
+				return s.checkRemoveTargetFromChain(ctx, step)
+			case model.ChangePlanStepOpType.RemoveTarget:
+				return s.checkRemoveTarget(ctx, step)
+			case model.ChangePlanStepOpType.CreateTarget:
+				return s.checkCreateTarget(ctx, step)
+			case model.ChangePlanStepOpType.AddTargetToChain:
+				return s.checkAddTargetToChain(ctx, step)
+			case model.ChangePlanStepOpType.UploadChains:
+				return s.checkUploadChains(ctx, step)
+			case model.ChangePlanStepOpType.UploadChainTable:
+				return s.checkUploadChainTable(ctx, step)
+			case model.ChangePlanStepOpType.CreateNewChainAndTargetModel:
+				return s.checkCreateNewChanAndTargets(step)
+			default:
+				return errors.Errorf("invalid operation type %s", step.OperationType)
+			}
+		}()
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		step.FinishAt = common.Pointer(time.Now())
+		if err = db.Model(step).Update("finish_at", step.FinishAt).Error; err != nil {
+			return errors.Trace(err)
+		}
+
+		s.Logger.Infof("%s finished", step)
+	}
+
+	changePlan.FinishAt = common.Pointer(time.Now())
+	if err := db.Model(changePlan).Update("finish_at", changePlan.FinishAt).Error; err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (s *runChangePlanStep) runAdminCli(ctx context.Context, cmd string) (string, error) {
+	return s.RunAdminCli(ctx, s.Runtime.Services.Mgmtd.ContainerName, cmd)
+}
+
+func (s *runChangePlanStep) loadChainsInfo(ctx context.Context) (
+	map[string]string, map[string]*utils.Set[string], error) {
+
+	out, err := s.runAdminCli(ctx, "list-chains")
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	targetChainMap := map[string]string{}
+	chainTargetStatus := map[string]*utils.Set[string]{}
+	scanner := bufio.NewScanner(strings.NewReader(out))
+	scanner.Scan()
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) < 7 {
+			return nil, nil, errors.Errorf("invalid list-chains output line: %s", line)
+		}
+
+		//nolint:lll
+		/* output of list-chains:
+		   ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target                          Target
+		   900100001  1             1             SERVING  []              101000100101(SERVING-UPTODATE)  101000200101(SERVING-UPTODATE)
+		   900100002  1             1             SERVING  []              101000100102(SERVING-UPTODATE)  101000200102(SERVING-UPTODATE) */
+		chainID := parts[1]
+		for _, targetInfo := range parts[5:] {
+			matches := chainTargetRe.FindStringSubmatch(targetInfo)
+			if len(matches) == 0 {
+				return nil, nil, errors.Errorf("invalid target info of list-chains output line: %s", line)
+			}
+			targetChainMap[matches[1]] = chainID
+			set, ok := chainTargetStatus[chainID]
+			if !ok {
+				set = utils.NewSet[string]()
+				chainTargetStatus[chainID] = set
+			}
+			set.Add(matches[2])
+		}
+	}
+
+	return targetChainMap, chainTargetStatus, nil
+}
+
+func (s *runChangePlanStep) waitTargetChainTargetState(ctx context.Context, targetID targetID,
+	pubState, localState string) error {
+
+	timer := time.NewTimer(s.Runtime.Cfg.Services.Mgmtd.WaitTargetOnlineTimeout)
+	defer timer.Stop()
+	targetState := fmt.Sprintf("%s-%s", pubState, localState)
+loop:
+	for {
+		select {
+		case <-timer.C:
+			break loop
+		default:
+			targetChainMap, chainTargetStatus, err := s.loadChainsInfo(ctx)
+			if err != nil {
+				return errors.Annotate(err, "load chains info")
+			}
+			targetIDStr := strconv.FormatInt(targetID, 10)
+			targetChainID, ok := targetChainMap[targetIDStr]
+			if !ok {
+				return errors.Errorf("chain info of target %d not found", targetID)
+			}
+			if chainTargetStatus[targetChainID].Contains(targetState) {
+				return nil
+			}
+		}
+	}
+
+	return errors.Errorf("timeout to wait other target of target %d's chain to %s", targetID, targetState)
+}
+
+func (s *runChangePlanStep) checkOfflineTarget(ctx context.Context, step *model.ChangePlanStep) error {
+	offlineTarget := offlineTargetOpData{}
+	if err := json.Unmarshal([]byte(step.OperationData), &offlineTarget); err != nil {
+		return errors.Trace(err)
+	}
+
+	// a chain should has at least one serving target to serve, so we should ensure that at least another
+	//  target is up-to-date in chain before offline target
+	if err := s.waitTargetChainTargetState(ctx, offlineTarget.TargetID, "SERVING", "UPTODATE"); err != nil {
+		return errors.Trace(err)
+	}
+
+	cmd := fmt.Sprintf("offline-target --target-id %d", offlineTarget.TargetID)
+	_, err := s.runAdminCli(ctx, cmd)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if s.waitTargetState(ctx, offlineTarget.TargetID, "OFFLINE", "OFFLINE") != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (s *runChangePlanStep) waitChainHasTarget(
+	ctx context.Context, targetID targetID, chainID chainID, has bool) error {
+
+	targetIDStr := strconv.FormatInt(targetID, 10)
+	chainIDStr := strconv.FormatInt(chainID, 10)
+	hasMsg := "has"
+	if !has {
+		hasMsg = "has no"
+	}
+	timer := time.NewTimer(s.Runtime.Cfg.Services.Mgmtd.WaitTargetOnlineTimeout)
+	defer timer.Stop()
+loop:
+	for {
+		select {
+		case <-timer.C:
+			break loop
+		default:
+			targetChainMap, _, err := s.loadChainsInfo(ctx)
+			if err != nil {
+				return errors.Annotate(err, "load chains info")
+			}
+			curChainID, ok := targetChainMap[targetIDStr]
+			val := ok && chainIDStr == curChainID
+			if !has {
+				val = !val
+			}
+			if val {
+				return nil
+			}
+			time.Sleep(time.Second * 5)
+		}
+	}
+
+	return errors.Errorf("timeout to wait chain %d %s target %d", targetID, hasMsg, chainID)
+}
+
+func (s *runChangePlanStep) checkRemoveTargetFromChain(ctx context.Context, step *model.ChangePlanStep) error {
+	removeTargetFromChain := removeTargetFromChainOpData{}
+	if err := json.Unmarshal([]byte(step.OperationData), &removeTargetFromChain); err != nil {
+		return errors.Trace(err)
+	}
+
+	chainID := removeTargetFromChain.ChainID
+	targetID := removeTargetFromChain.TargetID
+	cmd := fmt.Sprintf("update-chain --mode remove %d %d", chainID, targetID)
+	_, err := s.runAdminCli(ctx, cmd)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if s.waitChainHasTarget(ctx, chainID, targetID, false) != nil {
+		return errors.Trace(err)
+	}
+
+	// when we remove target from chain, storage service targe state update has a delay,
+	// so we need to wait for a while to ensure the target state is updated
+	time.Sleep(10 * time.Second)
+
+	return nil
+}
+
+func (s *runChangePlanStep) checkRemoveTarget(ctx context.Context, step *model.ChangePlanStep) error {
+	removeTarget := removeTargetOpData{}
+	if err := json.Unmarshal([]byte(step.OperationData), &removeTarget); err != nil {
+		return errors.Trace(err)
+	}
+
+	cmd := fmt.Sprintf("remove-target --node-id %d --target-id %d",
+		removeTarget.NodeID, removeTarget.TargetID)
+	_, err := s.runAdminCli(ctx, cmd)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (s *runChangePlanStep) checkCreateTarget(ctx context.Context, step *model.ChangePlanStep) error {
+	createTarget := createTargetOpData{}
+	if err := json.Unmarshal([]byte(step.OperationData), &createTarget); err != nil {
+		return errors.Trace(err)
+	}
+
+	cmd := fmt.Sprintf("create-target --node-id %d --target-id %d --disk-index %d --chain-id %d"+
+		" --use-new-chunk-engine",
+		createTarget.NodeID, createTarget.TargetID, createTarget.DiskIndex, createTarget.ChainID)
+	_, err := s.runAdminCli(ctx, cmd)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (s *runChangePlanStep) waitTargetState(ctx context.Context, targetID targetID, pubState, localState string) error {
+	targetIDStr := strconv.FormatInt(targetID, 10)
+	timer := time.NewTimer(s.Runtime.Cfg.Services.Mgmtd.WaitTargetOnlineTimeout)
+	defer timer.Stop()
+loop:
+	for {
+		select {
+		case <-timer.C:
+			break loop
+		default:
+			out, err := s.runAdminCli(ctx, "list-targets")
+			if err != nil {
+				return errors.Trace(err)
+			}
+			scanner := bufio.NewScanner(strings.NewReader(out))
+			scanner.Scan()
+			for scanner.Scan() {
+				line := scanner.Text()
+				parts := strings.Fields(line)
+				if len(parts) < 8 {
+					return errors.Errorf("invalid list-targets output line: %s", line)
+				}
+				if targetIDStr != parts[0] {
+					continue
+				}
+				if parts[4] == localState && parts[3] == pubState {
+					return nil
+				}
+			}
+			time.Sleep(time.Second)
+		}
+	}
+
+	return errors.Errorf("timeout to wait target %d SERVING-UPTODATE", targetID)
+}
+
+func (s *runChangePlanStep) checkAddTargetToChain(ctx context.Context, step *model.ChangePlanStep) error {
+	addTargetToChain := addTargetToChainOpData{}
+	if err := json.Unmarshal([]byte(step.OperationData), &addTargetToChain); err != nil {
+		return errors.Trace(err)
+	}
+
+	cmd := fmt.Sprintf("update-chain --mode add %d %d",
+		addTargetToChain.ChainID, addTargetToChain.TargetID)
+	_, err := s.runAdminCli(ctx, cmd)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := s.waitTargetState(ctx, addTargetToChain.TargetID, "SERVING", "UPTODATE"); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (s *runChangePlanStep) checkUploadChains(ctx context.Context, step *model.ChangePlanStep) error {
+	uploadChains := uploadChainsOpData{}
+	if err := json.Unmarshal([]byte(step.OperationData), &uploadChains); err != nil {
+		return errors.Trace(err)
+	}
+
+	chainTargets := map[string][]string{}
+	for targetID, chainID := range uploadChains.TargetChainMapping {
+		chainIDStr := strconv.FormatInt(chainID, 10)
+		targetIDStr := strconv.FormatInt(targetID, 10)
+		chainTargets[chainIDStr] = append(chainTargets[chainIDStr], targetIDStr)
+	}
+	targetNum := 0
+	for _, targets := range chainTargets {
+		targetNum = len(targets)
+	}
+
+	localTmpFile, err := s.Runtime.LocalEm.FS.MkTempFile(ctx, os.TempDir())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		if err = s.Runtime.LocalEm.FS.RemoveAll(ctx, localTmpFile); err != nil {
+			s.Logger.Warnf("Failed to delete tmp file %s:%s", localTmpFile, err)
+		}
+	}()
+	sb := bytes.NewBufferString("")
+	sb.WriteString("ChainId")
+	for range targetNum {
+		sb.WriteString(",TargetId")
+	}
+	sb.WriteString("\n")
+	for chainID, targets := range chainTargets {
+		sb.WriteString(fmt.Sprintf("%s\n", strings.Join(append([]string{chainID}, targets...), ",")))
+	}
+
+	err = s.Runtime.LocalEm.FS.WriteFile(localTmpFile, sb.Bytes(), 0644)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	remoteTmpFile, err := s.Em.FS.MkTempFile(ctx, os.TempDir())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		if err = s.Em.FS.RemoveAll(ctx, remoteTmpFile); err != nil {
+			s.Logger.Warnf("Failed to delete tmp file %s:%s", remoteTmpFile, err)
+		}
+	}()
+	if err = s.Em.Runner.Scp(ctx, localTmpFile, remoteTmpFile); err != nil {
+		return errors.Trace(err)
+	}
+	if err = s.Em.Docker.Cp(ctx, remoteTmpFile, s.Runtime.Cfg.Services.Mgmtd.ContainerName,
+		uploadChains.ChainsFile); err != nil {
+
+		return errors.Trace(err)
+	}
+
+	cmd := fmt.Sprintf("upload-chains %s", uploadChains.ChainsFile)
+	_, err = s.runAdminCli(ctx, cmd)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (s *runChangePlanStep) checkUploadChainTable(ctx context.Context, step *model.ChangePlanStep) error {
+	uploadChainTable := uploadChainTableOpData{}
+	if err := json.Unmarshal([]byte(step.OperationData), &uploadChainTable); err != nil {
+		return errors.Trace(err)
+	}
+
+	cmd := fmt.Sprintf("upload-chain-table %d %s",
+		uploadChainTable.ChainTableID, uploadChainTable.ChainTableFile)
+	_, err := s.runAdminCli(ctx, cmd)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (s *runChangePlanStep) checkCreateNewChanAndTargets(step *model.ChangePlanStep) error {
+	// TODO: implement this
+	return nil
 }

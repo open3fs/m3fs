@@ -49,6 +49,9 @@ const (
 	RuntimeAdminCliTomlKey          = "admin_cli_toml"
 	RuntimeDbKey                    = "model/db"
 	RuntimeNodesMapKey              = "model/nodes_map"
+
+	RuntimeChangePlanKey      = "change_plan/plan"
+	RuntimeChangePlanStepsKey = "change_plan/steps"
 )
 
 // Runtime contains task run info
@@ -115,6 +118,24 @@ func (r *Runtime) LoadNodesMap() map[string]*model.Node {
 		return nil
 	}
 	return nodes.(map[string]*model.Node)
+}
+
+// LoadChangePlan retrieves the change plan from the runtime cache.
+func (r *Runtime) LoadChangePlan() *model.ChangePlan {
+	changePlan, ok := r.Load(RuntimeChangePlanKey)
+	if !ok {
+		return nil
+	}
+	return changePlan.(*model.ChangePlan)
+}
+
+// LoadChangePlanSteps retrieves the change plan steps from the runtime cache.
+func (r *Runtime) LoadChangePlanSteps() []*model.ChangePlanStep {
+	steps, ok := r.Load(RuntimeChangePlanStepsKey)
+	if !ok {
+		return nil
+	}
+	return steps.([]*model.ChangePlanStep)
 }
 
 // Runner is a task runner.

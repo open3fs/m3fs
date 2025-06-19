@@ -78,6 +78,7 @@ func (r *LocalRunner) NonSudoExec(ctx context.Context, command string, args ...s
 	cmd.Stdout = out
 	errOutStr, err := r.runCtx(ctx, cmd, in, errOut)
 	if err != nil {
+		r.logger.Debugf("Output of %s: %s", cmdStr, out.String())
 		return "", checkErr(err, errOutStr)
 	}
 

@@ -71,6 +71,10 @@ func (r *RemoteRunner) exec(cmd string) (string, error) {
 	if err != nil {
 		return "", errors.Annotate(err, "get session stdoutpipe")
 	}
+	errOut, err := session.StderrPipe()
+	if err != nil {
+		return "", errors.Annotate(err, "get session stderrpipe")
+	}
 
 	r.log.Debugf("Run command: %s", cmd)
 	err = session.Start(cmd)
@@ -114,9 +118,15 @@ func (r *RemoteRunner) exec(cmd string) (string, error) {
 		}
 	}
 
+	errReader := bufio.NewReader(errOut)
+	errBytes, err := io.ReadAll(errReader)
+	if err != nil {
+		r.log.Warnf("Failed to read error output of `%s`: %v", cmd, err)
+	}
 	err = session.Wait()
 	outStr := strings.ReplaceAll(string(output), requirePasswordPrefix, "")
 	r.log.Debugf("Output of `%s`: %s", cmd, outStr)
+	r.log.Debugf("Error output of `%s`: %s", cmd, string(errBytes))
 	if err != nil {
 		return "", errors.Annotatef(err, "run `%s` failed", cmd)
 	}
