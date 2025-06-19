@@ -20,7 +20,6 @@ import (
 	"context"
 	"embed"
 	"fmt"
-	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -48,8 +47,6 @@ var (
 	MgmtdMainLauncherTomlTmpl []byte
 	// MgmtdMainTomlTmpl is the template content of mgmtd_main.toml
 	MgmtdMainTomlTmpl []byte
-	// AdminCliTomlTmpl is the template content of admin_cli.toml
-	AdminCliTomlTmpl []byte
 	// AdminCliShellTmpl is the template content of admin_cli.sh
 	AdminCliShellTmpl []byte
 )
@@ -71,49 +68,10 @@ func init() {
 		panic(err)
 	}
 
-	AdminCliTomlTmpl, err = templatesFs.ReadFile("templates/admin_cli.toml.tmpl")
-	if err != nil {
-		panic(err)
-	}
-
 	AdminCliShellTmpl, err = templatesFs.ReadFile("templates/admin_cli.sh.tmpl")
 	if err != nil {
 		panic(err)
 	}
-}
-
-type genAdminCliConfigStep struct {
-	task.BaseStep
-}
-
-func (s *genAdminCliConfigStep) Execute(ctx context.Context) error {
-	mgmtdServerAddresses := make([]string, len(s.Runtime.Services.Mgmtd.Nodes))
-	port := strconv.Itoa(s.Runtime.Services.Mgmtd.RDMAListenPort)
-	for i, nodeName := range s.Runtime.Services.Mgmtd.Nodes {
-		node := s.Runtime.Nodes[nodeName]
-		mgmtdServerAddresses[i] = fmt.Sprintf(`"%s://%s"`,
-			s.Runtime.MgmtdProtocol, net.JoinHostPort(node.Host, port))
-	}
-	mgmtdServerAddressesStr := fmt.Sprintf("[%s]", strings.Join(mgmtdServerAddresses, ","))
-	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey, mgmtdServerAddressesStr)
-
-	adminCliData := map[string]any{
-		"ClusterID":            s.Runtime.Cfg.Name,
-		"MgmtdServerAddresses": mgmtdServerAddressesStr,
-	}
-	s.Logger.Debugf("Admin cli config template data: %v", adminCliData)
-	t, err := template.New("admin_cli.toml").Parse(string(AdminCliTomlTmpl))
-	if err != nil {
-		return errors.Annotatef(err, "parse template of admin_cli.toml.tmpl")
-	}
-	data := new(bytes.Buffer)
-	err = t.Execute(data, adminCliData)
-	if err != nil {
-		return errors.Annotate(err, "execute template of admin_cli.toml.tmpl")
-	}
-	s.Runtime.Store(task.RuntimeAdminCliTomlKey, data.Bytes())
-
-	return nil
 }
 
 type initClusterStep struct {

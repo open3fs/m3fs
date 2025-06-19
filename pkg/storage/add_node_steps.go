@@ -23,7 +23,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -95,11 +94,6 @@ type uploadChainsOpData struct {
 type uploadChainTableOpData struct {
 	ChainTableID   int64  `json:"chain_table_id"`
 	ChainTableFile string `json:"chain_table_file"`
-}
-
-type createTargetModelOpData struct {
-	Targets  []fsTarget `json:"targets"`
-	ChainIDs []chainID  `json:"chain_ids"`
 }
 
 // targetPool maintain assignable target
@@ -194,7 +188,7 @@ func (s *prepareChangePlanStep) Execute(ctx context.Context) error {
 	if err != nil {
 		return errors.Annotate(err, "run data_placement.py to calculate the new model")
 	}
-	newDistribution, newTargets, err := s.parseDataPlacementModel(ctx, modelPath)
+	newDistribution, _, err := s.parseDataPlacementModel(ctx, modelPath)
 	if err != nil {
 		return errors.Annotate(err, "parse new data placement model")
 	}
@@ -202,7 +196,7 @@ func (s *prepareChangePlanStep) Execute(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	steps, err := s.generateSteps(curDistribution, newDistribution, curTargets, newTargets)
+	steps, err := s.generateSteps(curDistribution, newDistribution, curTargets)
 	if err != nil {
 		return errors.Annotate(err, "generate change plan steps")
 	}
@@ -252,7 +246,6 @@ func (s *prepareChangePlanStep) generateSteps(
 	currentDistribution chainDistribution,
 	newDistribution chainDistribution,
 	currentTargets []fsTarget,
-	newTargets []fsTarget,
 ) ([]*model.ChangePlanStep, error) {
 
 	storCfg := s.Runtime.Cfg.Services.Storage
@@ -404,24 +397,8 @@ func (s *prepareChangePlanStep) generateSteps(
 	steps = append(steps, &model.ChangePlanStep{
 		OperationType: model.ChangePlanStepOpType.UploadChainTable,
 		OperationData: uploadChainTableData,
-	})
-
-	createModelData := createTargetModelOpData{
-		Targets: newTargets,
-	}
-	for chainID := range newDistribution {
-		createModelData.ChainIDs = append(createModelData.ChainIDs, chainID)
-	}
-	sort.Slice(createModelData.ChainIDs, func(i, j int) bool {
-		return createModelData.ChainIDs[i] < createModelData.ChainIDs[j]
-	})
-	data, err := utils.JsonMarshalString(createModelData)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	steps = append(steps, &model.ChangePlanStep{
-		OperationType: model.ChangePlanStepOpType.CreateNewChainAndTargetModel,
-		OperationData: data,
+	}, &model.ChangePlanStep{
+		OperationType: model.ChangePlanStepOpType.SyncChainAndTargetModel,
 	})
 
 	return steps, nil
@@ -717,8 +694,8 @@ func (s *runChangePlanStep) Execute(ctx context.Context) error {
 				return s.checkUploadChains(ctx, step)
 			case model.ChangePlanStepOpType.UploadChainTable:
 				return s.checkUploadChainTable(ctx, step)
-			case model.ChangePlanStepOpType.CreateNewChainAndTargetModel:
-				return s.checkCreateNewChanAndTargets(step)
+			case model.ChangePlanStepOpType.SyncChainAndTargetModel:
+				return s.checkSyncChainAndTargets(ctx)
 			default:
 				return errors.Errorf("invalid operation type %s", step.OperationType)
 			}
@@ -1074,7 +1051,172 @@ func (s *runChangePlanStep) checkUploadChainTable(ctx context.Context, step *mod
 	return nil
 }
 
-func (s *runChangePlanStep) checkCreateNewChanAndTargets(step *model.ChangePlanStep) error {
-	// TODO: implement this
+func (s *runChangePlanStep) checkSyncChainAndTargets(ctx context.Context) error {
+	var chains []model.Chain
+	var targets []model.Target
+	db := s.Runtime.LoadDB()
+	err := db.Model(new(model.Chain)).Find(&chains).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = db.Model(new(model.Target)).Find(&targets).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	chainMap := make(map[int64]model.Chain, len(chains))
+	for _, chain := range chains {
+		chainID, err := strconv.ParseInt(chain.Name, 10, 64)
+		if err != nil {
+			return errors.Errorf("invalid chain name %s", chain.Name)
+		}
+		chainMap[chainID] = chain
+	}
+	targetMap := make(map[int64]model.Target, len(targets))
+	for _, target := range targets {
+		targetID, err := strconv.ParseInt(target.Name, 10, 64)
+		if err != nil {
+			return errors.Errorf("invalid target name %s", target.Name)
+		}
+		targetMap[targetID] = target
+	}
+	var storServices []model.StorService
+	err = db.Model(new(model.StorService)).Find(&storServices).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	storServiceMap := make(map[int64]model.StorService, len(storServices))
+	for _, storService := range storServices {
+		storServiceMap[storService.FsNodeID] = storService
+	}
+	var disks []model.Disk
+	err = db.Model(new(model.Disk)).Find(&disks).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	diskKeyFunc := func(nodeID uint, diskIndex int) string {
+		return fmt.Sprintf("%d-%d", nodeID, diskIndex)
+	}
+	diskMap := make(map[string]model.Disk, len(disks))
+	for _, disk := range disks {
+		diskMap[diskKeyFunc(disk.NodeID, disk.Index)] = disk
+	}
+
+	fsTargets, fsChains, err := s.getFsChainsAndTargets(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = db.Transaction(func(tx *gorm.DB) error {
+		for chainIDStr, fsChain := range fsChains {
+			_, ok := chainMap[fsChain.id]
+			if ok {
+				continue
+			}
+			var chain model.Chain
+			chain.Name = chainIDStr
+			err := tx.Model(&chain).Create(&chain).Error
+			if err != nil {
+				return errors.Trace(err)
+			}
+			chainMap[fsChain.id] = chain
+		}
+
+		for _, fsTarget := range fsTargets {
+			target, ok := targetMap[fsTarget.ID]
+			if ok {
+				targetNewChain := chainMap[fsTarget.ChainID]
+				if target.ChainID != targetNewChain.ID {
+					target.ChainID = targetNewChain.ID
+					if err = tx.Model(&target).Update("chain_id", target.ChainID).Error; err != nil {
+						return errors.Trace(err)
+					}
+				}
+				continue
+			}
+			chain, ok := chainMap[fsTarget.ChainID]
+			if !ok {
+				return errors.Errorf("chain %d for target %d not found", fsTarget.ChainID, fsTarget.ID)
+			}
+			storService, ok := storServiceMap[fsTarget.NodeID]
+			if !ok {
+				return errors.Errorf("stor service %d for target %d not found", fsTarget.NodeID, fsTarget.ID)
+			}
+			disk, ok := diskMap[diskKeyFunc(storService.NodeID, fsTarget.DiskIndex)]
+			if !ok {
+				return errors.Errorf("disk for target %d not found", fsTarget.ID)
+			}
+			target = model.Target{
+				Name:    strconv.FormatInt(fsTarget.ID, 10),
+				DiskID:  disk.ID,
+				NodeID:  storService.NodeID,
+				ChainID: chain.ID,
+			}
+			target.Name = strconv.FormatInt(fsTarget.ID, 10)
+			err := tx.Model(&target).Create(&target).Error
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
+}
+
+func (s *runChangePlanStep) getFsChainsAndTargets(ctx context.Context) (
+	map[string]*fsTarget, map[string]*fsChain, error) {
+
+	out, err := s.runAdminCli(ctx, "list-targets")
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	scanner := bufio.NewScanner(strings.NewReader(out))
+	scanner.Scan()
+	targetMap := make(map[string]*fsTarget)
+	chainMap := make(map[string]*fsChain)
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) < 8 {
+			return nil, nil, errors.Errorf("invalid list-targets output line: %s", line)
+		}
+		targetIDStr := parts[0]
+		targetID, err := strconv.ParseInt(targetIDStr, 10, 64)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		chainIDStr := parts[1]
+		chainID, err := strconv.ParseInt(chainIDStr, 10, 64)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		nodeIDStr := parts[5]
+		nodeID, err := strconv.ParseInt(nodeIDStr, 10, 64)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		diskIDStr := parts[6]
+		diskID, err := strconv.ParseInt(diskIDStr, 10, 64)
+		if err != nil {
+			return nil, nil, errors.Trace(err)
+		}
+		targetMap[targetIDStr] = &fsTarget{
+			ID:        targetID,
+			NodeID:    nodeID,
+			DiskIndex: int(diskID),
+			ChainID:   chainID,
+		}
+		chain, ok := chainMap[chainIDStr]
+		if !ok {
+			chain = &fsChain{id: chainID}
+			chainMap[chainIDStr] = chain
+		}
+		chain.targetIDs = append(chain.targetIDs, targetID)
+	}
+
+	return targetMap, chainMap, nil
 }

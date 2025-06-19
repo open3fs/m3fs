@@ -35,6 +35,7 @@ type FSInterface interface {
 	MkTempFile(context.Context, string) (string, error)
 	MkdirAll(context.Context, string) error
 	RemoveAll(context.Context, string) error
+	ReadFile(context.Context, string) (string, error)
 	WriteFile(string, []byte, os.FileMode) error
 	DownloadFile(string, string) error
 	ReadRemoteFile(string) (string, error)
@@ -87,6 +88,15 @@ func (fe *fsExternal) MkTempFile(ctx context.Context, dir string) (string, error
 func (fe *fsExternal) MkdirAll(ctx context.Context, dir string) error {
 	_, err := fe.run(ctx, "mkdir", "-m", "0777", "-p", dir)
 	return errors.Trace(err)
+}
+
+func (fe *fsExternal) ReadFile(ctx context.Context, path string) (string, error) {
+	out, err := fe.run(ctx, "cat", path)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	return out, nil
 }
 
 func (fe *fsExternal) WriteFile(path string, data []byte, perm os.FileMode) error {

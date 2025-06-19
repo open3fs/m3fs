@@ -52,7 +52,7 @@ func (t *CreateMgmtdServiceTask) Init(r *task.Runtime, logger log.Interface) {
 		},
 		{
 			Nodes:   []config.Node{nodes[0]},
-			NewStep: func() task.Step { return new(genAdminCliConfigStep) },
+			NewStep: steps.NewGenAdminCliConfigStep(),
 		},
 		{
 			Nodes:    nodes,

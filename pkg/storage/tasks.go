@@ -89,6 +89,11 @@ func getServiceWorkDir(workDir string) string {
 // CreateStorageServiceTask is a task for creating 3fs storage services.
 type CreateStorageServiceTask struct {
 	task.BaseTask
+
+	// StorageNodes is the nodes name of new storage nodes
+	StorageNodes []string
+	// BeginNodeID is the begin node id  of new storage nodes
+	BeginNodeID int
 }
 
 // Init initializes the task.
@@ -98,14 +103,22 @@ func (t *CreateStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 
 	storage := r.Cfg.Services.Storage
 	workDir := getServiceWorkDir(r.WorkDir)
-	nodes := make([]config.Node, len(storage.Nodes))
-	for i, node := range storage.Nodes {
+	nodes := make([]config.Node, len(t.StorageNodes))
+	for i, node := range t.StorageNodes {
 		nodes[i] = r.Nodes[node]
 	}
 	t.SetSteps([]task.StepConfig{
 		{
 			Nodes:   []config.Node{nodes[0]},
-			NewStep: steps.NewGen3FSNodeIDStepFunc(ServiceName, 10001, storage.Nodes),
+			NewStep: steps.NewGenAdminCliConfigStep(),
+		},
+		{
+			Nodes:   []config.Node{t.Runtime.Nodes[t.Runtime.Cfg.Services.Mgmtd.Nodes[0]]},
+			NewStep: steps.NewSetupFdbClusterFileContentStepFun(t.Runtime.WorkDir),
+		},
+		{
+			Nodes:   []config.Node{nodes[0]},
+			NewStep: steps.NewGen3FSNodeIDStepFunc(ServiceName, t.BeginNodeID, t.StorageNodes),
 		},
 		{
 			Nodes:    nodes,
@@ -224,6 +237,46 @@ func (t *DeleteStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 					string(storage.DiskType),
 					"clear",
 				}),
+		},
+	})
+}
+
+// PrepareChangePlanTask is a task for prepare add storage node change plan.
+type PrepareChangePlanTask struct {
+	task.BaseTask
+}
+
+// Init initializes the task.
+func (t *PrepareChangePlanTask) Init(r *task.Runtime, logger log.Interface) {
+	t.BaseTask.SetName("PrepareChangePlanTask")
+	t.BaseTask.Init(r, logger)
+	mgmtNode := r.Nodes[r.Cfg.Services.Mgmtd.Nodes[0]]
+	t.SetSteps([]task.StepConfig{
+		{
+			Nodes: []config.Node{mgmtNode},
+			NewStep: func() task.Step {
+				return new(prepareChangePlanStep)
+			},
+		},
+	})
+}
+
+// RunChangePlanTask is a task for run change plan.
+type RunChangePlanTask struct {
+	task.BaseTask
+}
+
+// Init initializes the task.
+func (t *RunChangePlanTask) Init(r *task.Runtime, logger log.Interface) {
+	t.BaseTask.SetName("RunChangePlanTask")
+	t.BaseTask.Init(r, logger)
+	mgmtNode := r.Nodes[r.Cfg.Services.Mgmtd.Nodes[0]]
+	t.SetSteps([]task.StepConfig{
+		{
+			Nodes: []config.Node{mgmtNode},
+			NewStep: func() task.Step {
+				return new(runChangePlanStep)
+			},
 		},
 	})
 }

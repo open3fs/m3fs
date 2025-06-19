@@ -17,10 +17,12 @@ package steps
 import (
 	"bytes"
 	"context"
+	"embed"
 	"fmt"
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"text/template"
@@ -30,7 +32,24 @@ import (
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
 	"github.com/open3fs/m3fs/pkg/task"
+	"github.com/open3fs/m3fs/pkg/utils"
 )
+
+var (
+	//go:embed templates/*.tmpl
+	templatesFs embed.FS
+
+	// AdminCliTomlTmpl is the template content of admin_cli.toml
+	AdminCliTomlTmpl []byte
+)
+
+func init() {
+	var err error
+	AdminCliTomlTmpl, err = templatesFs.ReadFile("templates/admin_cli.toml.tmpl")
+	if err != nil {
+		panic(err)
+	}
+}
 
 // GetNodeIDKey returns the key for storing node ID in the runtime store.
 func GetNodeIDKey(service, name string) string {
@@ -76,6 +95,81 @@ func NewGen3FSNodeIDStepFunc(service string, idBegin int, nodes []string) func()
 	}
 }
 
+type setupFdbClusterFileContentStep struct {
+	task.BaseStep
+	workDir string
+}
+
+func (s *setupFdbClusterFileContentStep) Execute(ctx context.Context) error {
+	_, ok := s.Runtime.Load(task.RuntimeFdbClusterFileContentKey)
+	if ok {
+		return nil
+	}
+	fp := filepath.Join(s.workDir, "mgmtd", "config.d", "fdb.cluster")
+	content, err := s.Em.FS.ReadFile(ctx, fp)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	s.Runtime.Store(task.RuntimeFdbClusterFileContentKey, content)
+	return nil
+}
+
+// NewSetupFdbClusterFileContentStepFun is the generate 3fs fdb cluster file content step factory func.
+func NewSetupFdbClusterFileContentStepFun(workDir string) func() task.Step {
+	return func() task.Step {
+		return &setupFdbClusterFileContentStep{
+			workDir: workDir,
+		}
+	}
+}
+
+type genAdminCliConfigStep struct {
+	task.BaseStep
+}
+
+func (s *genAdminCliConfigStep) Execute(ctx context.Context) error {
+	_, ok := s.Runtime.Load(task.RuntimeAdminCliTomlKey)
+	if ok {
+		return nil
+	}
+
+	mgmtdServerAddresses := make([]string, len(s.Runtime.Services.Mgmtd.Nodes))
+	port := strconv.Itoa(s.Runtime.Services.Mgmtd.RDMAListenPort)
+	for i, nodeName := range s.Runtime.Services.Mgmtd.Nodes {
+		node := s.Runtime.Nodes[nodeName]
+		mgmtdServerAddresses[i] = fmt.Sprintf(`"%s://%s"`,
+			s.Runtime.MgmtdProtocol, net.JoinHostPort(node.Host, port))
+	}
+	mgmtdServerAddressesStr := fmt.Sprintf("[%s]", strings.Join(mgmtdServerAddresses, ","))
+	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey, mgmtdServerAddressesStr)
+
+	adminCliData := map[string]any{
+		"ClusterID":            s.Runtime.Cfg.Name,
+		"MgmtdServerAddresses": mgmtdServerAddressesStr,
+	}
+	s.Logger.Debugf("Admin cli config template data: %v", adminCliData)
+	t, err := template.New("admin_cli.toml").Parse(string(AdminCliTomlTmpl))
+	if err != nil {
+		return errors.Annotatef(err, "parse template of admin_cli.toml.tmpl")
+	}
+	data := new(bytes.Buffer)
+	err = t.Execute(data, adminCliData)
+	if err != nil {
+		return errors.Annotate(err, "execute template of admin_cli.toml.tmpl")
+	}
+	s.Runtime.Store(task.RuntimeAdminCliTomlKey, data.Bytes())
+
+	return nil
+}
+
+// NewGenAdminCliConfigStep is the generate 3fs node id step factory func.
+func NewGenAdminCliConfigStep() func() task.Step {
+	return func() task.Step {
+		return &genAdminCliConfigStep{}
+	}
+}
+
 // Extra3FSConfigFile defines extra config file that custom by specific task
 type Extra3FSConfigFile struct {
 	Data     []byte
@@ -96,7 +190,7 @@ type prepare3FSConfigStep struct {
 	extraConfigFilesFunc func(*task.Runtime) []*Extra3FSConfigFile
 }
 
-func (s *prepare3FSConfigStep) getMoniterEndpoints() string {
+func (s *prepare3FSConfigStep) getMonitorEndpoints() string {
 	monitor := s.Runtime.Services.Monitor
 	endpoints := make([]string, len(monitor.Nodes))
 	for i, nodeName := range monitor.Nodes {
@@ -204,7 +298,7 @@ func (s *prepare3FSConfigStep) genConfigs(tmpDir string) error {
 
 	mainTmplData := map[string]any{
 		"LogLevel":             s.Runtime.Cfg.LogLevel,
-		"MonitorRemoteIP":      s.getMoniterEndpoints(),
+		"MonitorRemoteIP":      s.getMonitorEndpoints(),
 		"RDMAListenPort":       s.rdmaListenPort,
 		"TCPListenPort":        s.tcpListenPort,
 		"MgmtdServerAddresses": mgmtdServerAddresses,
@@ -352,8 +446,23 @@ func (s *run3FSContainerStep) Execute(ctx context.Context) error {
 		}
 	}
 
+	checkStateServices := utils.NewSet("storage_main", "meta_main")
+	if checkStateServices.Contains(s.service) {
+		nodeID, _ := s.Runtime.LoadInt(GetNodeIDKey(s.service, s.Node.Name))
+		nodeIDStr := strconv.Itoa(nodeID)
+		err = WaitServiceState(ctx, s.listNodes, nodeIDStr,
+			"HEARTBEAT_CONNECTED", s.Runtime.Cfg.WaitServiceOnlineTimeout)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
 	s.Logger.Infof("Started %s container %s successfully", s.service, s.containerName)
 	return nil
+}
+
+func (s *run3FSContainerStep) listNodes(ctx context.Context) (string, error) {
+	return s.RunAdminCli(ctx, s.containerName, "list-nodes")
 }
 
 // Run3FSContainerStepSetup is a struct that holds the configuration of the run3FSContainerStep.

@@ -19,9 +19,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v3"
+	"gorm.io/gorm"
 
 	fsclient "github.com/open3fs/m3fs/pkg/3fs_client"
 	"github.com/open3fs/m3fs/pkg/artifact"
@@ -36,6 +36,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/monitor"
 	"github.com/open3fs/m3fs/pkg/network"
 	"github.com/open3fs/m3fs/pkg/pg"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/storage"
 	"github.com/open3fs/m3fs/pkg/task"
 )
@@ -99,6 +100,26 @@ var clusterCmd = &cli.Command{
 			},
 		},
 		{
+			Name:   "add-storage-nodes",
+			Usage:  "Add 3fs cluster storage nodes",
+			Action: addStorageNodes,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:        "config",
+					Aliases:     []string{"c"},
+					Usage:       "Path to the cluster configuration file",
+					Destination: &configFilePath,
+					Required:    true,
+				},
+				&cli.StringFlag{
+					Name:        "workdir",
+					Aliases:     []string{"w"},
+					Usage:       "Path to the working directory (default is current directory)",
+					Destination: &workDir,
+				},
+			},
+		},
+		{
 			Name:   "prepare",
 			Usage:  "Prepare to deploy a 3fs cluster",
 			Action: prepareCluster,
@@ -154,7 +175,7 @@ func loadClusterConfig() (*config.Config, error) {
 	if err = cfg.SetValidate(workDir, registry); err != nil {
 		return nil, errors.Annotate(err, "validate cluster config")
 	}
-	logrus.Debugf("Cluster config: %+v", cfg)
+	log.Logger.Debugf("Cluster config: %+v", cfg)
 
 	return cfg, nil
 }
@@ -173,7 +194,10 @@ func createCluster(ctx *cli.Context) error {
 		new(monitor.CreateMonitorTask),
 		new(mgmtd.CreateMgmtdServiceTask),
 		new(meta.CreateMetaServiceTask),
-		new(storage.CreateStorageServiceTask),
+		&storage.CreateStorageServiceTask{
+			StorageNodes: cfg.Services.Storage.Nodes,
+			BeginNodeID:  10001,
+		},
 		new(mgmtd.InitUserAndChainTask),
 		new(fsclient.Create3FSClientServiceTask),
 	)
@@ -262,5 +286,109 @@ func drawClusterArchitecture(ctx *cli.Context) error {
 	}
 
 	fmt.Println(diagram.Render())
+	return nil
+}
+
+func setupDB(cfg *config.Config) (*gorm.DB, error) {
+	dbCfg := cfg.Services.Pg
+	dbNode := cfg.Services.Pg.Nodes[0]
+	for _, node := range cfg.Nodes {
+		if node.Name != dbNode {
+			continue
+		}
+
+		db, err := model.NewDB(&model.ConnectionArgs{
+			Host:     node.Host,
+			Port:     dbCfg.Port,
+			User:     dbCfg.Username,
+			Password: dbCfg.Password,
+			DBName:   dbCfg.Database,
+		})
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		return db, nil
+	}
+	return nil, errors.New("no db nodes found")
+}
+
+func addStorageNodes(ctx *cli.Context) error {
+	cfg, err := loadClusterConfig()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	db, err := setupDB(cfg)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	changePlan, err := model.GetProcessingChangePlan(db)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var steps []*model.ChangePlanStep
+	if changePlan != nil {
+		if changePlan.Type != model.ChangePlanTypeAddStorNodes {
+			return errors.Errorf("there are unfinished %s operation", changePlan.Type)
+		}
+		steps, err = changePlan.GetSteps(db)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
+	var tasks []task.Interface
+	if changePlan == nil {
+		tasks = append(tasks, new(storage.PrepareChangePlanTask))
+	}
+	nodesMap := make(map[string]*model.Node)
+	var storNodeIDs []uint
+	err = db.Model(new(model.StorService)).Select("node_id").Find(&storNodeIDs).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var newStorNodes []*model.Node
+	query := db.Model(new(model.Node))
+	if len(storNodeIDs) != 0 {
+		query = query.Where("id NOT IN (?)", storNodeIDs)
+	}
+	err = query.Find(&newStorNodes, "name in (?)", cfg.Services.Storage.Nodes).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if len(newStorNodes) == 0 && changePlan == nil {
+		return errors.New("No new storage nodes to add")
+	}
+	if changePlan == nil {
+		newNodeNames := make([]string, len(newStorNodes))
+		for i, node := range newStorNodes {
+			newNodeNames[i] = node.Name
+			nodesMap[node.Name] = node
+		}
+		log.Logger.Infof("Add new storage nodes: %v", newNodeNames)
+		tasks = append(tasks, &storage.CreateStorageServiceTask{
+			StorageNodes: newNodeNames,
+			BeginNodeID:  10001 + len(storNodeIDs),
+		})
+	}
+	tasks = append(tasks, new(storage.RunChangePlanTask))
+
+	runner, err := task.NewRunner(cfg, tasks...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	runner.Init()
+	runner.Runtime.Store(task.RuntimeDbKey, db)
+	runner.Runtime.Store(task.RuntimeChangePlanKey, changePlan)
+	runner.Runtime.Store(task.RuntimeChangePlanStepsKey, steps)
+	runner.Runtime.Store(task.RuntimeNodesMapKey, nodesMap)
+
+	if err = runner.Run(ctx.Context); err != nil {
+		return errors.Annotate(err, "create cluster")
+	}
+
+	log.Logger.Infof("Add storage nodes success")
+
 	return nil
 }

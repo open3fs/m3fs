@@ -23,25 +23,25 @@ import (
 
 // ChangePlanStepOpType defines ChangePlanStep operation type
 var ChangePlanStepOpType = struct {
-	CreateStorService            string
-	OfflineTarget                string
-	RemoveTarget                 string
-	RemoveTargetFromChain        string
-	CreateTarget                 string
-	AddTargetToChain             string
-	UploadChains                 string
-	UploadChainTable             string
-	CreateNewChainAndTargetModel string
+	CreateStorService       string
+	OfflineTarget           string
+	RemoveTarget            string
+	RemoveTargetFromChain   string
+	CreateTarget            string
+	AddTargetToChain        string
+	UploadChains            string
+	UploadChainTable        string
+	SyncChainAndTargetModel string
 }{
-	CreateStorService:            "create_stor_service",
-	OfflineTarget:                "offline_target",
-	RemoveTarget:                 "remove_target",
-	RemoveTargetFromChain:        "remove_target_from_chain",
-	CreateTarget:                 "create_target",
-	AddTargetToChain:             "add_target_to_chain",
-	UploadChains:                 "upload_chains",
-	UploadChainTable:             "upload_chain_table",
-	CreateNewChainAndTargetModel: "create_new_chain_and_target_model",
+	CreateStorService:       "create_stor_service",
+	OfflineTarget:           "offline_target",
+	RemoveTarget:            "remove_target",
+	RemoveTargetFromChain:   "remove_target_from_chain",
+	CreateTarget:            "create_target",
+	AddTargetToChain:        "add_target_to_chain",
+	UploadChains:            "upload_chains",
+	UploadChainTable:        "upload_chain_table",
+	SyncChainAndTargetModel: "sync_chain_and_target_model",
 }
 
 // ChangePlanStep is the model of change plan step.
