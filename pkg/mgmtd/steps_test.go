@@ -543,8 +543,8 @@ SupplementaryGids`, nil)
 		"--node_id_end", strconv.Itoa(10000 + len(s.Runtime.Services.Storage.Nodes)),
 		"--num_disks_per_node", strconv.Itoa(s.Runtime.Services.Storage.DiskNumPerNode),
 		"--num_targets_per_disk", strconv.Itoa(s.Runtime.Services.Storage.TargetNumPerDisk),
-		"--target_id_prefix", strconv.Itoa(s.Runtime.Services.Storage.TargetIDPrefix),
-		"--chain_id_prefix", strconv.Itoa(s.Runtime.Services.Storage.ChainIDPrefix),
+		"--target_id_prefix", strconv.FormatInt(s.Runtime.Services.Storage.TargetIDPrefix, 10),
+		"--chain_id_prefix", strconv.FormatInt(s.Runtime.Services.Storage.ChainIDPrefix, 10),
 		"--incidence_matrix_path", "output/DataPlacementModel-v_2-b_32-r_32-k_2-λ_32-lb_1-ub_0/incidence_matrix.pickle",
 	}).Return("", nil)
 	s.MockDocker.On("Exec", containerName, "bash", []string{
@@ -578,8 +578,8 @@ type createChainAndTargetModelStepSuite struct {
 
 	node1 *model.Node
 	node2 *model.Node
-	stor1 *model.StorageService
-	stor2 *model.StorageService
+	stor1 *model.StorService
+	stor2 *model.StorService
 	disk1 *model.Disk
 	disk2 *model.Disk
 	disk3 *model.Disk
@@ -599,35 +599,35 @@ func (s *createChainAndTargetModelStepSuite) SetupTest() {
 		Name: "node2",
 	}
 	s.NoError(db.Model(new(model.Node)).Create(s.node2).Error)
-	s.stor1 = &model.StorageService{
+	s.stor1 = &model.StorService{
 		NodeID:   s.node1.ID,
-		FsNodeID: "10001",
+		FsNodeID: 10001,
 	}
-	s.NoError(db.Model(new(model.StorageService)).Create(s.stor1).Error)
-	s.stor2 = &model.StorageService{
+	s.NoError(db.Model(new(model.StorService)).Create(s.stor1).Error)
+	s.stor2 = &model.StorService{
 		NodeID:   s.node2.ID,
-		FsNodeID: "10002",
+		FsNodeID: 10002,
 	}
-	s.NoError(db.Model(new(model.StorageService)).Create(s.stor2).Error)
+	s.NoError(db.Model(new(model.StorService)).Create(s.stor2).Error)
 	s.disk1 = &model.Disk{
-		Name:             "disk1",
-		NodeID:           s.node1.ID,
-		StorageServiceID: s.stor1.ID,
-		Index:            0,
+		Name:          "disk1",
+		NodeID:        s.node1.ID,
+		StorServiceID: s.stor1.ID,
+		Index:         0,
 	}
 	s.NoError(db.Model(new(model.Disk)).Create(s.disk1).Error)
 	s.disk2 = &model.Disk{
-		Name:             "disk2",
-		NodeID:           s.node2.ID,
-		StorageServiceID: s.stor2.ID,
-		Index:            0,
+		Name:          "disk2",
+		NodeID:        s.node2.ID,
+		StorServiceID: s.stor2.ID,
+		Index:         0,
 	}
 	s.NoError(db.Model(new(model.Disk)).Create(s.disk2).Error)
 	s.disk3 = &model.Disk{
-		Name:             "disk3",
-		NodeID:           s.node2.ID,
-		StorageServiceID: s.stor2.ID,
-		Index:            1,
+		Name:          "disk3",
+		NodeID:        s.node2.ID,
+		StorServiceID: s.stor2.ID,
+		Index:         1,
 	}
 	s.NoError(db.Model(new(model.Disk)).Create(s.disk3).Error)
 

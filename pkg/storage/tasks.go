@@ -169,10 +169,10 @@ func (t *CreateStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 					ModelObjFunc: func(s *task.BaseStep) any {
 						fsNodeID, _ := s.Runtime.LoadInt(
 							steps.GetNodeIDKey(ServiceName, s.Node.Name))
-						return &model.StorageService{
+						return &model.StorService{
 							Name:     r.Services.Storage.ContainerName,
 							NodeID:   s.GetNodeModelID(),
-							FsNodeID: fmt.Sprintf("%d", fsNodeID),
+							FsNodeID: int64(fsNodeID),
 						}
 					},
 				}),

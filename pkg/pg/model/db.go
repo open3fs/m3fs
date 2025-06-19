@@ -92,11 +92,13 @@ func SyncTables(db *gorm.DB) error {
 		new(MgmtService),
 		new(MonService),
 		new(MetaService),
-		new(StorageService),
+		new(StorService),
 		new(Disk),
 		new(Target),
 		new(Chain),
 		new(FuseClient),
+		new(ChangePlan),
+		new(ChangePlanStep),
 	)
 	if err != nil {
 		return errors.Annotatef(err, "create resource tables")

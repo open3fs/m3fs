@@ -299,8 +299,8 @@ func (s *initUserAndChainStep) initChainFiles(ctx context.Context) error {
 		"--node_id_end", strconv.Itoa(10000+len(s.Runtime.Services.Storage.Nodes)),
 		"--num_disks_per_node", strconv.Itoa(s.Runtime.Services.Storage.DiskNumPerNode),
 		"--num_targets_per_disk", strconv.Itoa(s.Runtime.Services.Storage.TargetNumPerDisk),
-		"--target_id_prefix", strconv.Itoa(s.Runtime.Services.Storage.TargetIDPrefix),
-		"--chain_id_prefix", strconv.Itoa(s.Runtime.Services.Storage.ChainIDPrefix),
+		"--target_id_prefix", strconv.FormatInt(s.Runtime.Services.Storage.TargetIDPrefix, 10),
+		"--chain_id_prefix", strconv.FormatInt(s.Runtime.Services.Storage.ChainIDPrefix, 10),
 		"--incidence_matrix_path", fmt.Sprintf("%s/incidence_matrix.pickle", dataPlacementDir),
 	)
 	if err != nil {
@@ -380,12 +380,12 @@ func (s *createChainAndTargetModelStep) createTargets(
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	scanner.Scan()
 	db := s.Runtime.LoadDB()
-	storServices := []*model.StorageService{}
-	err = db.Model(new(model.StorageService)).Find(&storServices).Error
+	storServices := []*model.StorService{}
+	err = db.Model(new(model.StorService)).Find(&storServices).Error
 	if err != nil {
 		return errors.Annotate(err, "find storage services")
 	}
-	storServiceMap := make(map[string]*model.StorageService, len(storServices))
+	storServiceMap := make(map[int64]*model.StorService, len(storServices))
 	for _, storService := range storServices {
 		storServiceMap[storService.FsNodeID] = storService
 	}
@@ -410,7 +410,10 @@ func (s *createChainAndTargetModelStep) createTargets(
 		}
 		targetID := fs[0]
 		chainID := fs[1]
-		nodeID := fs[5]
+		nodeID, err := strconv.ParseInt(fs[5], 10, 64)
+		if err != nil {
+			return errors.Annotatef(err, "parse node id %s for target '%s'", fs[5], line)
+		}
 		diskIndexStr := fs[6]
 		diskIndex, err := strconv.Atoi(diskIndexStr)
 		if err != nil {
