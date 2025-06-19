@@ -152,8 +152,8 @@ type Storage struct {
 	TCPListenPort     int      `yaml:"tcpListenPort,omitempty"`
 	ReplicationFactor int      `yaml:"replicationFactor,omitempty"`
 	TargetNumPerDisk  int      `yaml:"targetNumPerDisk,omitempty"`
-	TargetIDPrefix    int      `yaml:"targetIDPrefix,omitempty"`
-	ChainIDPrefix     int      `yaml:"chainIDPrefix,omitempty"`
+	TargetIDPrefix    int64    `yaml:"targetIDPrefix,omitempty"`
+	ChainIDPrefix     int64    `yaml:"chainIDPrefix,omitempty"`
 }
 
 // Client is the 3fs client config definition

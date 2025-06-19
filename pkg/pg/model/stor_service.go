@@ -16,10 +16,10 @@ package model
 
 import "gorm.io/gorm"
 
-// StorageService is the model of 3fs storage service.
-type StorageService struct {
+// StorService is the model of 3fs storage service.
+type StorService struct {
 	gorm.Model
 	Name     string
 	NodeID   uint
-	FsNodeID string
+	FsNodeID int64
 }

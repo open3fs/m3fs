@@ -19,19 +19,20 @@ import (
 	"strconv"
 	"strings"
 
+	"gorm.io/gorm"
+
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
 	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
-	"gorm.io/gorm"
 )
 
 type createDisksStep struct {
 	task.BaseStep
 
-	db               *gorm.DB
-	nodeID           uint
-	storageServiceID uint
+	db            *gorm.DB
+	nodeID        uint
+	storServiceID uint
 }
 
 func (s *createDisksStep) Execute(ctx context.Context) error {
@@ -41,11 +42,11 @@ func (s *createDisksStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	s.nodeID = node.ID
-	var storageService model.StorageService
+	var storageService model.StorService
 	if err := s.db.First(&storageService, "node_id = ?", s.nodeID).Error; err != nil {
 		return errors.Trace(err)
 	}
-	s.storageServiceID = storageService.ID
+	s.storServiceID = storageService.ID
 
 	devices, err := s.Em.Disk.ListBlockDevices(ctx)
 	if err != nil {
@@ -86,12 +87,12 @@ func (s *createDisksStep) createFsDisks(devices []external.BlockDevice) error {
 		}
 
 		disk := &model.Disk{
-			Name:             device.Name,
-			NodeID:           s.nodeID,
-			StorageServiceID: s.storageServiceID,
-			Index:            index,
-			SizeByte:         device.Size,
-			SerialNum:        device.Serial,
+			Name:          device.Name,
+			NodeID:        s.nodeID,
+			StorServiceID: s.storServiceID,
+			Index:         index,
+			SizeByte:      device.Size,
+			SerialNum:     device.Serial,
 		}
 		if err := s.db.Model(disk).Create(disk).Error; err != nil {
 			return errors.Trace(err)

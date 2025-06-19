@@ -14,7 +14,9 @@
 
 package utils
 
-import "github.com/open3fs/m3fs/pkg/common"
+import (
+	"github.com/open3fs/m3fs/pkg/common"
+)
 
 // Set is a set
 type Set[T comparable] map[T]struct{}
@@ -71,6 +73,18 @@ func (s Set[T]) Equal(other Set[T]) bool {
 		}
 	}
 	return true
+}
+
+// Difference returns a new set containing elements that exists in set a but not in set b
+func (s Set[T]) Difference(other Set[T]) Set[T] {
+	result := make(Set[T])
+	for item := range s {
+		if !other.Contains(item) {
+			result.Add(item)
+		}
+	}
+
+	return result
 }
 
 // NewSet creates a new Set

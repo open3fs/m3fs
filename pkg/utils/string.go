@@ -14,7 +14,12 @@
 
 package utils
 
-import "math/rand"
+import (
+	"encoding/json"
+	"math/rand"
+
+	"github.com/open3fs/m3fs/pkg/errors"
+)
 
 // RandomString generates a random string of the specified length.
 func RandomString(length int) string {
@@ -24,4 +29,13 @@ func RandomString(length int) string {
 		result[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(result)
+}
+
+// JsonMarshalString marshal obj to json string
+func JsonMarshalString(obj any) (string, error) {
+	bytes, err := json.Marshal(obj)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return string(bytes), nil
 }

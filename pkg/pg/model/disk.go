@@ -19,10 +19,10 @@ import "gorm.io/gorm"
 // Disk is the model of node disk.
 type Disk struct {
 	gorm.Model
-	Name             string
-	NodeID           uint
-	StorageServiceID uint
-	Index            int
-	SizeByte         int64
-	SerialNum        string
+	Name          string
+	NodeID        uint
+	StorServiceID uint
+	Index         int
+	SizeByte      int64
+	SerialNum     string
 }

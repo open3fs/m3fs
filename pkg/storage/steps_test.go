@@ -35,7 +35,7 @@ type createDisksStepSuite struct {
 	ttask.StepSuite
 
 	step        *createDisksStep
-	storService model.StorageService
+	storService model.StorService
 	node        model.Node
 }
 
@@ -50,7 +50,7 @@ func (s *createDisksStepSuite) SetupTest() {
 	db := s.NewDB()
 	s.NoError(db.Model(new(model.Node)).First(&s.node).Error)
 	s.storService.NodeID = s.node.ID
-	s.NoError(db.Model(new(model.StorageService)).Create(&s.storService).Error)
+	s.NoError(db.Model(new(model.StorService)).Create(&s.storService).Error)
 }
 
 func (s *createDisksStepSuite) TestCreateDisks() {
@@ -89,23 +89,23 @@ func (s *createDisksStepSuite) TestCreateDisks() {
 	s.NoError(s.NewDB().Model(new(model.Disk)).Order("id asc").Find(&disks).Error)
 	s.Len(disks, 2)
 	disk1Exp := model.Disk{
-		Model:            disks[0].Model,
-		Name:             "vda",
-		NodeID:           s.node.ID,
-		StorageServiceID: s.storService.ID,
-		Index:            0,
-		SizeByte:         10737418240,
-		SerialNum:        "1234567890",
+		Model:         disks[0].Model,
+		Name:          "vda",
+		NodeID:        s.node.ID,
+		StorServiceID: s.storService.ID,
+		Index:         0,
+		SizeByte:      10737418240,
+		SerialNum:     "1234567890",
 	}
 	s.Equal(disk1Exp, disks[0])
 	disk2Exp := model.Disk{
-		Model:            disks[1].Model,
-		Name:             "vdc1",
-		NodeID:           s.node.ID,
-		StorageServiceID: s.storService.ID,
-		Index:            1,
-		SizeByte:         10737418239,
-		SerialNum:        "1234567892",
+		Model:         disks[1].Model,
+		Name:          "vdc1",
+		NodeID:        s.node.ID,
+		StorServiceID: s.storService.ID,
+		Index:         1,
+		SizeByte:      10737418239,
+		SerialNum:     "1234567892",
 	}
 	s.Equal(disk2Exp, disks[1])
 
