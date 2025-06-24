@@ -142,18 +142,19 @@ type Meta struct {
 
 // Storage is the 3fs storage config definition
 type Storage struct {
-	ContainerName     string   `yaml:"containerName"`
-	Nodes             []string `yaml:"nodes"`
-	NodeGroups        []string `yaml:"nodeGroups"`
-	DiskType          DiskType `yaml:"diskType,omitempty"`
-	SectorSize        int      `yaml:"sectorSize,omitempty"`
-	DiskNumPerNode    int      `yaml:"diskNumPerNode,omitempty"`
-	RDMAListenPort    int      `yaml:"rdmaListenPort,omitempty"`
-	TCPListenPort     int      `yaml:"tcpListenPort,omitempty"`
-	ReplicationFactor int      `yaml:"replicationFactor,omitempty"`
-	TargetNumPerDisk  int      `yaml:"targetNumPerDisk,omitempty"`
-	TargetIDPrefix    int64    `yaml:"targetIDPrefix,omitempty"`
-	ChainIDPrefix     int64    `yaml:"chainIDPrefix,omitempty"`
+	ContainerName            string        `yaml:"containerName"`
+	Nodes                    []string      `yaml:"nodes"`
+	NodeGroups               []string      `yaml:"nodeGroups"`
+	DiskType                 DiskType      `yaml:"diskType,omitempty"`
+	SectorSize               int           `yaml:"sectorSize,omitempty"`
+	DiskNumPerNode           int           `yaml:"diskNumPerNode,omitempty"`
+	RDMAListenPort           int           `yaml:"rdmaListenPort,omitempty"`
+	TCPListenPort            int           `yaml:"tcpListenPort,omitempty"`
+	ReplicationFactor        int           `yaml:"replicationFactor,omitempty"`
+	TargetNumPerDisk         int           `yaml:"targetNumPerDisk,omitempty"`
+	TargetIDPrefix           int64         `yaml:"targetIDPrefix,omitempty"`
+	ChainIDPrefix            int64         `yaml:"chainIDPrefix,omitempty"`
+	WaitChainsServingTimeout time.Duration `yaml:"waitChainsServingTimeout,omitempty"`
 }
 
 // Client is the 3fs client config definition
@@ -361,6 +362,9 @@ func (c *Config) SetValidate(workDir, registry string) error {
 		}
 	}
 
+	if len(c.Services.Pg.Nodes) > 1 {
+		return errors.New("Currently only supports one postgresql node")
+	}
 	if c.Services.Pg.Username == "" {
 		return errors.New("services.postgresql.username is required")
 	}
@@ -450,6 +454,13 @@ func (c *Config) SetValidate(workDir, registry string) error {
 	}
 	if c.Services.Client.HostMountpoint == "" {
 		return errors.New("services.client.hostMountpoint is required")
+	}
+	if c.Services.Storage.WaitChainsServingTimeout == 0 {
+		return errors.New("services.storage.waitChainsServingTimeout is required")
+	}
+
+	if c.ServiceBasePath == "" {
+		return errors.New("serviceBasePath is required")
 	}
 
 	if c.ServiceBasePath == "" {
@@ -586,16 +597,17 @@ func NewConfigWithDefaults() *Config {
 				TCPListenPort:  9001,
 			},
 			Storage: Storage{
-				ContainerName:     "3fs-storage",
-				DiskType:          DiskTypeNvme,
-				SectorSize:        4096,
-				RDMAListenPort:    8002,
-				TCPListenPort:     9002,
-				ReplicationFactor: 2,
-				DiskNumPerNode:    1,
-				TargetNumPerDisk:  32,
-				TargetIDPrefix:    1,
-				ChainIDPrefix:     9,
+				ContainerName:            "3fs-storage",
+				DiskType:                 DiskTypeNvme,
+				SectorSize:               4096,
+				RDMAListenPort:           8002,
+				TCPListenPort:            9002,
+				ReplicationFactor:        2,
+				DiskNumPerNode:           1,
+				TargetNumPerDisk:         32,
+				TargetIDPrefix:           1,
+				ChainIDPrefix:            9,
+				WaitChainsServingTimeout: 10 * time.Minute,
 			},
 			Client: Client{
 				ContainerName:  "3fs-client",

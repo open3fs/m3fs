@@ -23,12 +23,15 @@ import (
 	"text/template"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
 	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
+	"github.com/open3fs/m3fs/pkg/task/steps"
 )
 
 var (
@@ -154,20 +157,17 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	timer := time.NewTimer(pgCfg.WaitReadyTimeout)
-	defer timer.Stop()
-	for {
-		select {
-		case <-timer.C:
-			return errors.Errorf("wait postgresql container %s ready timeout", pgCfg.ContainerName)
-		default:
+	err = steps.WaitUtilWithTimeout(ctx, fmt.Sprintf("postgresql container %s ready", pgCfg.ContainerName),
+		func() (bool, error) {
 			_, err := s.Em.Docker.Exec(ctx, pgCfg.ContainerName, "pg_isready", "-U", pgCfg.Username)
 			if err != nil {
-				time.Sleep(time.Second)
-				continue
+				s.Logger.Debugf("Run pg_isready failed: %s", err)
+				return false, nil
 			}
-		}
-		break
+			return true, nil
+		}, pgCfg.WaitReadyTimeout, time.Second)
+	if err != nil {
+		return errors.Trace(err)
 	}
 
 	s.Logger.Infof("Started postgresql container %s successfully", s.Runtime.Services.Pg.ContainerName)
@@ -210,9 +210,20 @@ func (s *initResourceModelsStep) Execute(ctx context.Context) error {
 		Password: pgCfg.Password,
 		DBName:   pgCfg.Database,
 	}
-	db, err := model.NewDB(connArg)
+
+	var db *gorm.DB
+	var err error
+	err = steps.WaitUtilWithTimeout(ctx, "connect to postgresql", func() (bool, error) {
+		db, err = model.NewDB(connArg)
+		if err != nil {
+			s.Logger.Warnf("Failed to create db connection to %s: %s", connArg, err)
+			return false, nil
+		}
+
+		return true, nil
+	}, pgCfg.WaitReadyTimeout, time.Second*5)
 	if err != nil {
-		return errors.Annotatef(err, "create db connection to %s", connArg)
+		return errors.Trace(err)
 	}
 
 	if err = model.SyncTables(db); err != nil {

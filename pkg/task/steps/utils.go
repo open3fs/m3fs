@@ -17,6 +17,7 @@ package steps
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -28,19 +29,11 @@ func WaitServiceState(
 	ctx context.Context, listNodesFunc func(context.Context) (string, error),
 	serviceID, targetState string, timeout time.Duration) error {
 
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			break loop
-		case <-ctx.Done():
-			break loop
-		default:
+	err := WaitUtilWithTimeout(ctx, fmt.Sprintf("service %s to %s", serviceID, targetState),
+		func() (bool, error) {
 			nodesInfo, err := listNodesFunc(ctx)
 			if err != nil {
-				return errors.Trace(err)
+				return false, errors.Trace(err)
 			}
 			//nolint:lll
 			// output of list nodes:
@@ -52,19 +45,43 @@ loop:
 				line := scanner.Text()
 				parts := strings.Fields(line)
 				if len(parts) < 9 {
-					return errors.Errorf("invalid list-nodes output: %s", line)
+					return false, errors.Errorf("invalid list-nodes output: %s", line)
 				}
 				if parts[0] != serviceID {
 					continue
 				}
-				if parts[2] != targetState {
-					time.Sleep(time.Second)
-					continue
-				}
-				return nil
+				return parts[2] == targetState, nil
 			}
+			return false, nil
+		}, timeout, 2*time.Second)
+	return errors.Trace(err)
+}
+
+// WaitUtilWithTimeout wait condFunc returns true with timeout
+func WaitUtilWithTimeout(
+	ctx context.Context, op string, condFunc func() (bool, error), timeout, interval time.Duration) error {
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break loop
+		case <-ctx.Done():
+			break loop
+		default:
+			pass, err := condFunc()
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if !pass {
+				time.Sleep(interval)
+				continue
+			}
+			return nil
 		}
 	}
 
-	return errors.Errorf("timeout to wait service %s to %s", serviceID, targetState)
+	return errors.Errorf("timeout to wait %s", op)
 }

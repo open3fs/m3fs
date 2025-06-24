@@ -33,6 +33,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
+	"github.com/open3fs/m3fs/pkg/task/steps"
 	"github.com/open3fs/m3fs/pkg/utils"
 )
 
@@ -1033,6 +1034,26 @@ func (s *runChangePlanStep) checkUploadChains(ctx context.Context, step *model.C
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	err = steps.WaitUtilWithTimeout(ctx, "wait all chains serving", func() (bool, error) {
+		_, chainTargetStatus, err := s.loadChainsInfo(ctx)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
+		for _, stateSet := range chainTargetStatus {
+			for _, state := range stateSet.ToSlice() {
+				if state != "SERVING-UPTODATE" {
+					return false, nil
+				}
+			}
+		}
+
+		return true, nil
+	}, s.Runtime.Cfg.Services.Storage.WaitChainsServingTimeout, time.Second*5)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	return nil
 }
 

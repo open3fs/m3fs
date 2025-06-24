@@ -483,6 +483,7 @@ func (s *runChangePlanSuite) TestRun() {
 	mgmtCfg := s.Runtime.Cfg.Services.Mgmtd
 	s.MockDocker.On("Cp", "/tmp2", mgmtCfg.ContainerName, "output/generated_chains.csv").Return(nil)
 	s.mockAdminCli("upload-chains output/generated_chains.csv", "")
+	s.mockAdminCli("list-chains", "")
 	s.mockAdminCli("upload-chain-table 1 output/generated_chain_table.csv", "")
 
 	existsChain := &model.Chain{
