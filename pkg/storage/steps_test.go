@@ -15,6 +15,8 @@
 package storage
 
 import (
+	"fmt"
+	"path"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -110,4 +112,91 @@ func (s *createDisksStepSuite) TestCreateDisks() {
 	s.Equal(disk2Exp, disks[1])
 
 	s.MockDisk.AssertExpectations(s.T())
+}
+
+func TestSetupAutoMountDiskStepSuite(t *testing.T) {
+	suiteRun(t, &setupAutoMountDiskStepSuite{})
+}
+
+type setupAutoMountDiskStepSuite struct {
+	ttask.StepSuite
+
+	step *setupAutoMountDiskStep
+}
+
+func (s *setupAutoMountDiskStepSuite) SetupTest() {
+	s.StepSuite.SetupTest()
+
+	s.step = new(setupAutoMountDiskStep)
+	s.SetupRuntime()
+	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
+}
+
+func (s *setupAutoMountDiskStepSuite) TestSetup() {
+	scriptPath := path.Join(s.Cfg.WorkDir, "bin", "mount-3fs-disks")
+	script := `#!/bin/bash
+set -e
+
+base_dir=$1
+
+while IFS= read -r line;do
+    disk_info=($line)
+    dev_name="/dev/${disk_info[0]}"
+    if (( ${#disk_info[@]} > 2));then
+        continue
+    fi
+    IFS="-" label_info=(${disk_info[1]}) # label format: 3fs-data-{index}
+    mp=${base_dir}/data${label_info[2]}
+    echo mounting ${dev_name} to $mp
+    mount -t xfs "${dev_name}" "$mp"
+done < <(lsblk -o NAME,LABEL,MOUNTPOINT -l | grep -P "3fs-data-\d+" || true)`
+	service := fmt.Sprintf(`[Unit]
+Description=Mount 3fs disks
+Before=docker.service
+ 
+[Service]
+Type=simple
+ExecStart=%s %s
+ 
+[Install]
+WantedBy=multi-user.target`, scriptPath, getServiceWorkDir(s.Cfg.WorkDir)+"/3fsdata")
+	s.MockCreateService("mount-3fs-disks", "mount-3fs-disks.service", []byte(script), []byte(service))
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.AssertCreateService()
+}
+
+func TestRemoveAutoMountDiskServiceStepSuite(t *testing.T) {
+	suiteRun(t, &removeAutoMountDiskServiceStepSuite{})
+}
+
+type removeAutoMountDiskServiceStepSuite struct {
+	ttask.StepSuite
+
+	step *removeAutoMountDiskServiceStep
+}
+
+func (s *removeAutoMountDiskServiceStepSuite) SetupTest() {
+	s.StepSuite.SetupTest()
+
+	s.step = new(removeAutoMountDiskServiceStep)
+	s.SetupRuntime()
+	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
+}
+
+func (s *removeAutoMountDiskServiceStepSuite) TestRemove() {
+	s.MockRemoveService("mount-3fs-disks.service", true)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.AssertRemoveService()
+}
+
+func (s *removeAutoMountDiskServiceStepSuite) TestRemoveWithServiceNotExists() {
+	s.MockRemoveService("mount-3fs-disks.service", false)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.AssertRemoveService()
 }

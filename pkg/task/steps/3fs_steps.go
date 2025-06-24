@@ -396,10 +396,11 @@ func (s *run3FSContainerStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        &s.containerName,
-		HostNetwork: true,
-		Privileged:  common.Pointer(true),
+		Image:         img,
+		Name:          &s.containerName,
+		HostNetwork:   true,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		Privileged:    common.Pointer(true),
 		Ulimits: map[string]string{
 			"nofile": "1048576:1048576",
 		},

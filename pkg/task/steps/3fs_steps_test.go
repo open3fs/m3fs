@@ -593,11 +593,12 @@ func (s *run3FSContainerStepSuite) testRunContainer(
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageName3FS)
 	s.NoError(err)
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        &s.Cfg.Services.Mgmtd.ContainerName,
-		Detach:      common.Pointer(true),
-		HostNetwork: true,
-		Privileged:  common.Pointer(true),
+		Image:         img,
+		Name:          &s.Cfg.Services.Mgmtd.ContainerName,
+		Detach:        common.Pointer(true),
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		HostNetwork:   true,
+		Privileged:    common.Pointer(true),
 		Ulimits: map[string]string{
 			"nofile": "1048576:1048576",
 		},

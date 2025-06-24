@@ -41,6 +41,10 @@ var (
 	StorageMainTomlTmpl []byte
 	// DiskToolScriptTmpl is the template content of disk_tool.sh
 	DiskToolScriptTmpl []byte
+	// MountDisksScriptTmpl is the template content of mount_3fs_disks.sh
+	MountDisksScriptTmpl []byte
+	// MountDisksServiceTmpl is the template content of mount_3fs_disks.service
+	MountDisksServiceTmpl []byte
 )
 
 func init() {
@@ -61,6 +65,16 @@ func init() {
 	}
 
 	DiskToolScriptTmpl, err = templatesFs.ReadFile("templates/disk_tool.sh.tmpl")
+	if err != nil {
+		panic(err)
+	}
+
+	MountDisksScriptTmpl, err = templatesFs.ReadFile("templates/mount_3fs_disks.sh.tmpl")
+	if err != nil {
+		panic(err)
+	}
+
+	MountDisksServiceTmpl, err = templatesFs.ReadFile("templates/mount_3fs_disks.service.tmpl")
 	if err != nil {
 		panic(err)
 	}
@@ -192,6 +206,10 @@ func (t *CreateStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 		},
 		{
 			Nodes:   nodes,
+			NewStep: func() task.Step { return new(setupAutoMountDiskStep) },
+		},
+		{
+			Nodes:   nodes,
 			NewStep: func() task.Step { return new(createDisksStep) },
 		},
 	})
@@ -237,6 +255,10 @@ func (t *DeleteStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 					string(storage.DiskType),
 					"clear",
 				}),
+		},
+		{
+			Nodes:   nodes,
+			NewStep: func() task.Step { return new(removeAutoMountDiskServiceStep) },
 		},
 	})
 }

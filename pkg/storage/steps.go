@@ -15,9 +15,12 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"path"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"gorm.io/gorm"
 
@@ -102,4 +105,49 @@ func (s *createDisksStep) createFsDisks(devices []external.BlockDevice) error {
 	}
 
 	return nil
+}
+
+type setupAutoMountDiskStep struct {
+	task.BaseStep
+}
+
+func (s *setupAutoMountDiskStep) Execute(ctx context.Context) error {
+	scriptTmpl, err := template.New("mount_3fs_disks.script").Parse(string(MountDisksScriptTmpl))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	scriptPath := path.Join(s.Runtime.WorkDir, "bin", "mount-3fs-disks")
+	scriptBuf := bytes.NewBuffer(nil)
+	err = scriptTmpl.Execute(scriptBuf, nil)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	serviceTmpl, err := template.New("mount_3fs_disks.service").Parse(string(MountDisksServiceTmpl))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	tmpData := map[string]any{
+		"ScriptPath": scriptPath,
+		"BaseDir":    path.Join(getServiceWorkDir(s.Runtime.WorkDir), "3fsdata"),
+	}
+	serviceBuf := bytes.NewBuffer(nil)
+	if err = serviceTmpl.Execute(serviceBuf, tmpData); err != nil {
+		return errors.Trace(err)
+	}
+
+	err = s.CreateScriptAndService(ctx, "mount-3fs-disks", "mount-3fs-disks.service",
+		scriptBuf.Bytes(), serviceBuf.Bytes())
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+type removeAutoMountDiskServiceStep struct {
+	task.BaseStep
+}
+
+func (s *removeAutoMountDiskServiceStep) Execute(ctx context.Context) error {
+	return errors.Trace(s.DeleteService(ctx, "mount-3fs-disks.service"))
 }

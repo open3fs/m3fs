@@ -96,10 +96,11 @@ func (s *startContainerStepSuite) TestStartContainerStep() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageNameGrafana)
 	s.NoError(err)
 	s.MockDocker.On("Run", &external.RunArgs{
-		Image:       img,
-		Name:        common.Pointer("3fs-grafana"),
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          common.Pointer("3fs-grafana"),
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
 		Volumes: []*external.VolumeArgs{
 			{
 				Source: path.Join(workDir, "datasources"),

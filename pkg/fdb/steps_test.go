@@ -103,10 +103,11 @@ func (s *runContainerStepSuite) TestRunContainerStep() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageNameFdb)
 	s.NoError(err)
 	s.MockDocker.On("Run", &external.RunArgs{
-		Image:       img,
-		Name:        &s.Cfg.Services.Fdb.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		Name:          &s.Cfg.Services.Fdb.ContainerName,
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
 		Envs: map[string]string{
 			"FDB_CLUSTER_FILE_CONTENTS": "xxxx",
 		},
@@ -150,10 +151,11 @@ func (s *runContainerStepSuite) TestRunContainerFailed() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageNameFdb)
 	s.NoError(err)
 	s.MockDocker.On("Run", &external.RunArgs{
-		Image:       img,
-		Name:        &s.Cfg.Services.Fdb.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          &s.Cfg.Services.Fdb.ContainerName,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
 		Envs: map[string]string{
 			"FDB_CLUSTER_FILE_CONTENTS": "xxxx",
 		},

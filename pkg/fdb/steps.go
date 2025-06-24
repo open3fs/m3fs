@@ -80,10 +80,11 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	clusterContentI, _ := s.Runtime.Load(task.RuntimeFdbClusterFileContentKey)
 	clusterContent := clusterContentI.(string)
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        &s.Runtime.Services.Fdb.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          &s.Runtime.Services.Fdb.ContainerName,
+		HostNetwork:   true,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		Detach:        common.Pointer(true),
 		Envs: map[string]string{
 			"FDB_CLUSTER_FILE_CONTENTS": clusterContent,
 		},

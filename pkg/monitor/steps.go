@@ -124,11 +124,12 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        &s.Runtime.Services.Monitor.ContainerName,
-		HostNetwork: true,
-		Privileged:  common.Pointer(true),
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          &s.Runtime.Services.Monitor.ContainerName,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		HostNetwork:   true,
+		Privileged:    common.Pointer(true),
+		Detach:        common.Pointer(true),
 		Volumes: []*external.VolumeArgs{
 			{
 				Source: "/dev",

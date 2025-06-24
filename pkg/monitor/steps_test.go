@@ -95,11 +95,12 @@ func (s *runContainerStepSuite) Test() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageName3FS)
 	s.NoError(err)
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        common.Pointer("3fs-monitor"),
-		HostNetwork: true,
-		Privileged:  common.Pointer(true),
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          common.Pointer("3fs-monitor"),
+		HostNetwork:   true,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		Privileged:    common.Pointer(true),
+		Detach:        common.Pointer(true),
 		Volumes: []*external.VolumeArgs{
 			{
 				Source: "/dev",

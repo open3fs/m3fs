@@ -15,14 +15,47 @@
 package network
 
 import (
+	"bytes"
 	"context"
+	"embed"
 	"os"
 	"path"
 	"strings"
+	"text/template"
 
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/task"
 )
+
+var (
+	//go:embed templates/*.tmpl
+	templatesFs embed.FS
+
+	// SetupRxeNetworkTmpl is the template content of setup rxe network script
+	SetupRxeNetworkTmpl []byte
+	// SetupErdmaNetworkTmpl is the template content of setup erdma network script
+	SetupErdmaNetworkTmpl []byte
+	// SetupServiceTmpl is the template content of setup network service
+	SetupServiceTmpl []byte
+)
+
+func init() {
+	var err error
+	SetupRxeNetworkTmpl, err = templatesFs.ReadFile("templates/setup-rxe-network.tmpl")
+	if err != nil {
+		panic(err)
+	}
+
+	SetupErdmaNetworkTmpl, err = templatesFs.ReadFile("templates/setup-erdma-network.tmpl")
+	if err != nil {
+		panic(err)
+	}
+
+	SetupServiceTmpl, err = templatesFs.ReadFile("templates/setup-3fs-network.service.tmpl")
+	if err != nil {
+		panic(err)
+	}
+}
 
 const (
 	genIbdev2netdevScript = `#!/bin/bash
@@ -64,27 +97,6 @@ EOF
 done
 
 chmod +x $targetScript
-`
-	createRdmaLinkScript = `#!/bin/bash
-
-for netdev in $(ip -o -4 a | awk '{print $2}' | grep -vw lo | sort -u)
-do
-    # skip linux bridge
-    if ip -o -d l show $netdev | grep -q bridge_id; then
-        continue
-    fi
-
-    if rdma link | grep -q -w "netdev $netdev"; then
-        continue
-    fi
-
-    echo "Create rdma link for $netdev"
-    rxe_name="${netdev}_rxe0"
-    rdma link add $rxe_name type rxe netdev $netdev
-    if rdma link | grep -q -w "link $rxe_name"; then
-        echo "Success to create $rxe_name"
-    fi
-done
 `
 )
 
@@ -152,119 +164,63 @@ func (s *installRdmaPackageStep) Execute(ctx context.Context) error {
 	return nil
 }
 
-type loadRdmaRxeModuleStep struct {
+type setupNetworkBaseStep struct {
 	task.BaseStep
 }
 
-func (s *loadRdmaRxeModuleStep) Execute(ctx context.Context) error {
-	s.Logger.Debugf("Loading rdma_rxe kernel module for %s if needed", s.Node.Host)
-
-	output, err := s.Em.Runner.Exec(ctx, "ls", "/sys/module")
-	if err != nil {
-		return errors.Annotate(err, "")
-	}
-	kernelModules := map[string]struct{}{}
-	for _, line := range strings.Split(output, "\n") {
-		modules := strings.Fields(line)
-		for _, module := range modules {
-			kernelModules[module] = struct{}{}
-		}
-	}
-
-	// if any of those modules is loaded, we don't need to load rdma_rxe
-	for _, module := range []string{"mlx5_core", "irdma", "erdma", "rdma_rxe"} {
-		if _, ok := kernelModules[module]; ok {
-			return nil
-		}
-	}
-
-	_, err = s.Em.Runner.Exec(ctx, "modprobe", "rdma_rxe")
-	if err != nil {
-		return errors.Annotatef(err, "modprobe rdma_rxe")
-	}
-	return nil
-}
-
-type createRdmaRxeLinkStep struct {
-	task.BaseStep
-}
-
-func (s *createRdmaRxeLinkStep) Execute(ctx context.Context) error {
-	s.Logger.Debugf("Creating rdma link for %s", s.Node.Host)
-	localEm := s.Runtime.LocalEm
-	tmpDir, err := localEm.FS.MkdirTemp(ctx, os.TempDir(), "m3fs-prepare-network")
+func (s *setupNetworkBaseStep) setupNetwork(ctx context.Context, scriptData []byte) error {
+	scriptPath := path.Join(s.Runtime.WorkDir, "bin", "setup-network")
+	tmpl, err := template.New("setup-3fs-network.service.tmpl").Parse(string(SetupServiceTmpl))
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer func() {
-		if err := localEm.FS.RemoveAll(ctx, tmpDir); err != nil {
-			s.Logger.Errorf("Failed to remove temporary directory %s: %v", tmpDir, err)
-		}
-	}()
-
-	scriptLocalPath := path.Join(tmpDir, "create_rdma_rxe_link")
-	err = localEm.FS.WriteFile(scriptLocalPath, []byte(createRdmaLinkScript), 0755)
+	data := map[string]any{
+		"ScriptPath": scriptPath,
+	}
+	buf := bytes.NewBuffer(nil)
+	if err = tmpl.Execute(buf, data); err != nil {
+		return errors.Trace(err)
+	}
+	err = s.CreateScriptAndService(ctx, "setup-network", "setup-3fs-network.service",
+		scriptData, buf.Bytes())
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	binDir := path.Join(s.Runtime.Cfg.WorkDir, "bin")
-	err = s.Em.FS.MkdirAll(ctx, binDir)
+	_, err = s.Em.Runner.Exec(ctx, scriptPath)
 	if err != nil {
-		return errors.Annotatef(err, "mkdir %s", binDir)
+		return errors.Annotatef(err, "execute %s", scriptPath)
 	}
-	remotePath := path.Join(binDir, "create_rdma_rxe_link")
-	if err := s.Em.Runner.Scp(ctx, scriptLocalPath, remotePath); err != nil {
-		return errors.Annotatef(err, "scp %s", scriptLocalPath)
-	}
-	_, err = s.Em.Runner.Exec(ctx, "chmod", "+x", remotePath)
-	if err != nil {
-		return errors.Annotatef(err, "chmod +x %s", remotePath)
-	}
-	_, err = s.Em.Runner.Exec(ctx, "bash", remotePath)
-	if err != nil {
-		return errors.Annotatef(err, "execute %s", remotePath)
-	}
+
 	return nil
 }
 
-type loadErdmaModuleStep struct {
+type setupRxeStep struct {
+	setupNetworkBaseStep
+}
+
+func (s *setupRxeStep) Execute(ctx context.Context) error {
+	s.Logger.Infof("Setup rxe environment for node %s", s.Node.Host)
+
+	return errors.Trace(s.setupNetwork(ctx, SetupRxeNetworkTmpl))
+}
+
+type setupErdmaStep struct {
+	setupNetworkBaseStep
+}
+
+func (s *setupErdmaStep) Execute(ctx context.Context) error {
+	s.Logger.Infof("Setup erdma environment for node %s", s.Node.Host)
+
+	return errors.Trace(s.setupNetwork(ctx, SetupErdmaNetworkTmpl))
+}
+
+type deleteSetupNetworkServiceStep struct {
 	task.BaseStep
 }
 
-func (s *loadErdmaModuleStep) Execute(ctx context.Context) error {
-	s.Logger.Debugf("Loading erdma kernel module for %s", s.Node.Host)
-	needLoadModule := false
-	_, err := s.Em.Runner.Exec(ctx, "ls", "/sys/module/erdma")
-	if err != nil && strings.Contains(err.Error(), "No such file or directory") {
-		needLoadModule = true
-	} else if err != nil {
-		return errors.Annotatef(err, "ls /sys/module/erdma")
-	}
-
-	if !needLoadModule {
-		output, err := s.Em.Runner.Exec(ctx, "cat", "/sys/module/erdma/parameters/compat_mode")
-		if err != nil {
-			return errors.Annotatef(err, "cat /sys/module/erdma/parameters/compat_mode")
-		}
-		if strings.TrimSpace(output) == "Y" {
-			return nil
-		}
-		needLoadModule = true
-		s.Logger.Infof("erdma module not running in compat mode, try to remove it")
-		// remove module may return error, but we don't care
-		_, _ = s.Em.Runner.Exec(ctx, "modprobe", "-r", "erdma")
-	}
-
-	if needLoadModule {
-		s.Logger.Infof("Loading erdma module with compat mode")
-		_, err = s.Em.Runner.Exec(ctx, "modprobe", "erdma", "compat_mode=1")
-		if err != nil {
-			return errors.Annotatef(err, "modprobe erdma")
-		}
-	}
-
-	return nil
+func (s *deleteSetupNetworkServiceStep) Execute(ctx context.Context) error {
+	return errors.Trace(s.DeleteService(ctx, "setup-3fs-network.service"))
 }
 
 type deleteIbdev2netdevScriptStep struct {
@@ -277,20 +233,6 @@ func (s *deleteIbdev2netdevScriptStep) Execute(ctx context.Context) error {
 	_, err := s.Em.Runner.Exec(ctx, "rm", "-f", path.Join(binDir, "ibdev2netdev"))
 	if err != nil {
 		return errors.Annotatef(err, "rm %s", path.Join(binDir, "ibdev2netdev"))
-	}
-	return nil
-}
-
-type deleteRdmaRxeLinkScriptStep struct {
-	task.BaseStep
-}
-
-func (s *deleteRdmaRxeLinkScriptStep) Execute(ctx context.Context) error {
-	s.Logger.Debugf("Deleting create_rdma_rxe_link script for %s", s.Node.Host)
-	binDir := path.Join(s.Runtime.Cfg.WorkDir, "bin")
-	_, err := s.Em.Runner.Exec(ctx, "rm", "-f", path.Join(binDir, "create_rdma_rxe_link"))
-	if err != nil {
-		return errors.Annotatef(err, "rm %s", path.Join(binDir, "create_rdma_rxe_link"))
 	}
 	return nil
 }
