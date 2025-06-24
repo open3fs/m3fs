@@ -131,7 +131,9 @@ func (tp *targetPool) GetAvailableTargetID(node nodeID, disk diskIndex) (targetI
 		tp.currentTargetMap[node][disk] = utils.NewSet[targetID]()
 	}
 
-	// target index range is [1, 100)
+	// Target index range is [1, 100)
+	// Limitation from the gen_chain_table.py script in the 3fs project:
+	//  https://github.com/deepseek-ai/3FS/blob/main/deploy/data_placement/src/setup/gen_chain_table.py#L94
 	for index := 1; index < 100; index++ {
 		id := ((tp.targetPrefix*1_000_000+node)*1_000+(int64(disk)+1))*100 + int64(index)
 		if !tp.currentTargetMap[node][disk].Contains(id) {
