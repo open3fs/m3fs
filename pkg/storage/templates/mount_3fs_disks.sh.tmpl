@@ -9,7 +9,7 @@ while IFS= read -r line;do
     if (( ${#disk_info[@]} > 2));then
         continue
     fi
-    IFS="-" label_info=(${disk_info[1]}) # label format: 3fs-data-{index}
+    IFS="-" read -r -a label_info <<< "${disk_info[1]}" # label format: 3fs-data-{index}
     mp=${base_dir}/data${label_info[2]}
     echo mounting ${dev_name} to $mp
     mount -t xfs "${dev_name}" "$mp"

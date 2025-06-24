@@ -589,7 +589,7 @@ func NewConfigWithDefaults() *Config {
 				StripeSize:              16,
 				RDMAListenPort:          8000,
 				TCPListenPort:           9000,
-				WaitTargetOnlineTimeout: 30 * time.Second,
+				WaitTargetOnlineTimeout: 10 * time.Minute,
 			},
 			Meta: Meta{
 				ContainerName:  "3fs-meta",

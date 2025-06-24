@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -59,6 +60,7 @@ type fsTarget struct {
 	NodeID    nodeID    `json:"node_id"`
 	DiskIndex diskIndex `json:"disk_index"`
 	ChainID   chainID   `json:"chain_id"`
+	status    string
 }
 
 type createTargetOpData struct {
@@ -349,6 +351,8 @@ func (s *prepareChangePlanStep) generateSteps(
 			})
 		}
 	}
+
+	var createTargetDatas []createTargetOpData
 	for chainID, diskOnNodeSet := range newDistribution {
 		if _, has := currentDistribution[chainID]; has {
 			continue
@@ -358,22 +362,29 @@ func (s *prepareChangePlanStep) generateSteps(
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-			createTargetData, err := utils.JsonMarshalString(createTargetOpData{
+			createTargetDatas = append(createTargetDatas, createTargetOpData{
 				NodeID:    diskOnNode.nodeID,
 				TargetID:  targetID,
 				DiskIndex: diskOnNode.diskIndex,
 				ChainID:   chainID,
 			})
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
 
 			newTargetChainMap[targetID] = chainID
-			steps = append(steps, &model.ChangePlanStep{
-				OperationType: model.ChangePlanStepOpType.CreateTarget,
-				OperationData: createTargetData,
-			})
 		}
+	}
+	// NOTE: sort create target data by target id order so we can check it in ut
+	sort.Slice(createTargetDatas, func(i, j int) bool {
+		return createTargetDatas[i].TargetID < createTargetDatas[j].TargetID
+	})
+	for _, createTargetData := range createTargetDatas {
+		data, err := utils.JsonMarshalString(createTargetData)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		steps = append(steps, &model.ChangePlanStep{
+			OperationType: model.ChangePlanStepOpType.CreateTarget,
+			OperationData: data,
+		})
 	}
 
 	updateChainsData, err := utils.JsonMarshalString(uploadChainsOpData{
@@ -725,6 +736,90 @@ func (s *runChangePlanStep) runAdminCli(ctx context.Context, cmd string) (string
 	return s.RunAdminCli(ctx, s.Runtime.Services.Mgmtd.ContainerName, cmd)
 }
 
+func (s *runChangePlanStep) loadTargetsInfo(
+	ctx context.Context, containOrphan ...bool) (map[targetID]fsTarget, error) {
+
+	targets := make(map[targetID]fsTarget)
+	out, err := s.runAdminCli(ctx, "list-targets")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	scanner := bufio.NewScanner(strings.NewReader(out))
+	scanner.Scan()
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) < 8 {
+			return nil, errors.Errorf("invalid list-targets output line: %s", line)
+		}
+		targetID, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return nil, errors.Annotatef(err, "invalid target id of list-targets output line: %s", line)
+		}
+		nodeID, err := strconv.ParseInt(parts[5], 10, 64)
+		if err != nil {
+			return nil, errors.Annotatef(err, "invalid node id of list-targets output line: %s", line)
+		}
+		diskIdx, err := strconv.ParseInt(parts[6], 10, 64)
+		if err != nil {
+			return nil, errors.Annotatef(err, "invalid disk index of list-targets output line: %s", line)
+		}
+		chainID, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return nil, errors.Annotatef(err, "invalid chain id of list-targets output line: %s", line)
+		}
+		targets[targetID] = fsTarget{
+			ID:        targetID,
+			NodeID:    nodeID,
+			DiskIndex: diskIndex(diskIdx),
+			ChainID:   chainID,
+			status:    fmt.Sprintf("%s-%s", parts[3], parts[4]),
+		}
+	}
+
+	if len(containOrphan) == 0 || !containOrphan[0] {
+		return targets, nil
+	}
+
+	// Output of "list-targets --orphan":
+	// TargetId      LocalState  NodeId  DiskIndex  UsedSize
+	// 101000200227  OFFLINE     10002   1          0
+	out, err = s.runAdminCli(ctx, "list-targets --orphan")
+	if err != nil {
+		return nil, errors.Annotate(err, "list orphan targets")
+	}
+
+	scanner = bufio.NewScanner(strings.NewReader(out))
+	scanner.Scan()
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.Fields(line)
+		if len(parts) < 5 {
+			return nil, errors.Errorf("invalid \"list-target --orphan\" output line: %s", line)
+		}
+		targetID, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return nil, errors.Annotatef(err, "invalid target id of \"list target --orphan\" output line: %s", line)
+		}
+		nodeID, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil {
+			return nil, errors.Annotatef(err, "invalid node id of \"list target --orphan\" output line: %s", line)
+		}
+		diskIdx, err := strconv.ParseInt(parts[3], 10, 64)
+		if err != nil {
+			return nil, errors.Annotatef(err, "invalid disk index of \"list target --orphan\" output line: %s", line)
+		}
+		targets[targetID] = fsTarget{
+			ID:        targetID,
+			NodeID:    nodeID,
+			DiskIndex: diskIndex(diskIdx),
+			status:    parts[1],
+		}
+	}
+
+	return targets, nil
+}
+
 func (s *runChangePlanStep) loadChainsInfo(ctx context.Context) (
 	map[string]string, map[string]*utils.Set[string], error) {
 
@@ -739,7 +834,7 @@ func (s *runChangePlanStep) loadChainsInfo(ctx context.Context) (
 	for scanner.Scan() {
 		line := scanner.Text()
 		parts := strings.Fields(line)
-		if len(parts) < 7 {
+		if len(parts) < 5 {
 			return nil, nil, errors.Errorf("invalid list-chains output line: %s", line)
 		}
 
@@ -748,7 +843,7 @@ func (s *runChangePlanStep) loadChainsInfo(ctx context.Context) (
 		   ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target                          Target
 		   900100001  1             1             SERVING  []              101000100101(SERVING-UPTODATE)  101000200101(SERVING-UPTODATE)
 		   900100002  1             1             SERVING  []              101000100102(SERVING-UPTODATE)  101000200102(SERVING-UPTODATE) */
-		chainID := parts[1]
+		chainID := parts[0]
 		for _, targetInfo := range parts[5:] {
 			matches := chainTargetRe.FindStringSubmatch(targetInfo)
 			if len(matches) == 0 {
@@ -803,6 +898,15 @@ func (s *runChangePlanStep) checkOfflineTarget(ctx context.Context, step *model.
 		return errors.Trace(err)
 	}
 
+	targets, err := s.loadTargetsInfo(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if targets[offlineTarget.TargetID].status == "OFFLINE-OFFLINE" {
+		s.Logger.Infof("Target %d already offline, skip it.", offlineTarget.TargetID)
+		return nil
+	}
+
 	// a chain should has at least one serving target to serve, so we should ensure that at least another
 	//  target is up-to-date in chain before offline target
 	if err := s.waitTargetChainTargetState(ctx, offlineTarget.TargetID, "SERVING", "UPTODATE"); err != nil {
@@ -810,7 +914,7 @@ func (s *runChangePlanStep) checkOfflineTarget(ctx context.Context, step *model.
 	}
 
 	cmd := fmt.Sprintf("offline-target --target-id %d", offlineTarget.TargetID)
-	_, err := s.runAdminCli(ctx, cmd)
+	_, err = s.runAdminCli(ctx, cmd)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -864,15 +968,25 @@ func (s *runChangePlanStep) checkRemoveTargetFromChain(ctx context.Context, step
 		return errors.Trace(err)
 	}
 
+	targetChainMap, _, err := s.loadChainsInfo(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if _, ok := targetChainMap[strconv.FormatInt(removeTargetFromChain.TargetID, 10)]; !ok {
+		s.Logger.Infof("Target %d already removed from %d, skip it.",
+			removeTargetFromChain.TargetID, removeTargetFromChain.ChainID)
+		return nil
+	}
+
 	chainID := removeTargetFromChain.ChainID
 	targetID := removeTargetFromChain.TargetID
 	cmd := fmt.Sprintf("update-chain --mode remove %d %d", chainID, targetID)
-	_, err := s.runAdminCli(ctx, cmd)
+	_, err = s.runAdminCli(ctx, cmd)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	if s.waitChainHasTarget(ctx, chainID, targetID, false) != nil {
+	if err = s.waitChainHasTarget(ctx, chainID, targetID, false); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -889,9 +1003,20 @@ func (s *runChangePlanStep) checkRemoveTarget(ctx context.Context, step *model.C
 		return errors.Trace(err)
 	}
 
+	// NOTE: list-targets only print targets in chains, when check for target exists we should list
+	// orphan targets also
+	targets, err := s.loadTargetsInfo(ctx, true)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if _, ok := targets[removeTarget.TargetID]; !ok {
+		s.Logger.Infof("Target %d already removed, skip it.", removeTarget.TargetID)
+		return nil
+	}
+
 	cmd := fmt.Sprintf("remove-target --node-id %d --target-id %d",
 		removeTarget.NodeID, removeTarget.TargetID)
-	_, err := s.runAdminCli(ctx, cmd)
+	_, err = s.runAdminCli(ctx, cmd)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -904,10 +1029,22 @@ func (s *runChangePlanStep) checkCreateTarget(ctx context.Context, step *model.C
 		return errors.Trace(err)
 	}
 
+	targets, err := s.loadTargetsInfo(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	target := targets[createTarget.TargetID]
+	if target.ChainID == createTarget.ChainID && target.NodeID == createTarget.NodeID &&
+		target.DiskIndex == createTarget.DiskIndex && target.ID == createTarget.TargetID {
+
+		s.Logger.Infof("Target %v already exits, skip create it.", target)
+		return nil
+	}
+
 	cmd := fmt.Sprintf("create-target --node-id %d --target-id %d --disk-index %d --chain-id %d"+
 		" --use-new-chunk-engine",
 		createTarget.NodeID, createTarget.TargetID, createTarget.DiskIndex, createTarget.ChainID)
-	_, err := s.runAdminCli(ctx, cmd)
+	_, err = s.runAdminCli(ctx, cmd)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -956,11 +1093,25 @@ func (s *runChangePlanStep) checkAddTargetToChain(ctx context.Context, step *mod
 		return errors.Trace(err)
 	}
 
-	cmd := fmt.Sprintf("update-chain --mode add %d %d",
-		addTargetToChain.ChainID, addTargetToChain.TargetID)
-	_, err := s.runAdminCli(ctx, cmd)
+	targetChainMap, _, err := s.loadChainsInfo(ctx)
 	if err != nil {
 		return errors.Trace(err)
+	}
+	doAdd := true
+	chainIDStr, ok := targetChainMap[strconv.FormatInt(addTargetToChain.TargetID, 10)]
+	if ok && chainIDStr == strconv.FormatInt(addTargetToChain.ChainID, 10) {
+		s.Logger.Infof("Target %d already added to chain %d, skip add it.",
+			addTargetToChain.TargetID, addTargetToChain.ChainID)
+		doAdd = false
+	}
+
+	if doAdd {
+		cmd := fmt.Sprintf("update-chain --mode add %d %d",
+			addTargetToChain.ChainID, addTargetToChain.TargetID)
+		_, err = s.runAdminCli(ctx, cmd)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	if err := s.waitTargetState(ctx, addTargetToChain.TargetID, "SERVING", "UPTODATE"); err != nil {

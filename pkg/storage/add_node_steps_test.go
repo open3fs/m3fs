@@ -448,30 +448,57 @@ func (s *runChangePlanSuite) mockAdminCli(cmd, ret string) {
 		[]string{"-cfg", "/opt/3fs/etc/admin_cli.toml", fmt.Sprintf("%q", cmd)}).Return(ret, nil).Once()
 }
 
+func (s *runChangePlanSuite) assertPlanStepsFinished(plan *model.ChangePlan, steps ...*model.ChangePlanStep) {
+	var planDB model.ChangePlan
+	db := s.NewDB()
+	s.NoError(db.Model(&planDB).First(&planDB, "id=?", plan.ID).Error)
+	s.NotNil(planDB.StartAt)
+	s.NotNil(planDB.FinishAt)
+	var stepsDB []model.ChangePlanStep
+	s.NoError(db.Model(new(model.ChangePlanStep)).Find(&stepsDB).Error)
+	s.Len(stepsDB, len(steps))
+	for _, step := range stepsDB {
+		s.NotNil(step.StartAt)
+		s.NotNil(step.FinishAt)
+	}
+}
+
 func (s *runChangePlanSuite) TestRun() {
-	s.initSteps()
+	plan, steps := s.initSteps()
 
 	s.mockAdminCli("list-targets",
 		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
 101000200102  900100016  HEAD  SERVING      UPTODATE    10001   0          0
-101000300101  900100016  TAIL  SERVING      UPTODATE    10002   0          0
 `)
-	//nolint:lll
-	s.mockAdminCli("list-chains", `ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target                          Target
-900100016  1             1             SERVING  []              101000200102(SERVING-UPTODATE)  101000300101(SERVING-UPTODATE)`)
+	s.mockAdminCli("create-target --node-id 10003 --target-id 101000300101 --disk-index 0 "+
+		"--chain-id 900100002 --use-new-chunk-engine", "")
+	s.mockAdminCli("list-chains", `ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target    
+900100002  1             1             SERVING  []              101000300102(SERVING-UPTODATE)`)
+	s.mockAdminCli("update-chain --mode add 900100002 101000300101", "")
+	s.mockAdminCli("list-targets",
+		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000300101  900100002  TAIL  SERVING      UPTODATE    10002   0          0
+`)
+	s.mockAdminCli("list-targets",
+		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+`)
+	s.mockAdminCli("list-chains", `ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target    
+900100002  1             1             SERVING  []              101000200102(SERVING-UPTODATE)`)
 	s.mockAdminCli("offline-target --target-id 101000200102", "")
 	s.mockAdminCli("list-targets",
 		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
 101000200102  900100016  HEAD  OFFLINE      OFFLINE    10001   0          0
-101000300101  900100016  TAIL  OFFLINE      OFFLINE    10002   0          0
 `)
-	s.mockAdminCli("update-chain --mode remove 900100002 101000200102", "")
 	s.mockAdminCli("list-chains", `ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target    
-900100002  1             1             SERVING  []              101000300101(SERVING-UPTODATE)`)
+900100002  1             1             SERVING  []              101000200102(SERVING-UPTODATE)`)
+	s.mockAdminCli("update-chain --mode remove 900100002 101000200102", "")
+	s.mockAdminCli("list-chains", `ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target`)
+	s.mockAdminCli("list-targets",
+		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000200102  900100016  HEAD  OFFLINE      OFFLINE    10002   0          0
+`)
+	s.mockAdminCli("list-targets --orphan", `TargetId      LocalState  NodeId  DiskIndex  UsedSize`)
 	s.mockAdminCli("remove-target --node-id 10002 --target-id 101000200102", "")
-	s.mockAdminCli("create-target --node-id 10003 --target-id 101000300101 --disk-index 0 "+
-		"--chain-id 900100002 --use-new-chunk-engine", "")
-	s.mockAdminCli("update-chain --mode add 900100002 101000300101", "")
 	s.MockLocalFS.On("MkTempFile", os.TempDir()).Return("/tmp", nil)
 	s.MockLocalFS.On("RemoveAll", "/tmp").Return(nil)
 	s.MockFS.On("MkTempFile", os.TempDir()).Return("/tmp2", nil)
@@ -536,16 +563,7 @@ func (s *runChangePlanSuite) TestRun() {
 	}
 	s.Equal(targetsExp, targetsDB)
 
-	var planDB model.ChangePlan
-	s.NoError(db.Model(&planDB).First(&planDB).Error)
-	s.NotNil(planDB.StartAt)
-	s.NotNil(planDB.FinishAt)
-	var stepsDB []model.ChangePlanStep
-	s.NoError(db.Model(new(model.ChangePlanStep)).Find(&stepsDB).Error)
-	for _, step := range stepsDB {
-		s.NotNil(step.StartAt)
-		s.NotNil(step.FinishAt)
-	}
+	s.assertPlanStepsFinished(plan, steps...)
 
 	s.MockDocker.AssertExpectations(s.T())
 }
@@ -564,6 +582,109 @@ func (s *runChangePlanSuite) TestRunWithFinishedSteps() {
 	s.NotNil(plan.FinishAt)
 }
 
+func (s *runChangePlanSuite) TestOfflineTargetWithAlreadyOffline() {
+	step := &model.ChangePlanStep{
+		OperationType: model.ChangePlanStepOpType.OfflineTarget,
+		OperationData: string(s.JsonMarshal(offlineTargetOpData{
+			TargetID: 101000300101,
+		})),
+	}
+	plan := s.createPlanAndSteps(step)
+	s.mockAdminCli("list-targets",
+		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000300101  900100002  TAIL  OFFLINE      OFFLINE    10002   0          0
+`)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.assertPlanStepsFinished(plan, step)
+
+	s.MockDocker.AssertExpectations(s.T())
+}
+
+func (s *runChangePlanSuite) TestAlreadyRemoveFromChain() {
+	step := &model.ChangePlanStep{
+		OperationType: model.ChangePlanStepOpType.RemoveTargetFromChain,
+		OperationData: string(s.JsonMarshal(removeTargetFromChainOpData{
+			TargetID: 101000300101,
+			ChainID:  900100002,
+		})),
+	}
+	plan := s.createPlanAndSteps(step)
+	//nolint:lll
+	s.mockAdminCli("list-chains", `ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target
+900100002  1             1             SERVING  []              101000300103(FAIL-FAIL)`)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.assertPlanStepsFinished(plan, step)
+
+	s.MockDocker.AssertExpectations(s.T())
+}
+
+func (s *runChangePlanSuite) TestTargetAlreadyRemoved() {
+	step := &model.ChangePlanStep{
+		OperationType: model.ChangePlanStepOpType.RemoveTarget,
+		OperationData: string(s.JsonMarshal(removeTargetOpData{
+			TargetID: 101000300101,
+			NodeID:   1001,
+		})),
+	}
+	plan := s.createPlanAndSteps(step)
+	s.mockAdminCli("list-targets",
+		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize`)
+	s.mockAdminCli("list-targets --orphan", `TargetId      LocalState  NodeId  DiskIndex  UsedSize`)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.assertPlanStepsFinished(plan, step)
+
+	s.MockDocker.AssertExpectations(s.T())
+}
+
+func (s *runChangePlanSuite) TestTargetAlreadyCreated() {
+	step := &model.ChangePlanStep{
+		OperationType: model.ChangePlanStepOpType.CreateTarget,
+		OperationData: string(s.JsonMarshal(createTargetOpData{
+			TargetID: 101000300101,
+			NodeID:   1001,
+			ChainID:  900100002,
+		})),
+	}
+	plan := s.createPlanAndSteps(step)
+	s.mockAdminCli("list-targets",
+		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000300101  900100002  TAIL  FAIL      UPTODATE    1001   0          0
+`)
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.assertPlanStepsFinished(plan, step)
+
+	s.MockDocker.AssertExpectations(s.T())
+}
+
+func (s *runChangePlanSuite) TestTargetAlreadyAddedToChain() {
+	step := &model.ChangePlanStep{
+		OperationType: model.ChangePlanStepOpType.AddTargetToChain,
+		OperationData: string(s.JsonMarshal(addTargetToChainOpData{
+			TargetID: 101000300101,
+			ChainID:  900100002,
+		})),
+	}
+	plan := s.createPlanAndSteps(step)
+	s.mockAdminCli("list-chains", `ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target
+900100002  1             1             SERVING  []              101000300101(FAIL-FAIL)`)
+	s.mockAdminCli("list-targets",
+		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000300101  900100002  TAIL  SERVING      UPTODATE    10001   0          0
+`)
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.assertPlanStepsFinished(plan, step)
+
+	s.MockDocker.AssertExpectations(s.T())
+}
+
 func (s *runChangePlanSuite) TestTimeoutWaitAfterAddTargetToChain() {
 	s.step.Runtime.Cfg.Services.Mgmtd.WaitTargetOnlineTimeout = time.Second
 	step := &model.ChangePlanStep{
@@ -574,6 +695,7 @@ func (s *runChangePlanSuite) TestTimeoutWaitAfterAddTargetToChain() {
 		})),
 	}
 	plan := s.createPlanAndSteps(step)
+	s.mockAdminCli("list-chains", `ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target`)
 	s.mockAdminCli("list-targets",
 		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
 101000200102  900100016  HEAD  SERVING      UPTODATE    10001   0          0
@@ -602,6 +724,10 @@ func (s *runChangePlanSuite) TestTimeoutWaitBeforeOfflineTarget() {
 		})),
 	}
 	plan := s.createPlanAndSteps(step)
+	s.mockAdminCli("list-targets",
+		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000300101  900100002  TAIL  SERVING      UPTODATE    10001   0          0
+`)
 	//nolint:lll
 	s.mockAdminCli("list-chains", `ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target                          Target
 900100002  1             1             SERVING  []              101000300101(FAIL-FAIL)  101000300101(FAIL-FAIL)`)
