@@ -45,6 +45,14 @@ const (
 	RuntimeMgmtdServerAddressesKey  = "mgmtd/server_addresses"
 	RuntimeUserTokenKey             = "user_token"
 	RuntimeAdminCliTomlKey          = "admin_cli_toml"
+
+	RuntimeOsNameKey = "os_name"
+)
+
+// defines os names.
+const (
+	OsNameUbuntu    = "Ubuntu"
+	OsNameOpenEuler = "openEuler"
 )
 
 // Runtime contains task run info

@@ -17,12 +17,12 @@ package network
 import (
 	"errors"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
 	"github.com/open3fs/m3fs/pkg/config"
+	"github.com/open3fs/m3fs/pkg/task"
 	ttask "github.com/open3fs/m3fs/tests/task"
 )
 
@@ -98,10 +98,19 @@ func (s *installRdmaPackageStepSuite) SetupTest() {
 }
 
 func (s *installRdmaPackageStepSuite) TestInstallRdmaPackage() {
-	s.MockRunner.On("Exec", "apt", []string{"install", "-y",
-		strings.Join(rdmaPackages, " ")}).Return("", nil)
+	s.Runtime.Store(task.RuntimeOsNameKey, task.OsNameUbuntu)
+	s.MockRunner.On("Exec", "apt", append([]string{"install", "-y"},
+		rdmaPackages[task.OsNameUbuntu]...)).Return("", nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.MockRunner.AssertExpectations(s.T())
+}
+
+func (s *installRdmaPackageStepSuite) TestInstallRdmaPackageWithNotSupportedOs() {
+	s.Runtime.Store(task.RuntimeOsNameKey, "Darwin")
+
+	s.Error(s.step.Execute(s.Ctx()), "unsupported os: Darwin")
 
 	s.MockRunner.AssertExpectations(s.T())
 }
