@@ -15,7 +15,10 @@
 package main
 
 import (
+	"embed"
+	"fmt"
 	"os"
+	"runtime"
 	"text/template"
 
 	"github.com/urfave/cli/v2"
@@ -26,6 +29,10 @@ import (
 var (
 	clusterName      string
 	sampleConfigPath string
+	architecture     string
+
+	//go:embed templates/*
+	templatesFs embed.FS
 )
 
 var configCmd = &cli.Command{
@@ -58,89 +65,28 @@ var configCmd = &cli.Command{
 					Destination: &sampleConfigPath,
 					Value:       "cluster.yml",
 				},
+				&cli.StringFlag{
+					Name:        "architecture",
+					Aliases:     []string{"arch"},
+					Usage:       "Specify the architecture of the cluster (\"amd64\" or \"arm64\")",
+					Destination: &architecture,
+				},
 			},
 		},
 	},
 }
 
-var sampleConfigTemplate = `name: "{{.name}}"
-workDir: "/opt/3fs"
-# networkType configure the network type of the cluster, can be one of the following:
-# -    IB: use InfiniBand network protocol
-# -  RDMA: use RDMA network protocol
-# - ERDMA: use aliyun ERDMA as RDMA network protocol
-# -   RXE: use Linux rxe kernel module to mock RDMA network protocol
-networkType: "RDMA"
-nodes:
-  - name: node1
-    host: "192.168.1.1"
-    username: "root"
-    password: "password"
-  - name: node2
-    host: "192.168.1.2"
-    username: "root"
-    password: "password"
-services:
-  client:
-    nodes: 
-      - node1
-    hostMountpoint: /mnt/3fs
-  storage:
-    nodes: 
-      - node1
-      - node2
-    # diskType configure the disk type of the storage node to use, can be one of the following:
-    # - nvme: NVMe SSD
-    # - dir: use a directory on the filesystem
-    diskType: "nvme"
-  mgmtd:
-    nodes: 
-      - node1
-  meta:
-    nodes: 
-      - node1
-  monitor:
-    nodes:
-      - node1
-  fdb:
-    nodes: 
-      - node1
-  clickhouse:
-    nodes: 
-      - node1
-    # Database name for Clickhouse
-    db: "3fs"
-    # User for Clickhouse authentication
-    user: "default"
-    # Password for Clickhouse authentication
-    password: "password"
-    # TCP port for Clickhouse
-    tcpPort: 8999
-  grafana:
-    nodes: 
-      - node1
-    # TCP port for Grafana
-    port: 3000
-images:
-  registry: "{{ .registry }}"
-  arch: "amd64"
-  3fs:
-    # If you want to run on environment not support avx512, add -avx2 to the end of the image tag, e.g. 20250410-avx2.
-    repo: "open3fs/3fs"
-    tag: "20250410"
-  fdb: 
-    repo: "open3fs/foundationdb"
-    tag: "7.3.63"
-  clickhouse:
-    repo: "open3fs/clickhouse"
-    tag: "25.1-jammy"
-  grafana:
-    repo: "open3fs/grafana"
-    tag: "12.0.0"
-`
-
 func createSampleConfig(ctx *cli.Context) error {
-	tmpl, err := template.New("sampleConfig").Parse(sampleConfigTemplate)
+	if architecture == "" {
+		architecture = runtime.GOARCH
+	}
+
+	sampleConfigTmpl, err := templatesFs.ReadFile(fmt.Sprintf("templates/config-%s.tmpl", architecture))
+	if err != nil {
+		return errors.Annotate(err, "read config template")
+	}
+
+	tmpl, err := template.New("sampleConfig").Parse(string(sampleConfigTmpl))
 	if err != nil {
 		return errors.Annotate(err, "parse sample config template")
 	}
