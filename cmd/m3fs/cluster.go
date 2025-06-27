@@ -232,7 +232,7 @@ func deleteCluster(ctx *cli.Context) error {
 		new(pg.DeletePgClusterTask),
 	}
 	if clusterDeleteAll {
-		runnerTasks = append(runnerTasks, new(network.PrepareNetworkTask))
+		runnerTasks = append(runnerTasks, new(network.DeleteNetworkTask))
 	}
 	runner, err := task.NewRunner(cfg, runnerTasks...)
 	if err != nil {
@@ -312,6 +312,41 @@ func setupDB(cfg *config.Config) (*gorm.DB, error) {
 	return nil, errors.New("no db nodes found")
 }
 
+func syncNodeModels(cfg *config.Config, db *gorm.DB) error {
+	var nodes []model.Node
+	err := db.Model(new(model.Node)).Find(&nodes).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	nodesMap := make(map[string]model.Node, len(nodes))
+	for _, node := range nodes {
+		nodesMap[node.Name] = node
+	}
+	cfgNodes := cfg.Nodes
+	err = db.Transaction(func(tx *gorm.DB) error {
+		for _, cfgNode := range cfgNodes {
+			_, ok := nodesMap[cfgNode.Name]
+			if ok {
+				continue
+			}
+			node := model.Node{
+				Name: cfgNode.Name,
+				Host: cfgNode.Host,
+			}
+			if err = tx.Model(&node).Create(&node).Error; err != nil {
+				return errors.Trace(err)
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
 func addStorageNodes(ctx *cli.Context) error {
 	cfg, err := loadClusterConfig()
 	if err != nil {
@@ -320,6 +355,10 @@ func addStorageNodes(ctx *cli.Context) error {
 
 	db, err := setupDB(cfg)
 	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if err = syncNodeModels(cfg, db); err != nil {
 		return errors.Trace(err)
 	}
 

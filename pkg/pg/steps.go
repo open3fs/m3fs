@@ -141,12 +141,13 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	}
 	pgCfg := s.Runtime.Services.Pg
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        &pgCfg.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
-		Envs:        s.getContainerEvs(),
-		Volumes:     vols,
+		Image:         img,
+		Name:          &pgCfg.ContainerName,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
+		Envs:          s.getContainerEvs(),
+		Volumes:       vols,
 	}
 	_, err = s.Em.Docker.Run(ctx, args)
 	if err != nil {

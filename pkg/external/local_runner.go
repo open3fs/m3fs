@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -106,6 +107,11 @@ func (r *LocalRunner) Exec(ctx context.Context, cmd string, args ...string) (str
 func (r *LocalRunner) Scp(ctx context.Context, local, remote string) error {
 	_, err := r.Exec(ctx, "cp", "-r", local, remote)
 	return errors.Trace(err)
+}
+
+// Stat run stat on path.
+func (r *LocalRunner) Stat(path string) (os.FileInfo, error) {
+	return os.Stat(path)
 }
 
 // Wait is an essential part of exec.Cmd which must have been started by Start,

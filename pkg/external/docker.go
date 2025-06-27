@@ -22,6 +22,13 @@ import (
 	"github.com/open3fs/m3fs/pkg/log"
 )
 
+// Container restart policy defines
+const (
+	ContainerRestartPolicyDefault       = ""
+	ContainerRestartPolicyAlways        = "always"
+	ContainerRestartPolicyUnlessStepped = "unless-stopped"
+)
+
 // DockerInterface provides interface about docker.
 type DockerInterface interface {
 	GetContainer(string) string
@@ -49,18 +56,19 @@ func (de *dockerExternal) GetContainer(name string) string {
 
 // RunArgs defines args for docker run command.
 type RunArgs struct {
-	Image       string
-	HostNetwork bool
-	Entrypoint  *string
-	Rm          *bool
-	Command     []string
-	Privileged  *bool
-	Ulimits     map[string]string
-	Name        *string
-	Detach      *bool
-	Publish     []*PublishArgs
-	Volumes     []*VolumeArgs
-	Envs        map[string]string
+	Image         string
+	HostNetwork   bool
+	Entrypoint    *string
+	Rm            *bool
+	Command       []string
+	Privileged    *bool
+	Ulimits       map[string]string
+	Name          *string
+	Detach        *bool
+	Publish       []*PublishArgs
+	Volumes       []*VolumeArgs
+	Envs          map[string]string
+	RestartPolicy string
 }
 
 // PublishArgs defines args for publishing a container port.
@@ -120,6 +128,9 @@ func (de *dockerExternal) Run(ctx context.Context, args *RunArgs) (out string, e
 			volBind += ":rshared"
 		}
 		params = append(params, "--volume", volBind)
+	}
+	if args.RestartPolicy != "" {
+		params = append(params, "--restart", args.RestartPolicy)
 	}
 	params = append(params, args.Image)
 	if len(args.Command) > 0 {

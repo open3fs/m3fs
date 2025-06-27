@@ -1,0 +1,10 @@
+[Unit]
+Description=Setup 3fs network
+Before=docker.service
+ 
+[Service]
+Type=simple
+ExecStart={{.ScriptPath}}
+ 
+[Install]
+WantedBy=multi-user.target

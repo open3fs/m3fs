@@ -163,10 +163,7 @@ func (fe *fsExternal) ReadRemoteFile(url string) (string, error) {
 }
 
 func (fe *fsExternal) IsNotExist(path string) (bool, error) {
-	if fe.returnUnimplemented {
-		return false, errors.New("unimplemented")
-	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := fe.em.Runner.Stat(path); os.IsNotExist(errors.Cause(err)) {
 		return true, nil
 	}
 	return false, nil

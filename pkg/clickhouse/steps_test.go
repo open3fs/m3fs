@@ -105,10 +105,11 @@ func (s *startContainerStepSuite) TestStartContainerStep() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageNameClickhouse)
 	s.NoError(err)
 	s.MockDocker.On("Run", &external.RunArgs{
-		Image:       img,
-		Name:        common.Pointer("3fs-clickhouse"),
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          common.Pointer("3fs-clickhouse"),
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
 		Envs: map[string]string{
 			"CLICKHOUSE_USER":     "default",
 			"CLICKHOUSE_PASSWORD": "password",

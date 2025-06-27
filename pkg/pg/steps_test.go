@@ -81,12 +81,13 @@ func (s *runContainerStepSuite) testRunContainerStep(
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageNamePg)
 	s.NoError(err)
 	s.MockDocker.On("Run", &external.RunArgs{
-		Image:       img,
-		Name:        &s.Cfg.Services.Pg.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
-		Envs:        env,
-		Volumes:     vols,
+		Image:         img,
+		Name:          &s.Cfg.Services.Pg.ContainerName,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
+		Envs:          env,
+		Volumes:       vols,
 	}).Return("", nil)
 	s.MockDocker.On("Exec", "3fs-postgres", "pg_isready",
 		[]string{"-U", s.Cfg.Services.Pg.Username}).Return("", nil)
@@ -162,10 +163,11 @@ func (s *runContainerStepSuite) TestRunContainerFailed() {
 	s.NoError(err)
 	pgCfg := s.Cfg.Services.Pg
 	s.MockDocker.On("Run", &external.RunArgs{
-		Image:       img,
-		Name:        &s.Cfg.Services.Pg.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          &s.Cfg.Services.Pg.ContainerName,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
 		Envs: map[string]string{
 			"POSTGRESQL_USERNAME":             pgCfg.Username,
 			"POSTGRESQL_PASSWORD":             pgCfg.Password,

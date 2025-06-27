@@ -15,10 +15,14 @@
 package task
 
 import (
+	"os"
+	"path"
+
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/external"
 	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
+	"github.com/open3fs/m3fs/pkg/utils"
 	texternal "github.com/open3fs/m3fs/tests/external"
 	tmodel "github.com/open3fs/m3fs/tests/model"
 )
@@ -98,4 +102,54 @@ func (s *StepSuite) SetupRuntime() {
 	s.Runtime.Store(task.RuntimeNodesMapKey, nodesMap)
 	s.Runtime.Store(task.RuntimeDbKey, db)
 	s.Runtime.Services = &s.Cfg.Services
+}
+
+// MockWriteRemoteFile mock write file to remote path.
+func (s *StepSuite) MockWriteRemoteFile(remotePath string, data []byte) {
+	localFile := utils.RandomString(10)
+	s.MockLocalFS.On("MkTempFile", os.TempDir()).Return(localFile, nil).Once()
+	s.MockLocalFS.On("RemoveAll", localFile).Return(nil).Once()
+	s.MockLocalFS.On("WriteFile", localFile, data, os.FileMode(0644)).Return(nil).Once()
+	baseDir := path.Dir(remotePath)
+	s.MockFS.On("MkdirAll", baseDir).Return(nil).Once()
+	s.MockRunner.On("Scp", localFile, remotePath).Return(nil).Once()
+}
+
+// AssertWriteRemoteFile assert write remote file called.
+func (s *StepSuite) AssertWriteRemoteFile() {
+	s.MockLocalFS.AssertExpectations(s.T())
+	s.MockRunner.AssertExpectations(s.T())
+}
+
+// MockRemoveService mock remove system service.
+func (s *StepSuite) MockRemoveService(serviceName string, exists bool) {
+	servicePath := path.Join(s.Runtime.Cfg.ServiceBasePath, serviceName)
+	s.MockFS.On("IsNotExist", servicePath).Return(!exists, nil).Once()
+	if exists {
+		s.MockFS.On("RemoveAll", servicePath).Return(nil).Once()
+		s.MockRunner.On("Exec", "systemctl", []string{"disable", serviceName}).Return("", nil)
+		s.MockRunner.On("Exec", "systemctl", []string{"daemon-reload"}).Return("", nil)
+	}
+}
+
+// AssertRemoveService assert remove system service called.
+func (s *StepSuite) AssertRemoveService() {
+	s.MockFS.AssertExpectations(s.T())
+	s.MockRunner.AssertExpectations(s.T())
+}
+
+// MockCreateService mock create system service.
+func (s *StepSuite) MockCreateService(scriptName, serviceName string, scriptData, serviceData []byte) {
+	scriptPath := path.Join(s.Cfg.WorkDir, "bin", scriptName)
+	s.MockWriteRemoteFile(scriptPath, scriptData)
+	s.MockWriteRemoteFile(path.Join(s.Cfg.ServiceBasePath, serviceName), serviceData)
+	s.MockRunner.On("Exec", "chmod", []string{"+x", scriptPath}).Return("", nil)
+	s.MockRunner.On("Exec", "systemctl", []string{"enable", serviceName}).Return("", nil)
+	s.MockRunner.On("Exec", "systemctl", []string{"daemon-reload"}).Return("", nil)
+}
+
+// AssertCreateService assert create service called.
+func (s *StepSuite) AssertCreateService() {
+	s.AssertWriteRemoteFile()
+	s.MockRunner.AssertExpectations(s.T())
 }

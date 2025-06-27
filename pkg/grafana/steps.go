@@ -140,10 +140,11 @@ func (s *startContainerStep) Execute(ctx context.Context) error {
 	datasourceDir := path.Join(workdir, "datasources")
 	dashboardDir := path.Join(workdir, "dashboards")
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        &s.Runtime.Services.Grafana.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          &s.Runtime.Services.Grafana.ContainerName,
+		HostNetwork:   true,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		Detach:        common.Pointer(true),
 		Volumes: []*external.VolumeArgs{
 			{
 				Source: datasourceDir,

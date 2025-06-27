@@ -43,12 +43,7 @@ func (t *PrepareNetworkTask) Init(r *task.Runtime, logger log.Interface) {
 			{
 				Nodes:    nodes,
 				Parallel: true,
-				NewStep:  func() task.Step { return new(loadRdmaRxeModuleStep) },
-			},
-			{
-				Nodes:    nodes,
-				Parallel: true,
-				NewStep:  func() task.Step { return new(createRdmaRxeLinkStep) },
+				NewStep:  func() task.Step { return new(setupRxeStep) },
 			},
 		}
 		steps = append(steps, rxeSteps...)
@@ -57,7 +52,7 @@ func (t *PrepareNetworkTask) Init(r *task.Runtime, logger log.Interface) {
 			{
 				Nodes:    nodes,
 				Parallel: true,
-				NewStep:  func() task.Step { return new(loadErdmaModuleStep) },
+				NewStep:  func() task.Step { return new(setupErdmaStep) },
 			},
 		}
 		steps = append(steps, erdmaSteps...)
@@ -71,7 +66,7 @@ func (t *PrepareNetworkTask) Init(r *task.Runtime, logger log.Interface) {
 	t.SetSteps(steps)
 }
 
-// DeleteNetworkTask is a task for deleting configration added on setup network.
+// DeleteNetworkTask is a task for deleting configuration added on setup network.
 type DeleteNetworkTask struct {
 	task.BaseTask
 }
@@ -86,21 +81,14 @@ func (t *DeleteNetworkTask) Init(r *task.Runtime, logger log.Interface) {
 		{
 			Nodes:    nodes,
 			Parallel: true,
+			NewStep:  func() task.Step { return new(deleteSetupNetworkServiceStep) },
+		},
+		{
+			Nodes:    nodes,
+			Parallel: true,
 			NewStep:  func() task.Step { return new(deleteIbdev2netdevScriptStep) },
 		},
 	}
-	switch r.Cfg.NetworkType {
-	case config.NetworkTypeRXE:
-		rxeSteps := []task.StepConfig{
-			{
-				Nodes:    nodes,
-				Parallel: true,
-				NewStep:  func() task.Step { return new(deleteRdmaRxeLinkScriptStep) },
-			},
-		}
-		steps = append(steps, rxeSteps...)
-	case config.NetworkTypeERDMA:
-		// TODO
-	}
+
 	t.SetSteps(steps)
 }

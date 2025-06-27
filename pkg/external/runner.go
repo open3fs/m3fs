@@ -40,6 +40,7 @@ type RunnerInterface interface {
 	Exec(ctx context.Context, command string, args ...string) (string, error)
 
 	Scp(ctx context.Context, local, remote string) error
+	Stat(path string) (os.FileInfo, error)
 }
 
 // RemoteRunner implements RunInterface by running command on a remote host.
@@ -266,6 +267,16 @@ func (r *RemoteRunner) copyDirToRemote(local, remote string) error {
 		}
 		return nil
 	})
+}
+
+// Stat run stat on path
+func (r *RemoteRunner) Stat(path string) (os.FileInfo, error) {
+	info, err := r.sftpClient.Stat(path)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return info, nil
 }
 
 // RemoteRunnerCfg defines configurations of a remote runner.

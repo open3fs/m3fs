@@ -17,6 +17,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -254,6 +255,92 @@ func (s *BaseStep) RunAdminCli(ctx context.Context, container, cmd string) (stri
 	}
 
 	return out, nil
+}
+
+// WriteRemoteFile write file to remote path
+func (s *BaseStep) WriteRemoteFile(ctx context.Context, remotePath string, data []byte) error {
+
+	localTmpFile, err := s.Runtime.LocalEm.FS.MkTempFile(ctx, os.TempDir())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	defer func() {
+		if err = s.Runtime.LocalEm.FS.RemoveAll(ctx, localTmpFile); err != nil {
+			s.Logger.Warnf("Failed to delete tmp file %s:%s", localTmpFile, err)
+		}
+	}()
+
+	baseDir := path.Dir(remotePath)
+	if err := s.Em.FS.MkdirAll(ctx, baseDir); err != nil {
+		return errors.Trace(err)
+	}
+
+	err = s.Runtime.LocalEm.FS.WriteFile(localTmpFile, data, 0644)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if err = s.Em.Runner.Scp(ctx, localTmpFile, remotePath); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+// CreateScriptAndService create service and its script
+func (s *BaseStep) CreateScriptAndService(
+	ctx context.Context, scriptName, serviceName string, scriptBytes, serviceBytes []byte) error {
+
+	scriptPath := path.Join(s.Runtime.WorkDir, "bin", scriptName)
+	err := s.WriteRemoteFile(ctx, scriptPath, scriptBytes)
+	if err != nil {
+		return errors.Annotatef(err, "write remote file %s", scriptPath)
+	}
+	_, err = s.Em.Runner.Exec(ctx, "chmod", "+x", scriptPath)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	servicePath := path.Join(s.Runtime.Cfg.ServiceBasePath, serviceName)
+	if err = s.WriteRemoteFile(ctx, servicePath, serviceBytes); err != nil {
+		return errors.Annotatef(err, "write remote file %s", servicePath)
+	}
+
+	if _, err = s.Em.Runner.Exec(ctx, "systemctl", "enable", serviceName); err != nil {
+		return errors.Annotatef(err, "enable %s", serviceName)
+	}
+
+	if _, err = s.Em.Runner.Exec(ctx, "systemctl", "daemon-reload"); err != nil {
+		return errors.Annotate(err, "daemon reload")
+	}
+
+	return nil
+}
+
+// DeleteService delete system service
+func (s *BaseStep) DeleteService(ctx context.Context, serviceName string) error {
+	servicePath := path.Join(s.Runtime.Cfg.ServiceBasePath, serviceName)
+	notExists, err := s.Em.FS.IsNotExist(servicePath)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if notExists {
+		return nil
+	}
+
+	if _, err := s.Em.Runner.Exec(ctx, "systemctl", "disable", serviceName); err != nil {
+		return errors.Annotatef(err, "disable %s", serviceName)
+	}
+
+	if err := s.Em.FS.RemoveAll(ctx, servicePath); err != nil {
+		return errors.Trace(err)
+	}
+
+	if _, err := s.Em.Runner.Exec(ctx, "systemctl", "daemon-reload"); err != nil {
+		return errors.Annotate(err, "daemon reload")
+	}
+
+	return nil
 }
 
 // LocalStep is an interface that defines the methods that all local steps must implement,

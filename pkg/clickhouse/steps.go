@@ -152,10 +152,11 @@ func (s *startContainerStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        &s.Runtime.Services.Clickhouse.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          &s.Runtime.Services.Clickhouse.ContainerName,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
 		Envs: map[string]string{
 			"CLICKHOUSE_USER":     s.Runtime.Services.Clickhouse.User,
 			"CLICKHOUSE_PASSWORD": s.Runtime.Services.Clickhouse.Password,

@@ -195,6 +195,7 @@ type Config struct {
 	UI                       UIConfig       `yaml:"ui,omitempty"`
 	WaitServiceOnlineTimeout time.Duration  `yaml:"waitServiceOnlineTimeout,omitempty"`
 	CmdMaxExitTimeout        *time.Duration `yaml:",omitempty"`
+	ServiceBasePath          string         `yaml:"serviceBasePath,omitempty"`
 }
 
 func (c *Config) parseValidateNodeGroups(hostSet *utils.Set[string]) (map[string]*NodeGroup, error) {
@@ -451,6 +452,10 @@ func (c *Config) SetValidate(workDir, registry string) error {
 		return errors.New("services.client.hostMountpoint is required")
 	}
 
+	if c.ServiceBasePath == "" {
+		return errors.New("serviceBasePath is required")
+	}
+
 	if err := c.validImages(); err != nil {
 		return errors.Trace(err)
 	}
@@ -621,5 +626,6 @@ func NewConfigWithDefaults() *Config {
 			},
 		},
 		WaitServiceOnlineTimeout: 30 * time.Second,
+		ServiceBasePath:          "/lib/systemd/system/",
 	}
 }
