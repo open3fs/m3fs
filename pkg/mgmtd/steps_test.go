@@ -18,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -507,6 +508,7 @@ func (s *initUserAndChainStepSuite) SetupTest() {
 	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey, `["RDMA://10.16.28.58:8000"]`)
 }
 
+//nolint:lll
 func (s *initUserAndChainStepSuite) Test() {
 	containerName := s.Runtime.Services.Mgmtd.ContainerName
 	s.MockDocker.On("Exec", containerName, "/opt/3fs/bin/admin_cli", []string{
@@ -524,6 +526,27 @@ SupplementaryGids`, nil)
 		"-c",
 		`"echo AAA8WCoB8QAt8bFw2wBupzjA > /opt/3fs/etc/token.txt"`,
 	}).Return("", nil)
+
+	s.Runtime.Services.Storage.Nodes = []string{"test-3fs-1", "test-3fs-2"}
+	s.Runtime.Cfg.CheckStatusInterval = 10 * time.Millisecond
+	s.MockDocker.On("Exec", containerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		"--config.mgmtd_client.mgmtd_server_addresses", `'["RDMA://10.16.28.58:8000"]'`,
+		"--config.user_info.token", "AAA8WCoB8QAt8bFw2wBupzjA",
+		`"list-nodes"`,
+	}).Return(`Id     Type     Status               Hostname    Pid  Tags  LastHeartbeatTime    ConfigVersion  ReleaseVersion
+1      MGMTD    PRIMARY_MGMTD        test-3fs-1  1    []    N/A                  1(UPTODATE)    250228-dev-1-999999-ee9a5cee
+100    META     HEARTBEAT_CONNECTED  test-3fs-1  1    []    2025-06-30 04:22:52  1(UPTODATE)    250228-dev-1-999999-ee9a5cee`, nil).Once()
+	s.MockDocker.On("Exec", containerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		"--config.mgmtd_client.mgmtd_server_addresses", `'["RDMA://10.16.28.58:8000"]'`,
+		"--config.user_info.token", "AAA8WCoB8QAt8bFw2wBupzjA",
+		`"list-nodes"`,
+	}).Return(`Id     Type     Status               Hostname    Pid  Tags  LastHeartbeatTime    ConfigVersion  ReleaseVersion
+1      MGMTD    PRIMARY_MGMTD        test-3fs-1  1    []    N/A                  1(UPTODATE)    250228-dev-1-999999-ee9a5cee
+100    META     HEARTBEAT_CONNECTED  test-3fs-1  1    []    2025-06-30 04:22:52  1(UPTODATE)    250228-dev-1-999999-ee9a5cee
+10001  STORAGE  HEARTBEAT_CONNECTED  test-3fs-1  1    []    2025-06-30 04:22:50  1(UPTODATE)    250228-dev-1-999999-ee9a5cee
+10002  STORAGE  HEARTBEAT_CONNECTED  test-3fs-2  1    []    2025-06-30 04:22:52  1(UPTODATE)    250228-dev-1-999999-ee9a5cee`, nil)
 
 	s.MockDocker.On("Exec", containerName, "python3", []string{
 		"/opt/3fs/data_placement/src/model/data_placement.py",
