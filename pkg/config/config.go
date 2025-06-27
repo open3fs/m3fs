@@ -168,16 +168,18 @@ type UIConfig struct {
 
 // Config is the 3fs cluster config definition
 type Config struct {
-	Name              string
-	WorkDir           string      `yaml:"workDir"`
-	NetworkType       NetworkType `yaml:"networkType"`
-	LogLevel          string      `yaml:"logLevel"`
-	Nodes             []Node
-	NodeGroups        []NodeGroup    `yaml:"nodeGroups"`
-	Services          Services       `yaml:"services"`
-	Images            Images         `yaml:"images"`
-	UI                UIConfig       `yaml:"ui,omitempty"`
-	CmdMaxExitTimeout *time.Duration `yaml:",omitempty"`
+	Name                string
+	WorkDir             string      `yaml:"workDir"`
+	NetworkType         NetworkType `yaml:"networkType"`
+	LogLevel            string      `yaml:"logLevel"`
+	Nodes               []Node
+	NodeGroups          []NodeGroup    `yaml:"nodeGroups"`
+	Services            Services       `yaml:"services"`
+	Images              Images         `yaml:"images"`
+	UI                  UIConfig       `yaml:"ui,omitempty"`
+	CmdMaxExitTimeout   *time.Duration `yaml:",omitempty"`
+	CheckStatusTimeout  time.Duration
+	CheckStatusInterval time.Duration
 }
 
 func (c *Config) parseValidateNodeGroups(hostSet *utils.Set[string]) (map[string]*NodeGroup, error) {
@@ -572,5 +574,7 @@ func NewConfigWithDefaults() *Config {
 				Tag:  "12.0.0",
 			},
 		},
+		CheckStatusTimeout:  5 * time.Minute,
+		CheckStatusInterval: 5 * time.Second,
 	}
 }

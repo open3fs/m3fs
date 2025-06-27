@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
@@ -212,6 +213,9 @@ func (s *initUserAndChainStep) Execute(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	if err = s.waitStorageServiceReady(ctx, token); err != nil {
+		return errors.Trace(err)
+	}
 	if err = s.initChainFiles(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -264,6 +268,46 @@ func (s *initUserAndChainStep) initUser(ctx context.Context) (token string, err 
 	}
 	s.Runtime.Store(task.RuntimeUserTokenKey, token)
 	return token, nil
+}
+
+func (s *initUserAndChainStep) waitStorageServiceReady(ctx context.Context, token string) error {
+	addr := steps.GetMgmtdServerAddresses(s.Runtime)
+
+	timeout := time.NewTimer(s.Runtime.Cfg.CheckStatusTimeout)
+	defer timeout.Stop()
+	interval := time.NewTicker(s.Runtime.Cfg.CheckStatusInterval)
+	defer interval.Stop()
+
+	for {
+		select {
+		case <-timeout.C:
+			return errors.Errorf("timeout waiting for storage service to be ready")
+		case <-interval.C:
+			output, err := s.Em.Docker.Exec(ctx, s.Runtime.Services.Mgmtd.ContainerName,
+				"/opt/3fs/bin/admin_cli",
+				"--cfg", "/opt/3fs/etc/admin_cli.toml",
+				"--config.mgmtd_client.mgmtd_server_addresses", fmt.Sprintf(`'%s'`, addr),
+				"--config.user_info.token", token,
+				`"list-nodes"`,
+			)
+			if err != nil {
+				return errors.Annotate(err, "list-nodes")
+			}
+
+			readyNodeNum := 0
+			lines := strings.Split(output, "\n")
+			for _, line := range lines {
+				if strings.Contains(line, "STORAGE") && strings.Contains(line, "HEARTBEAT_CONNECTED") {
+					readyNodeNum++
+				}
+			}
+			s.Logger.Infof("Waiting for storage service to be ready: %d/%d",
+				readyNodeNum, len(s.Runtime.Services.Storage.Nodes))
+			if readyNodeNum >= len(s.Runtime.Services.Storage.Nodes) {
+				return nil
+			}
+		}
+	}
 }
 
 func (s *initUserAndChainStep) initChainFiles(ctx context.Context) error {
