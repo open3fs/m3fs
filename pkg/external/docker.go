@@ -26,7 +26,7 @@ import (
 const (
 	ContainerRestartPolicyDefault       = ""
 	ContainerRestartPolicyAlways        = "always"
-	ContainerRestartPolicyUnlessStepped = "unless-stopped"
+	ContainerRestartPolicyUnlessStopped = "unless-stopped"
 )
 
 // DockerInterface provides interface about docker.

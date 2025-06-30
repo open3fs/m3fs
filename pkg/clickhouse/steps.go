@@ -154,7 +154,7 @@ func (s *startContainerStep) Execute(ctx context.Context) error {
 	args := &external.RunArgs{
 		Image:         img,
 		Name:          &s.Runtime.Services.Clickhouse.ContainerName,
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		HostNetwork:   true,
 		Detach:        common.Pointer(true),
 		Envs: map[string]string{

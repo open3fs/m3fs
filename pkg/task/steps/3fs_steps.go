@@ -399,7 +399,7 @@ func (s *run3FSContainerStep) Execute(ctx context.Context) error {
 		Image:         img,
 		Name:          &s.containerName,
 		HostNetwork:   true,
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		Privileged:    common.Pointer(true),
 		Ulimits: map[string]string{
 			"nofile": "1048576:1048576",

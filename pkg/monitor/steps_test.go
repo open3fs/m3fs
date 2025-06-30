@@ -98,7 +98,7 @@ func (s *runContainerStepSuite) Test() {
 		Image:         img,
 		Name:          common.Pointer("3fs-monitor"),
 		HostNetwork:   true,
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		Privileged:    common.Pointer(true),
 		Detach:        common.Pointer(true),
 		Volumes: []*external.VolumeArgs{

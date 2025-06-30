@@ -181,6 +181,7 @@ func (s *setupNetworkBaseStep) setupNetwork(ctx context.Context, scriptData []by
 	if err = tmpl.Execute(buf, data); err != nil {
 		return errors.Trace(err)
 	}
+	s.Logger.Infof("Creating setup-network script and setup-3fs-network.service service...")
 	err = s.CreateScriptAndService(ctx, "setup-network", "setup-3fs-network.service",
 		scriptData, buf.Bytes())
 	if err != nil {

@@ -109,7 +109,7 @@ func (s *startContainerStepSuite) TestStartContainerStep() {
 		Name:          common.Pointer("3fs-clickhouse"),
 		HostNetwork:   true,
 		Detach:        common.Pointer(true),
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		Envs: map[string]string{
 			"CLICKHOUSE_USER":     "default",
 			"CLICKHOUSE_PASSWORD": "password",

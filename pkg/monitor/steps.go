@@ -126,7 +126,7 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	args := &external.RunArgs{
 		Image:         img,
 		Name:          &s.Runtime.Services.Monitor.ContainerName,
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		HostNetwork:   true,
 		Privileged:    common.Pointer(true),
 		Detach:        common.Pointer(true),

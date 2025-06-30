@@ -83,7 +83,7 @@ func (s *runContainerStepSuite) testRunContainerStep(
 	s.MockDocker.On("Run", &external.RunArgs{
 		Image:         img,
 		Name:          &s.Cfg.Services.Pg.ContainerName,
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		HostNetwork:   true,
 		Detach:        common.Pointer(true),
 		Envs:          env,
@@ -165,7 +165,7 @@ func (s *runContainerStepSuite) TestRunContainerFailed() {
 	s.MockDocker.On("Run", &external.RunArgs{
 		Image:         img,
 		Name:          &s.Cfg.Services.Pg.ContainerName,
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		HostNetwork:   true,
 		Detach:        common.Pointer(true),
 		Envs: map[string]string{

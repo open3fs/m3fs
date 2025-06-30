@@ -143,7 +143,7 @@ func (s *startContainerStep) Execute(ctx context.Context) error {
 		Image:         img,
 		Name:          &s.Runtime.Services.Grafana.ContainerName,
 		HostNetwork:   true,
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		Detach:        common.Pointer(true),
 		Volumes: []*external.VolumeArgs{
 			{

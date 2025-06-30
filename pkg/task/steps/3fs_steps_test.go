@@ -596,7 +596,7 @@ func (s *run3FSContainerStepSuite) testRunContainer(
 		Image:         img,
 		Name:          &s.Cfg.Services.Mgmtd.ContainerName,
 		Detach:        common.Pointer(true),
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		HostNetwork:   true,
 		Privileged:    common.Pointer(true),
 		Ulimits: map[string]string{

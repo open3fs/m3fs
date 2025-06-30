@@ -98,7 +98,7 @@ func (s *startContainerStepSuite) TestStartContainerStep() {
 	s.MockDocker.On("Run", &external.RunArgs{
 		Image:         img,
 		Name:          common.Pointer("3fs-grafana"),
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		HostNetwork:   true,
 		Detach:        common.Pointer(true),
 		Volumes: []*external.VolumeArgs{

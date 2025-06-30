@@ -143,7 +143,7 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	args := &external.RunArgs{
 		Image:         img,
 		Name:          &pgCfg.ContainerName,
-		RestartPolicy: external.ContainerRestartPolicyUnlessStepped,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		HostNetwork:   true,
 		Detach:        common.Pointer(true),
 		Envs:          s.getContainerEvs(),

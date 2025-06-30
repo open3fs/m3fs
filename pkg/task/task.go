@@ -291,6 +291,7 @@ func (s *BaseStep) WriteRemoteFile(ctx context.Context, remotePath string, data 
 func (s *BaseStep) CreateScriptAndService(
 	ctx context.Context, scriptName, serviceName string, scriptBytes, serviceBytes []byte) error {
 
+	s.Logger.Infof("Creating %s script and %s service...", scriptName, serviceName)
 	scriptPath := path.Join(s.Runtime.WorkDir, "bin", scriptName)
 	err := s.WriteRemoteFile(ctx, scriptPath, scriptBytes)
 	if err != nil {
