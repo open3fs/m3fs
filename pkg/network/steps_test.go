@@ -228,7 +228,7 @@ set -e
 function load_erdma_module(){
     echo "Loading erdma kernel module..."
     need_load=true
-    if [ -f /sys/module/erdma ];then
+    if [ -d /sys/module/erdma ];then
         need_load=false
     fi
     if [ "${need_load}" = "false" ];then

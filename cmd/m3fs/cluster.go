@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	"gopkg.in/yaml.v3"
@@ -298,11 +299,12 @@ func setupDB(cfg *config.Config) (*gorm.DB, error) {
 		}
 
 		db, err := model.NewDB(&model.ConnectionArgs{
-			Host:     node.Host,
-			Port:     dbCfg.Port,
-			User:     dbCfg.Username,
-			Password: dbCfg.Password,
-			DBName:   dbCfg.Database,
+			Host:             node.Host,
+			Port:             dbCfg.Port,
+			User:             dbCfg.Username,
+			Password:         dbCfg.Password,
+			DBName:           dbCfg.Database,
+			SlowSQLThreshold: 200 * time.Millisecond,
 		})
 		if err != nil {
 			return nil, errors.Trace(err)

@@ -386,24 +386,19 @@ func (s *createChainAndTargetModelStep) createTargets(
 		if !ok {
 			return errors.Errorf("chain not found for target '%s'", line)
 		}
-		var disk *model.Disk
-		if s.Runtime.Cfg.Services.Storage.DiskType != config.DiskTypeDirectory {
-			nodeDisks, ok := disksMap[storService.NodeID]
-			if !ok {
-				return errors.Errorf("disks not found for storage service '%s'", storService.Name)
-			}
-			disk, ok = nodeDisks[diskIndex]
-			if !ok {
-				return errors.Errorf("disk not found for target '%s'", line)
-			}
+		nodeDisks, ok := disksMap[storService.NodeID]
+		if !ok {
+			return errors.Errorf("disks not found for storage service '%s'", storService.Name)
+		}
+		disk, ok := nodeDisks[diskIndex]
+		if !ok {
+			return errors.Errorf("disk not found for target '%s'", line)
 		}
 		target := &model.Target{
 			Name:    targetID,
 			NodeID:  storService.NodeID,
 			ChainID: chain.ID,
-		}
-		if disk != nil {
-			target.DiskID = disk.ID
+			DiskID:  disk.ID,
 		}
 		if err := db.Model(new(model.Target)).Create(target).Error; err != nil {
 			return errors.Annotatef(err, "create target %s", target.Name)

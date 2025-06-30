@@ -17,6 +17,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"path"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
 	"github.com/open3fs/m3fs/pkg/pg/model"
@@ -51,12 +53,18 @@ func (s *createDisksStep) Execute(ctx context.Context) error {
 	}
 	s.storServiceID = storageService.ID
 
-	devices, err := s.Em.Disk.ListBlockDevices(ctx)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if err = s.createFsDisks(devices); err != nil {
-		return errors.Trace(err)
+	if s.Runtime.Cfg.Services.Storage.DiskType == config.DiskTypeDirectory {
+		if err := s.createDirDisks(); err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		devices, err := s.Em.Disk.ListBlockDevices(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if err = s.createFsDisks(devices); err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	return nil
@@ -72,39 +80,63 @@ func (s *createDisksStep) parseDiskIndex(label string) (int, error) {
 	return int(index), nil
 }
 
-func (s *createDisksStep) createFsDisks(devices []external.BlockDevice) error {
-	for _, device := range devices {
-		if len(device.Children) > 0 {
-			if err := errors.Trace(s.createFsDisks(device.Children)); err != nil {
+func (s *createDisksStep) createDirDisks() error {
+	storCfg := s.Runtime.Services.Storage
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		for i := range storCfg.DiskNumPerNode {
+			disk := &model.Disk{
+				Name:          path.Join(getServiceWorkDir(s.Runtime.WorkDir), "3fsdata", fmt.Sprintf("data%d", i)),
+				NodeID:        s.nodeID,
+				StorServiceID: s.storServiceID,
+				Index:         i,
+				SizeByte:      -1,
+				SerialNum:     "",
+			}
+			if err := tx.Model(disk).Create(disk).Error; err != nil {
 				return errors.Trace(err)
 			}
-			continue
+			s.Logger.Debugf("Created dir type disk: %s, index: %d", disk.Name, disk.Index)
 		}
-		if device.Label == "" || !strings.HasPrefix(device.Label, "3fs-data-") {
-			continue
-		}
+		return nil
+	})
+	return errors.Trace(err)
+}
 
-		index, err := s.parseDiskIndex(device.Label)
-		if err != nil {
-			return errors.Trace(err)
-		}
+func (s *createDisksStep) createFsDisks(devices []external.BlockDevice) error {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		for _, device := range devices {
+			if len(device.Children) > 0 {
+				if err := errors.Trace(s.createFsDisks(device.Children)); err != nil {
+					return errors.Trace(err)
+				}
+				continue
+			}
+			if device.Label == "" || !strings.HasPrefix(device.Label, "3fs-data-") {
+				continue
+			}
 
-		disk := &model.Disk{
-			Name:          device.Name,
-			NodeID:        s.nodeID,
-			StorServiceID: s.storServiceID,
-			Index:         index,
-			SizeByte:      device.Size,
-			SerialNum:     device.Serial,
-		}
-		if err := s.db.Model(disk).Create(disk).Error; err != nil {
-			return errors.Trace(err)
-		}
-		s.Logger.Debugf("Created disk: %s, index: %d, size: %d, serial: %s",
-			disk.Name, disk.Index, disk.SizeByte, disk.SerialNum)
-	}
+			index, err := s.parseDiskIndex(device.Label)
+			if err != nil {
+				return errors.Trace(err)
+			}
 
-	return nil
+			disk := &model.Disk{
+				Name:          device.Name,
+				NodeID:        s.nodeID,
+				StorServiceID: s.storServiceID,
+				Index:         index,
+				SizeByte:      device.Size,
+				SerialNum:     device.Serial,
+			}
+			if err := tx.Model(disk).Create(disk).Error; err != nil {
+				return errors.Trace(err)
+			}
+			s.Logger.Debugf("Created disk: %s, index: %d, size: %d, serial: %s",
+				disk.Name, disk.Index, disk.SizeByte, disk.SerialNum)
+		}
+		return nil
+	})
+	return errors.Trace(err)
 }
 
 type setupAutoMountDiskStep struct {

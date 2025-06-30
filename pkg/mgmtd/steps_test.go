@@ -271,7 +271,7 @@ func (s *createChainAndTargetModelStepSuite) SetupTest() {
 	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
 }
 
-func (s *createChainAndTargetModelStepSuite) testCreate(isDir bool) {
+func (s *createChainAndTargetModelStepSuite) TestCreate() {
 	s.MockDocker.On("Exec", s.Cfg.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli", []string{
 		"--cfg", "/opt/3fs/etc/admin_cli.toml",
 		`list-chains`,
@@ -327,25 +327,11 @@ func (s *createChainAndTargetModelStepSuite) testCreate(isDir bool) {
 		NodeID:  s.node2.ID,
 		ChainID: chains[1].ID,
 	}
-	if isDir {
-		target1Exp.DiskID = 0
-		target2Exp.DiskID = 0
-		target3Exp.DiskID = 0
-	}
 	s.Equal(target1Exp, &targets[0])
 	s.Equal(target2Exp, &targets[1])
 	s.Equal(target3Exp, &targets[2])
 
 	s.MockDocker.AssertExpectations(s.T())
-}
-
-func (s *createChainAndTargetModelStepSuite) TestCreateWithNvme() {
-	s.testCreate(false)
-}
-
-func (s *createChainAndTargetModelStepSuite) TestCreateWithDir() {
-	s.Runtime.Cfg.Services.Storage.DiskType = config.DiskTypeDirectory
-	s.testCreate(true)
 }
 
 func (s *createChainAndTargetModelStepSuite) TestWithTargetStorServiceNotFound() {

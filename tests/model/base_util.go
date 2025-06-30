@@ -20,6 +20,7 @@ import (
 	"os"
 	"strconv"
 	"sync/atomic"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -39,11 +40,12 @@ var (
 // ConnectionArgs returns a connetion argument to test database.
 func ConnectionArgs() *model.ConnectionArgs {
 	connArg := &model.ConnectionArgs{
-		Host:     "127.0.0.1",
-		Port:     5432,
-		User:     "postgres",
-		Password: "password",
-		DBName:   "postgres",
+		Host:             "127.0.0.1",
+		Port:             5432,
+		User:             "postgres",
+		Password:         "password",
+		DBName:           "postgres",
+		SlowSQLThreshold: 500 * time.Millisecond,
 	}
 	setConnArgByEnv(connArg)
 

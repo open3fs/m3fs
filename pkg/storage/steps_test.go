@@ -55,7 +55,7 @@ func (s *createDisksStepSuite) SetupTest() {
 	s.NoError(db.Model(new(model.StorService)).Create(&s.storService).Error)
 }
 
-func (s *createDisksStepSuite) TestCreateDisks() {
+func (s *createDisksStepSuite) TestCreateBlockDisks() {
 	s.MockDisk.On("ListBlockDevices").Return([]external.BlockDevice{
 		{
 			Name:   "vda",
@@ -108,6 +108,37 @@ func (s *createDisksStepSuite) TestCreateDisks() {
 		Index:         1,
 		SizeByte:      10737418239,
 		SerialNum:     "1234567892",
+	}
+	s.Equal(disk2Exp, disks[1])
+
+	s.MockDisk.AssertExpectations(s.T())
+}
+
+func (s *createDisksStepSuite) TestCreateDirDisks() {
+	s.step.Runtime.Cfg.Services.Storage.DiskType = config.DiskTypeDirectory
+	s.step.Runtime.Cfg.Services.Storage.DiskNumPerNode = 2
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	var disks []model.Disk
+	s.NoError(s.NewDB().Model(new(model.Disk)).Order("id asc").Find(&disks).Error)
+	s.Len(disks, 2)
+	disk1Exp := model.Disk{
+		Model:         disks[0].Model,
+		Name:          path.Join(getServiceWorkDir(s.Runtime.WorkDir), "3fsdata/data0"),
+		NodeID:        s.node.ID,
+		StorServiceID: s.storService.ID,
+		Index:         0,
+		SizeByte:      -1,
+	}
+	s.Equal(disk1Exp, disks[0])
+	disk2Exp := model.Disk{
+		Model:         disks[1].Model,
+		Name:          path.Join(getServiceWorkDir(s.Runtime.WorkDir), "3fsdata/data1"),
+		NodeID:        s.node.ID,
+		StorServiceID: s.storService.ID,
+		Index:         1,
+		SizeByte:      -1,
 	}
 	s.Equal(disk2Exp, disks[1])
 
