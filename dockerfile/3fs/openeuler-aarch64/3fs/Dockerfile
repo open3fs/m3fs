@@ -31,6 +31,8 @@ RUN cd /opt/3fs/bin && \
     cd /usr/lib64 && \
     wget ${ARTIFACTORY_PREFIX}/${VERSION}/hf3fs_usrbio.so && \
     wget ${ARTIFACTORY_PREFIX}/${VERSION}/libhf3fs_api_shared.so && \
+    ln -s /usr/lib64/libhf3fs_api_shared.so /usr/lib/ && \
+    ln -s /usr/lib64/hf3fs_usrbio.so /usr/lib/ && \
     cd /usr/bin && \
     wget ${ARTIFACTORY_PREFIX}/${VERSION}/fio && \
     chmod +x /usr/bin/fio
