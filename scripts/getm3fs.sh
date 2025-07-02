@@ -2,14 +2,10 @@
 
 # Check OS
 OS_COMPATABILE=false
-SUPPORTED_OS=(
-  "ubuntu:22.04"
-  "openEuler:22.03"
-  "openEuler:24.03"
-)
+SUPPORTED_OS="ubuntu:22.04 openEuler:22.03 openEuler:24.03"
 if [ -f /etc/os-release ]; then
   . /etc/os-release
-  for os_version in "${SUPPORTED_OS[@]}"; do
+  for os_version in $SUPPORTED_OS; do
     os_name="${os_version%%:*}"
     os_ver="${os_version##*:}"
     if [ "$ID" = "$os_name" ] && [ "$VERSION_ID" = "$os_ver" ]; then
@@ -22,8 +18,8 @@ fi
 if [ "$OS_COMPATABILE" = false ]; then
   echo ""
   echo "Warning: m3fs is only supported on the following systems:"
-  for os_version in "${SUPPORTED_OS[@]}"; do
-    echo "  - ${os_version//:/ }"
+  for os_version in $SUPPORTED_OS; do
+    echo "  - $os_version" | sed 's/:/ /g'
   done
   echo "After downloading, please copy the tar.gz file to a supported system."
   echo ""
@@ -59,7 +55,7 @@ fi
 #   exit
 # fi
 
-VERSION="v0.1.9"
+VERSION="v0.2.0"
 DOWNLOAD_URL="https://artifactory.open3fs.com/m3fs/m3fs_${VERSION}_${ARCH}.tar.gz"
 
 echo ""
