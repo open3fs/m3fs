@@ -1,0 +1,74 @@
+name: "{{.name}}"
+workDir: "/opt/3fs"
+# networkType configure the network type of the cluster, can be one of the following:
+# -    IB: use InfiniBand network protocol
+# -  RDMA: use RDMA network protocol
+# - ERDMA: use aliyun ERDMA as RDMA network protocol
+# -   RXE: use Linux rxe kernel module to mock RDMA network protocol
+networkType: "RDMA"
+nodes:
+  - name: node1
+    host: "192.168.1.1"
+    username: "root"
+    password: "password"
+  - name: node2
+    host: "192.168.1.2"
+    username: "root"
+    password: "password"
+services:
+  client:
+    nodes:
+      - node1
+    hostMountpoint: /mnt/3fs
+  storage:
+    nodes:
+      - node1
+      - node2
+    # diskType configure the disk type of the storage node to use, can be one of the following:
+    # - nvme: NVMe SSD
+    # - dir: use a directory on the filesystem
+    diskType: "nvme"
+  mgmtd:
+    nodes:
+      - node1
+  meta:
+    nodes:
+      - node1
+  monitor:
+    nodes:
+      - node1
+  fdb:
+    nodes:
+      - node1
+  clickhouse:
+    nodes:
+      - node1
+    # Database name for Clickhouse
+    db: "3fs"
+    # User for Clickhouse authentication
+    user: "default"
+    # Password for Clickhouse authentication
+    password: "password"
+    # TCP port for Clickhouse
+    tcpPort: 8999
+  grafana:
+    nodes:
+      - node1
+    # TCP port for Grafana
+    port: 3000
+images:
+  registry: "{{ .registry }}"
+  arch: "arm64"
+  3fs:
+    repo: "open3fs/3fs"
+    tag: "20250617"
+  fdb:
+    repo: "open3fs/foundationdb"
+    tag: "7.3.63"
+  clickhouse:
+    # If you want to run on environment not support ARMv8.2-A and the Load-Acquire RCpc register, please use tag 22.9 (22.9 only, not 22.9-jammy).
+    repo: "open3fs/clickhouse"
+    tag: "25.1-jammy"
+  grafana:
+    repo: "open3fs/grafana"
+    tag: "12.0.0"

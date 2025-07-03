@@ -186,6 +186,11 @@ services:
     # port defines the listen port of grafana.
     # Default value is 3000.
     port: 3000
+    nodes:
+      - node1
+    # nodeGroups defines the node groups that deploy the grafana service
+    nodeGroups:
+      - group1
 images:
   # registry is the domain of image registry.
   registry: ""

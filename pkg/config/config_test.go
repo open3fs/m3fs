@@ -365,3 +365,10 @@ func (s *configSuite) TestParseNodeGroup() {
 	nodesExp = append([]Node{cfg.Nodes[0]}, nodesExp...)
 	s.Equal(nodesExp, cfg.Nodes)
 }
+
+func (s *configSuite) TestWithInvalidImageArch() {
+	cfg := s.newConfigWithDefaults()
+	cfg.Images.Arch = "wasm"
+
+	s.Error(cfg.SetValidate("", ""), "unsupported arch of images: wasm, supported archs: amd64, arm64")
+}

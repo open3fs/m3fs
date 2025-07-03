@@ -127,6 +127,9 @@ func (fe *fsExternal) DownloadFile(url, dstPath string) error {
 			fe.logger.Warnf("Failed to close http client: %v", err)
 		}
 	}()
+	if resp.StatusCode == http.StatusNotFound {
+		return errors.Errorf("file not found: %s", url)
+	}
 	outFile, err := os.Create(dstPath)
 	if err != nil {
 		return errors.Trace(err)

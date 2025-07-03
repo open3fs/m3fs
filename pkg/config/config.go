@@ -197,6 +197,8 @@ type Config struct {
 	WaitServiceOnlineTimeout time.Duration  `yaml:"waitServiceOnlineTimeout,omitempty"`
 	CmdMaxExitTimeout        *time.Duration `yaml:",omitempty"`
 	ServiceBasePath          string         `yaml:"serviceBasePath,omitempty"`
+	CheckStatusTimeout       time.Duration
+	CheckStatusInterval      time.Duration
 }
 
 func (c *Config) parseValidateNodeGroups(hostSet *utils.Set[string]) (map[string]*NodeGroup, error) {
@@ -509,6 +511,12 @@ func (c *Config) validServiceNodes(
 }
 
 func (c *Config) validImages() error {
+	supportedArchs := []string{"amd64", "arm64"}
+	if !utils.NewSet(supportedArchs...).Contains(c.Images.Arch) {
+		return errors.Errorf("unsupported arch of images: %s, supported archs: %s",
+			c.Images.Arch, strings.Join(supportedArchs, ", "))
+	}
+
 	imgs := []struct {
 		imgName string
 		image   Image
@@ -616,6 +624,7 @@ func NewConfigWithDefaults() *Config {
 		},
 		Images: Images{
 			Registry: "",
+			Arch:     "amd64",
 			FFFS: Image{
 				Repo: "open3fs/3fs",
 				Tag:  "20250410",
@@ -639,5 +648,7 @@ func NewConfigWithDefaults() *Config {
 		},
 		WaitServiceOnlineTimeout: 30 * time.Second,
 		ServiceBasePath:          "/lib/systemd/system/",
+		CheckStatusTimeout:       5 * time.Minute,
+		CheckStatusInterval:      5 * time.Second,
 	}
 }

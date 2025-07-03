@@ -344,6 +344,20 @@ func (s *BaseStep) DeleteService(ctx context.Context, serviceName string) error 
 	return nil
 }
 
+// GetOsName returns the distribution name of the os.
+func (s *BaseStep) GetOsName(ctx context.Context) (string, error) {
+	if osName, ok := s.Runtime.Load(RuntimeOsNameKey); ok {
+		return osName.(string), nil
+	}
+	output, err := s.Em.Runner.Exec(ctx, "bash", "-c", `'. /etc/os-release && echo $NAME'`)
+	if err != nil {
+		return "", errors.Annotatef(err, `bash -c '. /etc/os-release && echo $NAME'`)
+	}
+	osName := strings.TrimSpace(output)
+	s.Runtime.Store(RuntimeOsNameKey, osName)
+	return osName, nil
+}
+
 // LocalStep is an interface that defines the methods that all local steps must implement,
 type LocalStep interface {
 	Init(*Runtime, log.Interface)

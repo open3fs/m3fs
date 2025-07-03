@@ -47,11 +47,20 @@ const (
 	RuntimeMgmtdServerAddressesKey  = "mgmtd/server_addresses"
 	RuntimeUserTokenKey             = "user_token"
 	RuntimeAdminCliTomlKey          = "admin_cli_toml"
-	RuntimeDbKey                    = "model/db"
-	RuntimeNodesMapKey              = "model/nodes_map"
+
+	RuntimeDbKey       = "model/db"
+	RuntimeNodesMapKey = "model/nodes_map"
 
 	RuntimeChangePlanKey      = "change_plan/plan"
 	RuntimeChangePlanStepsKey = "change_plan/steps"
+
+	RuntimeOsNameKey = "os_name"
+)
+
+// defines os names.
+const (
+	OsNameUbuntu    = "Ubuntu"
+	OsNameOpenEuler = "openEuler"
 )
 
 // Runtime contains task run info

@@ -20,7 +20,6 @@ import (
 	"embed"
 	"os"
 	"path"
-	"strings"
 	"text/template"
 
 	"github.com/open3fs/m3fs/pkg/errors"
@@ -100,16 +99,27 @@ chmod +x $targetScript
 `
 )
 
-var rdmaPackages = []string{
-	"iproute2",
-	"libibverbs1",
-	"ibverbs-utils",
-	"librdmacm1",
-	"libibumad3",
-	"ibverbs-providers",
-	"rdma-core",
-	"rdmacm-utils",
-	"perftest",
+var installPackageCmd = map[string][]string{
+	task.OsNameUbuntu:    {"apt", "install", "-y"},
+	task.OsNameOpenEuler: {"dnf", "install", "-y"},
+}
+
+var rdmaPackages = map[string][]string{
+	task.OsNameUbuntu: {
+		"iproute2",
+		"libibverbs1",
+		"ibverbs-utils",
+		"librdmacm1",
+		"libibumad3",
+		"ibverbs-providers",
+		"rdma-core",
+		"rdmacm-utils",
+		"perftest",
+	},
+	task.OsNameOpenEuler: {
+		"rdma-core",
+		"perftest",
+	},
 }
 
 type genIbdev2netdevScriptStep struct {
@@ -156,8 +166,17 @@ type installRdmaPackageStep struct {
 
 func (s *installRdmaPackageStep) Execute(ctx context.Context) error {
 	s.Logger.Debugf("Installing rdma related packages for %s", s.Node.Host)
+	osName, err := s.GetOsName(ctx)
+	if err != nil {
+		return errors.Annotatef(err, "get os name")
+	}
+	installCmd, ok := installPackageCmd[osName]
+	if !ok {
+		return errors.Errorf("unsupported os: %s", osName)
+	}
 
-	_, err := s.Em.Runner.Exec(ctx, "apt", "install", "-y", strings.Join(rdmaPackages, " "))
+	installCmd = append(installCmd, rdmaPackages[osName]...)
+	_, err = s.Em.Runner.Exec(ctx, installCmd[0], installCmd[1:]...)
 	if err != nil {
 		return errors.Annotatef(err, "install rdma related packages")
 	}

@@ -39,6 +39,7 @@ type Image struct {
 // Images contains all component container image configs
 type Images struct {
 	Registry   string `yaml:"registry"`
+	Arch       string `yaml:"arch"`
 	FFFS       Image  `yaml:"3fs"` // 3fs cannot used as struct filed name, so we use fffs instead
 	Clickhouse Image  `yaml:"clickhouse"`
 	Grafana    Image  `yaml:"grafana"`
@@ -95,5 +96,5 @@ func (i Images) GetImageFileName(imgName string) (string, error) {
 	if err != nil {
 		return "", errors.Trace(err)
 	}
-	return fmt.Sprintf("%s_%s_amd64.docker", imgName, img.Tag), nil
+	return fmt.Sprintf("%s_%s_%s.docker", imgName, img.Tag, i.Arch), nil
 }
