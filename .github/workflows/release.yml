@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    name: Build binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+    - name: Build
+      run: |
+        GOARCH=${{ matrix.arch }} make build
+    - name: Package binaries
+      run: |
+        M3FS_VER=m3fs_${{ github.ref_name }}_${{ matrix.arch }}
+        cd bin
+        tar -zcf $M3FS_VER.tar.gz m3fs
+        sha256sum $M3FS_VER.tar.gz > $M3FS_VER.tar.gz.sha256sum
+    - uses: softprops/action-gh-release@v2
+      with:
+        draft: true
+        generate_release_notes: true
+        files: |
+          bin/m3fs_${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+          bin/m3fs_${{ github.ref_name }}_${{ matrix.arch }}.tar.gz.sha256sum
