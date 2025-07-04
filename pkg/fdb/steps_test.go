@@ -24,6 +24,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 	ttask "github.com/open3fs/m3fs/tests/task"
 )
@@ -86,8 +87,13 @@ func (s *runContainerStepSuite) SetupTest() {
 	s.step = &runContainerStep{}
 	s.dataDir = "/root/3fs/fdb/data"
 	s.logDir = "/root/3fs/fdb/logs"
+	s.Cfg.Nodes = append(s.Cfg.Nodes, config.Node{
+		Name: "test-node",
+		Host: "1.1.1.1",
+	})
+	s.Cfg.Services.Fdb.Nodes = []string{"test-node"}
 	s.SetupRuntime()
-	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
+	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
 	s.Runtime.Store(task.RuntimeFdbClusterFileContentKey, "xxxx")
 }
 
@@ -97,10 +103,11 @@ func (s *runContainerStepSuite) TestRunContainerStep() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageNameFdb)
 	s.NoError(err)
 	s.MockDocker.On("Run", &external.RunArgs{
-		Image:       img,
-		Name:        &s.Cfg.Services.Fdb.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
+		Name:          &s.Cfg.Services.Fdb.ContainerName,
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
 		Envs: map[string]string{
 			"FDB_CLUSTER_FILE_CONTENTS": "xxxx",
 		},
@@ -118,6 +125,22 @@ func (s *runContainerStepSuite) TestRunContainerStep() {
 
 	s.NoError(s.step.Execute(s.Ctx()))
 
+	var fdbClusterDB model.FdbCluster
+	s.NoError(s.NewDB().Model(new(model.FdbCluster)).First(&fdbClusterDB).Error)
+	fdbClusterExp := model.FdbCluster{
+		Model: fdbClusterDB.Model,
+	}
+	s.Equal(fdbClusterExp, fdbClusterDB)
+
+	var fdbProcessDB model.FdbProcess
+	s.NoError(s.NewDB().Model(new(model.FdbProcess)).First(&fdbProcessDB).Error)
+	fdbProcessExp := model.FdbProcess{
+		Model:  fdbProcessDB.Model,
+		Name:   s.Runtime.Services.Fdb.ContainerName,
+		NodeID: s.Runtime.LoadNodesMap()[s.step.Node.Name].ID,
+	}
+	s.Equal(fdbProcessExp, fdbProcessDB)
+
 	s.MockFS.AssertExpectations(s.T())
 	s.MockDocker.AssertExpectations(s.T())
 }
@@ -128,10 +151,11 @@ func (s *runContainerStepSuite) TestRunContainerFailed() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageNameFdb)
 	s.NoError(err)
 	s.MockDocker.On("Run", &external.RunArgs{
-		Image:       img,
-		Name:        &s.Cfg.Services.Fdb.ContainerName,
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          &s.Cfg.Services.Fdb.ContainerName,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
 		Envs: map[string]string{
 			"FDB_CLUSTER_FILE_CONTENTS": "xxxx",
 		},

@@ -28,6 +28,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 )
 
@@ -123,11 +124,12 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        &s.Runtime.Services.Monitor.ContainerName,
-		HostNetwork: true,
-		Privileged:  common.Pointer(true),
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          &s.Runtime.Services.Monitor.ContainerName,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
+		HostNetwork:   true,
+		Privileged:    common.Pointer(true),
+		Detach:        common.Pointer(true),
 		Volumes: []*external.VolumeArgs{
 			{
 				Source: "/dev",
@@ -155,6 +157,15 @@ func (s *runContainerStep) Execute(ctx context.Context) error {
 	_, err = s.Em.Docker.Run(ctx, args)
 	if err != nil {
 		return errors.Trace(err)
+	}
+
+	nodes := s.Runtime.LoadNodesMap()
+	db := s.Runtime.LoadDB()
+	if err = db.Create(&model.MonService{
+		Name:   s.Runtime.Services.Monitor.ContainerName,
+		NodeID: nodes[s.Node.Name].ID,
+	}).Error; err != nil {
+		return errors.Annotatef(err, "create monitor service in db")
 	}
 
 	s.Logger.Infof("Started monitor container %s successfully",

@@ -17,6 +17,7 @@ package external_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -105,11 +106,57 @@ func (rs MockedScpResults) Called() bool {
 	return false
 }
 
+// StatCheckFunc is the type of check function for Stat.
+type StatCheckFunc func(mr *MockedRunner, path string) (os.FileInfo, error)
+
+// MockedStatResult mocks result of the Stat func
+type MockedStatResult struct {
+	value     os.FileInfo
+	err       error
+	checkFunc StatCheckFunc
+	Called    bool
+	Count     int
+	times     int
+}
+
+// Value returns the value saved in MockedStatResult
+func (r *MockedStatResult) Value() os.FileInfo {
+	return r.value
+}
+
+// Error returns the error saved in MockedStatResult
+func (r *MockedStatResult) Error() error {
+	return r.err
+}
+
+// MockedStatResults defines mocked stat results
+type MockedStatResults []*MockedStatResult
+
+// Count returns called times of all mocked results
+func (rs MockedStatResults) Count() int {
+	var count int
+	for _, r := range rs {
+		count += r.Count
+	}
+	return count
+}
+
+// Called checks if Exec func is called
+func (rs MockedStatResults) Called() bool {
+	for _, r := range rs {
+		if r.Called {
+			return true
+		}
+	}
+	return false
+}
+
 // MockedRunner mocks RunInterface
 type MockedRunner struct {
 	t           *testing.T
 	execResults map[string]MockedExecResults
 	scpResults  map[string]MockedScpResults
+	statResults map[string]MockedStatResults
 }
 
 // Reset reset all mocked results
@@ -327,12 +374,97 @@ func (mr *MockedRunner) Scp(ctx context.Context, local, remote string) error {
 	return fmt.Errorf("Unexpected scp from %s to %s", local, remote)
 }
 
+func (mr *MockedRunner) Stat(path string) (os.FileInfo, error) {
+	for statPath, results := range mr.statResults {
+		if path == statPath {
+			continue
+		}
+		var result *MockedStatResult
+		var found bool
+		for _, result = range results {
+			if result.times != 0 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+		result.Called = true
+		result.Count++
+		if result.times > 0 {
+			result.times--
+		}
+		if result.checkFunc != nil {
+			return result.checkFunc(mr, path)
+		}
+		return result.value, result.err
+	}
+
+	return nil, fmt.Errorf("Unexpected stat path: %s", path)
+}
+
+// Add add mocked command prefix
+func (mr *MockedRunner) AddStat(path string, returnValue os.FileInfo, returnError error,
+	checkFunc StatCheckFunc, times ...int) {
+
+	mockedTimes := -1 // forever
+	if len(times) > 0 {
+		mockedTimes = times[0]
+	}
+	results, ok := mr.statResults[path]
+	if !ok {
+		results = MockedStatResults{}
+	}
+	if len(results) > 0 && results[0].times > 0 {
+		results = append(results,
+			&MockedStatResult{
+				value:     returnValue,
+				err:       returnError,
+				checkFunc: checkFunc,
+				times:     mockedTimes,
+			},
+		)
+	} else {
+		results = MockedStatResults{
+			&MockedStatResult{
+				value:     returnValue,
+				err:       returnError,
+				checkFunc: checkFunc,
+				times:     mockedTimes,
+			},
+		}
+	}
+	mr.statResults[path] = results
+}
+
+// Mock mocks command for times
+func (mr *MockedRunner) MockStat(
+	path string, returnValue os.FileInfo, returnError error, times ...int) {
+
+	mr.AddStat(path, returnValue, returnError, nil, times...)
+}
+
+// MockOnce mocks command once
+func (mr *MockedRunner) MockStatOnce(cmdPrefix string, returnValue os.FileInfo, returnError error) {
+	mr.MockStat(cmdPrefix, returnValue, returnError, 1)
+}
+
+// CalledStatCount returns called Stat count for specific path
+func (mr *MockedRunner) CalledStatCount(path string) int {
+	if _, ok := mr.statResults[path]; !ok {
+		return 0
+	}
+	return mr.statResults[path].Count()
+}
+
 // NewMockedRunner creates new mocked runner.
 func NewMockedRunner(t *testing.T) *MockedRunner {
 	mr := &MockedRunner{
 		t:           t,
 		execResults: make(map[string]MockedExecResults),
 		scpResults:  make(map[string]MockedScpResults),
+		statResults: make(map[string]MockedStatResults),
 	}
 	return mr
 }

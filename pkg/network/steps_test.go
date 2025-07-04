@@ -15,8 +15,9 @@
 package network
 
 import (
-	"errors"
+	"fmt"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -115,20 +116,20 @@ func (s *installRdmaPackageStepSuite) TestInstallRdmaPackageWithNotSupportedOs()
 	s.MockRunner.AssertExpectations(s.T())
 }
 
-func TestLoadRdmaRxeModule(t *testing.T) {
-	suiteRun(t, &loadRdmaRxeModuleStepSuite{})
+func TestSetupRxeStepSuite(t *testing.T) {
+	suiteRun(t, &setupRxeStepSuite{})
 }
 
-type loadRdmaRxeModuleStepSuite struct {
+type setupRxeStepSuite struct {
 	ttask.StepSuite
 
-	step *loadRdmaRxeModuleStep
+	step *setupRxeStep
 }
 
-func (s *loadRdmaRxeModuleStepSuite) SetupTest() {
+func (s *setupRxeStepSuite) SetupTest() {
 	s.StepSuite.SetupTest()
 
-	s.step = &loadRdmaRxeModuleStep{}
+	s.step = &setupRxeStep{}
 	s.Cfg.Nodes = []config.Node{
 		{
 			Name: "node1",
@@ -139,48 +140,85 @@ func (s *loadRdmaRxeModuleStepSuite) SetupTest() {
 	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
 }
 
-func (s *loadRdmaRxeModuleStepSuite) TestLoadRdmaRxeModule() {
-	lsOutput := `8250  crc_t10dif  hid_ntrig
-acpi  crct10dif_pclmul  i2c_piix4 libnvdimm`
+func (s *setupRxeStepSuite) TestSetup() {
+	script := `#!/bin/bash
 
-	s.MockRunner.On("Exec", "ls", []string{"/sys/module"}).Return(lsOutput, nil)
-	s.MockRunner.On("Exec", "modprobe", []string{"rdma_rxe"}).Return("", nil)
+set -e
+
+function load_rdma_rxe_module(){
+    echo "Loading rdma_rxe kernel module..."
+    modules=($(ls -1 /sys/module))
+    declare -A modules_map
+    for module in ${modules[@]};do
+        modules_map[$module]="1"
+    done
+    # if any of those modules is loaded, we don't need to load rdma_rxe
+    for module in "mlx4_core" "irdma" "erdma" "rdma_rxe";do
+        if [ "${modules_map[$module]}" = "1" ];then
+            return
+        fi
+    done
+
+    modprobe rdma_rxe
+}
+
+function create_rdma_rxe_link(){
+    for netdev in $(ip -o -4 a | awk '{print $2}' | grep -vw lo | sort -u)
+    do
+        # skip linux bridge
+        if ip -o -d l show $netdev | grep -q bridge_id; then
+            continue
+        fi
+    
+        if rdma link | grep -q -w "netdev $netdev"; then
+            continue
+        fi
+    
+        echo "Create rdma link for $netdev"
+        rxe_name="${netdev}_rxe0"
+        rdma link add $rxe_name type rxe netdev $netdev
+        if rdma link | grep -q -w "link $rxe_name"; then
+            echo "Success to create $rxe_name"
+        fi
+    done
+}
+
+load_rdma_rxe_module
+create_rdma_rxe_link`
+	scriptPath := path.Join(s.Cfg.WorkDir, "bin", "setup-network")
+	service := fmt.Sprintf(`[Unit]
+Description=Setup 3fs network
+Before=docker.service
+ 
+[Service]
+Type=simple
+ExecStart=%s
+ 
+[Install]
+WantedBy=multi-user.target`, scriptPath)
+	s.MockCreateService("setup-network", "setup-3fs-network.service", []byte(script), []byte(service))
+	s.MockRunner.On("Exec", scriptPath, []string(nil)).Return("", nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
 
+	s.AssertCreateService()
 	s.MockRunner.AssertExpectations(s.T())
 }
 
-func (s *loadRdmaRxeModuleStepSuite) TestNoNeedLoadRdmaRxeModule() {
-	for _, module := range []string{"mlx5_core", "irdma", "erdma", "rdma_rxe"} {
-		s.testNoNeedLoadRdmaRxeModule(module)
-	}
+func TestSetupErdmaStep(t *testing.T) {
+	suiteRun(t, &setupErdmaStepSuite{})
 }
 
-func (s *loadRdmaRxeModuleStepSuite) testNoNeedLoadRdmaRxeModule(module string) {
-	lsOutput := `8250 crc_t10dif hid_ntrig` + " " + module
-
-	s.MockRunner.On("Exec", "ls", []string{"/sys/module"}).Return(lsOutput, nil)
-
-	s.NoError(s.step.Execute(s.Ctx()))
-
-	s.MockRunner.AssertExpectations(s.T())
-}
-
-func TestCreateRdmaRxeLinkStep(t *testing.T) {
-	suiteRun(t, &createRdmaRxeLinkStepSuite{})
-}
-
-type createRdmaRxeLinkStepSuite struct {
+type setupErdmaStepSuite struct {
 	ttask.StepSuite
 
-	step *createRdmaRxeLinkStep
+	step *setupErdmaStep
 }
 
-func (s *createRdmaRxeLinkStepSuite) SetupTest() {
+func (s *setupErdmaStepSuite) SetupTest() {
 	s.StepSuite.SetupTest()
 
-	s.step = &createRdmaRxeLinkStep{}
+	s.step = &setupErdmaStep{}
 	s.Cfg.Nodes = []config.Node{
 		{
 			Name: "node1",
@@ -191,84 +229,48 @@ func (s *createRdmaRxeLinkStepSuite) SetupTest() {
 	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
 }
 
-func (s *createRdmaRxeLinkStepSuite) TestCreateRdmaRxeLinkStep() {
-	tmpDir := "/tmp/m3fs-prepare-network.123"
-	s.MockLocalFS.On("MkdirTemp", "/tmp", "m3fs-prepare-network").Return(tmpDir, nil)
-	scriptPath := tmpDir + "/create_rdma_rxe_link"
-	s.MockLocalFS.On("WriteFile", scriptPath,
-		[]byte(createRdmaLinkScript), os.FileMode(0755)).Return(nil)
+func (s *setupErdmaStepSuite) TestSetup() {
+	script := `#!/bin/bash
 
-	binDir := s.Cfg.WorkDir + "/bin"
-	remoteScriptPath := binDir + "/create_rdma_rxe_link"
-	s.MockFS.On("MkdirAll", binDir).Return(nil)
-	s.MockRunner.On("Scp", scriptPath, remoteScriptPath).Return(nil)
-	s.MockRunner.On("Exec", "chmod", []string{"+x", remoteScriptPath}).Return("", nil)
-	s.MockRunner.On("Exec", "bash", []string{remoteScriptPath}).Return("", nil)
+set -e
 
-	s.MockLocalFS.On("RemoveAll", tmpDir).Return(nil)
+function load_erdma_module(){
+    echo "Loading erdma kernel module..."
+    need_load=true
+    if [ -d /sys/module/erdma ];then
+        need_load=false
+    fi
+    if [ "${need_load}" = "false" ];then
+        output=$(cat /sys/module/erdma/parameters/compat_mode)
+        if [ "$(echo output|xargs)" = "Y" ];then
+            return
+        fi
+        echo "erdma module not running in compat mode, try to remove it"
+        set +e
+        modprobe -r erdma
+        set -e
+    fi
+    modprobe erdma compat_mode=1
+}
+
+load_erdma_module`
+	scriptPath := path.Join(s.Cfg.WorkDir, "bin", "setup-network")
+	service := fmt.Sprintf(`[Unit]
+Description=Setup 3fs network
+Before=docker.service
+ 
+[Service]
+Type=simple
+ExecStart=%s
+ 
+[Install]
+WantedBy=multi-user.target`, scriptPath)
+	s.MockCreateService("setup-network", "setup-3fs-network.service", []byte(script), []byte(service))
+	s.MockRunner.On("Exec", scriptPath, []string(nil)).Return("", nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
 
-	s.MockLocalFS.AssertExpectations(s.T())
-	s.MockFS.AssertExpectations(s.T())
-	s.MockRunner.AssertExpectations(s.T())
-}
-
-func TestLoadErdmaModuleStep(t *testing.T) {
-	suiteRun(t, &loadErdmaModuleStepSuite{})
-}
-
-type loadErdmaModuleStepSuite struct {
-	ttask.StepSuite
-
-	step *loadErdmaModuleStep
-}
-
-func (s *loadErdmaModuleStepSuite) SetupTest() {
-	s.StepSuite.SetupTest()
-
-	s.step = &loadErdmaModuleStep{}
-	s.Cfg.Nodes = []config.Node{
-		{
-			Name: "node1",
-			Host: "1.1.1.1",
-		},
-	}
-	s.SetupRuntime()
-	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
-}
-
-func (s *loadErdmaModuleStepSuite) TestLoadErdmaModuleNoAction() {
-	s.MockRunner.On("Exec", "ls", []string{"/sys/module/erdma"}).
-		Return("coresize  drivers  holders  initsize  initstate notes  parameters", nil)
-	s.MockRunner.On("Exec", "cat", []string{"/sys/module/erdma/parameters/compat_mode"}).
-		Return("Y", nil)
-
-	s.NoError(s.step.Execute(s.Ctx()))
-
-	s.MockRunner.AssertExpectations(s.T())
-}
-
-func (s *loadErdmaModuleStepSuite) TestLoadErdmaModuleWithLoadModule() {
-	s.MockRunner.On("Exec", "ls", []string{"/sys/module/erdma"}).
-		Return("", errors.New("No such file or directory"))
-	s.MockRunner.On("Exec", "modprobe", []string{"erdma", "compat_mode=1"}).Return("", nil)
-
-	s.NoError(s.step.Execute(s.Ctx()))
-
-	s.MockRunner.AssertExpectations(s.T())
-}
-
-func (s *loadErdmaModuleStepSuite) TestLoadErdmaModuleWithReloadModule() {
-	s.MockRunner.On("Exec", "ls", []string{"/sys/module/erdma"}).
-		Return("coresize  drivers  holders  initsize  initstate notes  parameters", nil)
-	s.MockRunner.On("Exec", "cat", []string{"/sys/module/erdma/parameters/compat_mode"}).
-		Return("N", nil)
-	s.MockRunner.On("Exec", "modprobe", []string{"-r", "erdma"}).Return("", nil)
-	s.MockRunner.On("Exec", "modprobe", []string{"erdma", "compat_mode=1"}).Return("", nil)
-
-	s.NoError(s.step.Execute(s.Ctx()))
-
+	s.AssertCreateService()
 	s.MockRunner.AssertExpectations(s.T())
 }
 
@@ -298,39 +300,6 @@ func (s *deleteIbdev2netdevScriptStepSuite) SetupTest() {
 
 func (s *deleteIbdev2netdevScriptStepSuite) TestDeleteIbdev2netdevScriptStep() {
 	scriptPath := s.Cfg.WorkDir + "/bin/ibdev2netdev"
-	s.MockRunner.On("Exec", "rm", []string{"-f", scriptPath}).Return("", nil)
-
-	s.NoError(s.step.Execute(s.Ctx()))
-
-	s.MockRunner.AssertExpectations(s.T())
-}
-
-func TestDeleteRdmaRxeLinkScriptStep(t *testing.T) {
-	suiteRun(t, &deleteRdmaRxeLinkScriptStepSuite{})
-}
-
-type deleteRdmaRxeLinkScriptStepSuite struct {
-	ttask.StepSuite
-
-	step *deleteRdmaRxeLinkScriptStep
-}
-
-func (s *deleteRdmaRxeLinkScriptStepSuite) SetupTest() {
-	s.StepSuite.SetupTest()
-
-	s.step = &deleteRdmaRxeLinkScriptStep{}
-	s.Cfg.Nodes = []config.Node{
-		{
-			Name: "node1",
-			Host: "1.1.1.1",
-		},
-	}
-	s.SetupRuntime()
-	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
-}
-
-func (s *deleteRdmaRxeLinkScriptStepSuite) TestDeleteRdmaRxeLinkScriptStep() {
-	scriptPath := s.Cfg.WorkDir + "/bin/create_rdma_rxe_link"
 	s.MockRunner.On("Exec", "rm", []string{"-f", scriptPath}).Return("", nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))

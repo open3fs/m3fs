@@ -22,10 +22,18 @@ import (
 	"github.com/open3fs/m3fs/pkg/log"
 )
 
+// Container restart policy defines
+const (
+	ContainerRestartPolicyDefault       = ""
+	ContainerRestartPolicyAlways        = "always"
+	ContainerRestartPolicyUnlessStopped = "unless-stopped"
+)
+
 // DockerInterface provides interface about docker.
 type DockerInterface interface {
 	GetContainer(string) string
 	Run(ctx context.Context, args *RunArgs) (out string, err error)
+	Cp(ctx context.Context, src, container, containerPath string) error
 	Rm(ctx context.Context, name string, force bool) (out string, err error)
 	Exec(context.Context, string, string, ...string) (out string, err error)
 	Load(ctx context.Context, path string) (out string, err error)
@@ -48,18 +56,19 @@ func (de *dockerExternal) GetContainer(name string) string {
 
 // RunArgs defines args for docker run command.
 type RunArgs struct {
-	Image       string
-	HostNetwork bool
-	Entrypoint  *string
-	Rm          *bool
-	Command     []string
-	Privileged  *bool
-	Ulimits     map[string]string
-	Name        *string
-	Detach      *bool
-	Publish     []*PublishArgs
-	Volumes     []*VolumeArgs
-	Envs        map[string]string
+	Image         string
+	HostNetwork   bool
+	Entrypoint    *string
+	Rm            *bool
+	Command       []string
+	Privileged    *bool
+	Ulimits       map[string]string
+	Name          *string
+	Detach        *bool
+	Publish       []*PublishArgs
+	Volumes       []*VolumeArgs
+	Envs          map[string]string
+	RestartPolicy string
 }
 
 // PublishArgs defines args for publishing a container port.
@@ -120,12 +129,24 @@ func (de *dockerExternal) Run(ctx context.Context, args *RunArgs) (out string, e
 		}
 		params = append(params, "--volume", volBind)
 	}
+	if args.RestartPolicy != "" {
+		params = append(params, "--restart", args.RestartPolicy)
+	}
 	params = append(params, args.Image)
 	if len(args.Command) > 0 {
 		params = append(params, args.Command...)
 	}
 	out, err = de.run(ctx, "docker", params...)
 	return out, errors.Trace(err)
+}
+
+func (de *dockerExternal) Cp(ctx context.Context, src, container, containerPath string) error {
+	_, err := de.run(ctx, "docker", []string{"cp", src, fmt.Sprintf("%s:%s", container, containerPath)}...)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
 }
 
 func (de *dockerExternal) Rm(ctx context.Context, name string, force bool) (out string, err error) {

@@ -1,0 +1,44 @@
+#!/bin/bash
+
+set -e
+
+function load_rdma_rxe_module(){
+    echo "Loading rdma_rxe kernel module..."
+    modules=($(ls -1 /sys/module))
+    declare -A modules_map
+    for module in ${modules[@]};do
+        modules_map[$module]="1"
+    done
+    # if any of those modules is loaded, we don't need to load rdma_rxe
+    for module in "mlx4_core" "irdma" "erdma" "rdma_rxe";do
+        if [ "${modules_map[$module]}" = "1" ];then
+            return
+        fi
+    done
+
+    modprobe rdma_rxe
+}
+
+function create_rdma_rxe_link(){
+    for netdev in $(ip -o -4 a | awk '{print $2}' | grep -vw lo | sort -u)
+    do
+        # skip linux bridge
+        if ip -o -d l show $netdev | grep -q bridge_id; then
+            continue
+        fi
+    
+        if rdma link | grep -q -w "netdev $netdev"; then
+            continue
+        fi
+    
+        echo "Create rdma link for $netdev"
+        rxe_name="${netdev}_rxe0"
+        rdma link add $rxe_name type rxe netdev $netdev
+        if rdma link | grep -q -w "link $rxe_name"; then
+            echo "Success to create $rxe_name"
+        fi
+    done
+}
+
+load_rdma_rxe_module
+create_rdma_rxe_link

@@ -49,6 +49,7 @@ func (s *configSuite) newConfig() *Config {
 			Username: "node1",
 		},
 	}
+	cfg.Services.Pg.Nodes = []string{"node1"}
 	cfg.Services.Fdb.Nodes = []string{"node1"}
 	cfg.Services.Clickhouse.Nodes = []string{"node1"}
 	cfg.Services.Grafana.Nodes = []string{"node1"}

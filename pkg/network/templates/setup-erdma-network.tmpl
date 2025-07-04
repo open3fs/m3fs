@@ -1,0 +1,24 @@
+#!/bin/bash
+
+set -e
+
+function load_erdma_module(){
+    echo "Loading erdma kernel module..."
+    need_load=true
+    if [ -d /sys/module/erdma ];then
+        need_load=false
+    fi
+    if [ "${need_load}" = "false" ];then
+        output=$(cat /sys/module/erdma/parameters/compat_mode)
+        if [ "$(echo output|xargs)" = "Y" ];then
+            return
+        fi
+        echo "erdma module not running in compat mode, try to remove it"
+        set +e
+        modprobe -r erdma
+        set -e
+    fi
+    modprobe erdma compat_mode=1
+}
+
+load_erdma_module

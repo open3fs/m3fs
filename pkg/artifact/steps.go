@@ -46,6 +46,7 @@ type downloadImagesStep struct {
 
 func (s *downloadImagesStep) Execute(ctx context.Context) error {
 	imageNames := []string{
+		config.ImageNamePg,
 		config.ImageNameFdb,
 		config.ImageNameClickhouse,
 		config.ImageNameGrafana,
@@ -217,6 +218,7 @@ func (s *importArtifactStep) Execute(ctx context.Context) error {
 	}
 
 	imageNames := []string{
+		config.ImageNamePg,
 		config.ImageNameFdb,
 		config.ImageNameClickhouse,
 		config.ImageName3FS,

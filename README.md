@@ -292,6 +292,44 @@ docker exec -it 3fs-client fio -numjobs=1 -fallocate=none -ioengine=external:/us
 ## Grafana
 Default username/password of grafana is admin/admin.
 
+## Add storage nodes
+Firstly,add new storage nodes info in config file:
+```
+nodes:
+  - name: node1
+    host: "10.0.0.201"
+    username: "root"
+    password: "password"
+  - name: node2
+    host: "10.0.0.202"
+    username: "root"
+    password: "password"
+  # add new nodes here
+  - name: new_stor_node
+    host: "10.0.0.203"
+    username: "root"
+    password: "password"
+services:
+  client:
+    nodes:
+      - node1
+    hostMountpoint: /mnt/3fs
+  storage:
+    nodes:
+      - node1
+      - node2
+      # add new nodes here
+      - new_stor_node
+```
+Then,run follow command to prepare new nodes:
+```
+m3fs cluster prepare -c cluster.yml
+```
+Finally,run follow command add nodes to cluster:
+```
+m3fs cluster add-storage-nodes -c cluster.yml
+```
+
 ## Related Projects
 
 [3fs-gcp](https://github.com/knachiketa04/3fs-gcp): A terraform project used to deploy 3FS on Google Cloud using m3fs.

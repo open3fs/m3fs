@@ -15,7 +15,6 @@ mkdir -p $MOUNT_DIR
 function prepare_dir_disk() {
         for i in $(seq 0 $((DISK_NUM-1))); do
                 MOUNT_POINT="${MOUNT_DIR}/data${i}"
-                mkdir -p ${MOUNT_POINT}
                 mkdir -p ${MOUNT_POINT}/3fs
         done
 }
@@ -96,7 +95,9 @@ function clear_nvme_disk() {
                 # Check if disk is already mounted
                 if grep -q "${MOUNT_POINT}" /proc/mounts; then
                         echo "Unmounting ${MOUNT_POINT}..."
+                        device=$(findmnt -n -o SOURCE --target ${MOUNT_POINT})
                         umount ${MOUNT_POINT}
+                        wipefs -a $device
                 else
                         echo "${MOUNT_POINT} is not mounted. Skipping..."
                 fi

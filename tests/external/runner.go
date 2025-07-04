@@ -16,6 +16,7 @@ package external
 
 import (
 	"context"
+	"os"
 
 	"github.com/stretchr/testify/mock"
 
@@ -52,4 +53,14 @@ func (m *MockRunner) Exec(ctx context.Context, cmd string, args ...string) (stri
 func (m *MockRunner) Scp(ctx context.Context, local, remote string) error {
 	arg := m.Called(local, remote)
 	return arg.Error(0)
+}
+
+// Stat mock.
+func (m *MockRunner) Stat(path string) (os.FileInfo, error) {
+	arg := m.Called(path)
+	err1 := arg.Error(1)
+	if err1 != nil {
+		return nil, err1
+	}
+	return arg.Get(0).(os.FileInfo), nil
 }

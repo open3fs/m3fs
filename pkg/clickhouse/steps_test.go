@@ -25,6 +25,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 	ttask "github.com/open3fs/m3fs/tests/task"
 )
@@ -79,7 +80,12 @@ func (s *startContainerStepSuite) SetupTest() {
 	s.StepSuite.SetupTest()
 
 	s.step = &startContainerStep{}
-	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
+	s.Cfg.Nodes = append(s.Cfg.Nodes, config.Node{
+		Name: "test-node",
+		Host: "1.1.1.1",
+	})
+	s.SetupRuntime()
+	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
 	s.Runtime.Store(task.RuntimeClickhouseTmpDirKey, "/tmp/3f-clickhouse.xxx")
 }
 
@@ -99,10 +105,11 @@ func (s *startContainerStepSuite) TestStartContainerStep() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageNameClickhouse)
 	s.NoError(err)
 	s.MockDocker.On("Run", &external.RunArgs{
-		Image:       img,
-		Name:        common.Pointer("3fs-clickhouse"),
-		HostNetwork: true,
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          common.Pointer("3fs-clickhouse"),
+		HostNetwork:   true,
+		Detach:        common.Pointer(true),
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
 		Envs: map[string]string{
 			"CLICKHOUSE_USER":     "default",
 			"CLICKHOUSE_PASSWORD": "password",
@@ -129,6 +136,15 @@ func (s *startContainerStepSuite) TestStartContainerStep() {
 
 	s.NotNil(s.step)
 	s.NoError(s.step.Execute(s.Ctx()))
+
+	var chServiceDB model.ChService
+	s.NoError(s.NewDB().Model(new(model.ChService)).First(&chServiceDB).Error)
+	chServiceExp := model.ChService{
+		Model:  chServiceDB.Model,
+		Name:   s.Runtime.Services.Clickhouse.ContainerName,
+		NodeID: s.Runtime.LoadNodesMap()[s.step.Node.Name].ID,
+	}
+	s.Equal(chServiceExp, chServiceDB)
 
 	s.MockRunner.AssertExpectations(s.T())
 	s.MockFS.AssertExpectations(s.T())

@@ -27,6 +27,7 @@ const (
 	ImageNameClickhouse = "clickhouse"
 	ImageName3FS        = "3fs"
 	ImageNameGrafana    = "grafana"
+	ImageNamePg         = "postgresql"
 )
 
 // Image is component container image config
@@ -43,10 +44,13 @@ type Images struct {
 	Clickhouse Image  `yaml:"clickhouse"`
 	Grafana    Image  `yaml:"grafana"`
 	Fdb        Image  `yaml:"fdb"`
+	Pg         Image  `yaml:"postgresql"`
 }
 
 func (i *Images) getImage(imgName string) (Image, error) {
 	switch imgName {
+	case ImageNamePg:
+		return i.Pg, nil
 	case ImageNameFdb:
 		return i.Fdb, nil
 	case ImageName3FS:

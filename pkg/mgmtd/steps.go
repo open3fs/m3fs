@@ -15,11 +15,11 @@
 package mgmtd
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"embed"
 	"fmt"
-	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -32,6 +32,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/errors"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 	"github.com/open3fs/m3fs/pkg/task/steps"
 )
@@ -46,8 +47,6 @@ var (
 	MgmtdMainLauncherTomlTmpl []byte
 	// MgmtdMainTomlTmpl is the template content of mgmtd_main.toml
 	MgmtdMainTomlTmpl []byte
-	// AdminCliTomlTmpl is the template content of admin_cli.toml
-	AdminCliTomlTmpl []byte
 	// AdminCliShellTmpl is the template content of admin_cli.sh
 	AdminCliShellTmpl []byte
 )
@@ -69,49 +68,10 @@ func init() {
 		panic(err)
 	}
 
-	AdminCliTomlTmpl, err = templatesFs.ReadFile("templates/admin_cli.toml.tmpl")
-	if err != nil {
-		panic(err)
-	}
-
 	AdminCliShellTmpl, err = templatesFs.ReadFile("templates/admin_cli.sh.tmpl")
 	if err != nil {
 		panic(err)
 	}
-}
-
-type genAdminCliConfigStep struct {
-	task.BaseStep
-}
-
-func (s *genAdminCliConfigStep) Execute(ctx context.Context) error {
-	mgmtdServerAddresses := make([]string, len(s.Runtime.Services.Mgmtd.Nodes))
-	port := strconv.Itoa(s.Runtime.Services.Mgmtd.RDMAListenPort)
-	for i, nodeName := range s.Runtime.Services.Mgmtd.Nodes {
-		node := s.Runtime.Nodes[nodeName]
-		mgmtdServerAddresses[i] = fmt.Sprintf(`"%s://%s"`,
-			s.Runtime.MgmtdProtocol, net.JoinHostPort(node.Host, port))
-	}
-	mgmtdServerAddressesStr := fmt.Sprintf("[%s]", strings.Join(mgmtdServerAddresses, ","))
-	s.Runtime.Store(task.RuntimeMgmtdServerAddressesKey, mgmtdServerAddressesStr)
-
-	adminCliData := map[string]any{
-		"ClusterID":            s.Runtime.Cfg.Name,
-		"MgmtdServerAddresses": mgmtdServerAddressesStr,
-	}
-	s.Logger.Debugf("Admin cli config template data: %v", adminCliData)
-	t, err := template.New("admin_cli.toml").Parse(string(AdminCliTomlTmpl))
-	if err != nil {
-		return errors.Annotatef(err, "parse template of admin_cli.toml.tmpl")
-	}
-	data := new(bytes.Buffer)
-	err = t.Execute(data, adminCliData)
-	if err != nil {
-		return errors.Annotate(err, "execute template of admin_cli.toml.tmpl")
-	}
-	s.Runtime.Store(task.RuntimeAdminCliTomlKey, data.Bytes())
-
-	return nil
 }
 
 type initClusterStep struct {
@@ -340,8 +300,8 @@ func (s *initUserAndChainStep) initChainFiles(ctx context.Context) error {
 		"--node_id_end", strconv.Itoa(10000+len(s.Runtime.Services.Storage.Nodes)),
 		"--num_disks_per_node", strconv.Itoa(s.Runtime.Services.Storage.DiskNumPerNode),
 		"--num_targets_per_disk", strconv.Itoa(s.Runtime.Services.Storage.TargetNumPerDisk),
-		"--target_id_prefix", strconv.Itoa(s.Runtime.Services.Storage.TargetIDPrefix),
-		"--chain_id_prefix", strconv.Itoa(s.Runtime.Services.Storage.ChainIDPrefix),
+		"--target_id_prefix", strconv.FormatInt(s.Runtime.Services.Storage.TargetIDPrefix, 10),
+		"--chain_id_prefix", strconv.FormatInt(s.Runtime.Services.Storage.ChainIDPrefix, 10),
 		"--incidence_matrix_path", fmt.Sprintf("%s/incidence_matrix.pickle", dataPlacementDir),
 	)
 	if err != nil {
@@ -387,4 +347,156 @@ func (s *initUserAndChainStep) uploadChainFiles(ctx context.Context, token strin
 	}
 
 	return nil
+}
+
+type createChainAndTargetModelStep struct {
+	task.BaseStep
+}
+
+func (s *createChainAndTargetModelStep) Execute(ctx context.Context) error {
+	s.Logger.Infof("Creating chains and targets model...")
+	chains, err := s.createChains(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if err = s.createTargets(ctx, chains); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (s *createChainAndTargetModelStep) createTargets(
+	ctx context.Context, chains map[string]*model.Chain) error {
+
+	output, err := s.Em.Docker.Exec(ctx, s.Runtime.Services.Mgmtd.ContainerName,
+		"/opt/3fs/bin/admin_cli",
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		"list-targets",
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	scanner.Scan()
+	db := s.Runtime.LoadDB()
+	storServices := []*model.StorService{}
+	err = db.Model(new(model.StorService)).Find(&storServices).Error
+	if err != nil {
+		return errors.Annotate(err, "find storage services")
+	}
+	storServiceMap := make(map[int64]*model.StorService, len(storServices))
+	for _, storService := range storServices {
+		storServiceMap[storService.FsNodeID] = storService
+	}
+	disks := []*model.Disk{}
+	err = db.Model(new(model.Disk)).Find(&disks).Error
+	if err != nil {
+		return errors.Annotate(err, "find disks")
+	}
+	disksMap := make(map[uint]map[int]*model.Disk)
+	for _, disk := range disks {
+		if _, ok := disksMap[disk.NodeID]; !ok {
+			disksMap[disk.NodeID] = make(map[int]*model.Disk)
+		}
+		disksMap[disk.NodeID][disk.Index] = disk
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		fs := strings.Fields(line)
+		if len(fs) < 8 {
+			return errors.Errorf("unexpected output of list-targets: %s", line)
+		}
+		targetID := fs[0]
+		chainID := fs[1]
+		nodeID, err := strconv.ParseInt(fs[5], 10, 64)
+		if err != nil {
+			return errors.Annotatef(err, "parse node id %s for target '%s'", fs[5], line)
+		}
+		diskIndexStr := fs[6]
+		diskIndex, err := strconv.Atoi(diskIndexStr)
+		if err != nil {
+			return errors.Annotatef(err, "parse disk index %s for target '%s'", diskIndexStr, line)
+		}
+
+		storService, ok := storServiceMap[nodeID]
+		if !ok {
+			return errors.Errorf("storage service not found for target '%s'", line)
+		}
+		chain, ok := chains[chainID]
+		if !ok {
+			return errors.Errorf("chain not found for target '%s'", line)
+		}
+		nodeDisks, ok := disksMap[storService.NodeID]
+		if !ok {
+			return errors.Errorf("disks not found for storage service '%s'", storService.Name)
+		}
+		disk, ok := nodeDisks[diskIndex]
+		if !ok {
+			return errors.Errorf("disk not found for target '%s'", line)
+		}
+		target := &model.Target{
+			Name:    targetID,
+			NodeID:  storService.NodeID,
+			ChainID: chain.ID,
+			DiskID:  disk.ID,
+		}
+		if err := db.Model(new(model.Target)).Create(target).Error; err != nil {
+			return errors.Annotatef(err, "create target %s", target.Name)
+		}
+	}
+
+	return nil
+}
+
+func (s *createChainAndTargetModelStep) createChains(ctx context.Context) (map[string]*model.Chain, error) {
+	var output string
+	var err error
+
+	timer := time.NewTimer(s.Runtime.Cfg.Services.Mgmtd.WaitTargetOnlineTimeout)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			return nil, errors.Errorf("timeout waiting for target online")
+		default:
+			output, err = s.Em.Docker.Exec(ctx, s.Runtime.Services.Mgmtd.ContainerName,
+				"/opt/3fs/bin/admin_cli",
+				"--cfg", "/opt/3fs/etc/admin_cli.toml",
+				"list-chains",
+			)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			if strings.Contains(output, "SERVING-OFFLINE") {
+				time.Sleep(time.Second)
+				continue
+			}
+		}
+		break
+	}
+
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	chains := make(map[string]*model.Chain)
+	scanner.Scan()
+	db := s.Runtime.LoadDB()
+	for scanner.Scan() {
+		line := scanner.Text()
+		fs := strings.Fields(line)
+		if len(fs) < 7 {
+			return nil, errors.Errorf("unexpected output of list-chains: %s", line)
+		}
+		chain := &model.Chain{
+			Name: fs[0],
+		}
+		err = db.Model(chain).Create(chain).Error
+		if err != nil {
+			return nil, errors.Annotatef(err, "create chain %s", chain.Name)
+		}
+		chains[chain.Name] = chain
+	}
+
+	return chains, nil
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/external"
 	"github.com/open3fs/m3fs/pkg/log"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 	"github.com/open3fs/m3fs/pkg/task/steps"
 )
@@ -125,6 +126,13 @@ func (t *Create3FSClientServiceTask) Init(r *task.Runtime, logger log.Interface)
 					WorkDir:        workDir,
 					ExtraVolumes:   runContainerVolumes,
 					UseRdmaNetwork: true,
+					ModelObjFunc: func(s *task.BaseStep) any {
+						return &model.FuseClient{
+							Name:           r.Services.Client.ContainerName,
+							NodeID:         s.GetNodeModelID(),
+							HostMountpoint: client.HostMountpoint,
+						}
+					},
 				}),
 		},
 	})

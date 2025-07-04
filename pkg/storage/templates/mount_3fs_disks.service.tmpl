@@ -1,0 +1,10 @@
+[Unit]
+Description=Mount 3fs disks
+Before=docker.service
+ 
+[Service]
+Type=simple
+ExecStart={{.ScriptPath}} {{.BaseDir}}
+ 
+[Install]
+WantedBy=multi-user.target

@@ -69,19 +69,33 @@ type NodeGroup struct {
 	Nodes    []Node  `yaml:"-"`
 }
 
+// Pg is the pg db config definition
+type Pg struct {
+	ContainerName    string        `yaml:"containerName"`
+	Nodes            []string      `yaml:"nodes"`
+	NodeGroups       []string      `yaml:"nodeGroups"`
+	Port             int           `yaml:"port"`
+	Username         string        `yaml:"username,omitempty"`
+	Password         string        `yaml:"password,omitempty"`
+	Database         string        `yaml:"database,omitempty"`
+	ReadOnlyUsername string        `yaml:"readOnlyUsername,omitempty"`
+	ReadOnlyPassword string        `yaml:"readOnlyPassword,omitempty"`
+	WaitReadyTimeout time.Duration `yaml:"waitReadyTimeout,omitempty"`
+}
+
 // Fdb is the fdb config definition
 type Fdb struct {
-	ContainerName      string `yaml:"containerName"`
-	Nodes              []string
+	ContainerName      string   `yaml:"containerName"`
+	Nodes              []string `yaml:"nodes"`
 	NodeGroups         []string `yaml:"nodeGroups"`
-	Port               int
+	Port               int      `yaml:"port"`
 	WaitClusterTimeout time.Duration
 }
 
 // Clickhouse is the click house config definition
 type Clickhouse struct {
-	ContainerName string `yaml:"containerName"`
-	Nodes         []string
+	ContainerName string   `yaml:"containerName"`
+	Nodes         []string `yaml:"nodes"`
 	NodeGroups    []string `yaml:"nodeGroups"`
 	Db            string   `yaml:"db"`
 	User          string   `yaml:"user"`
@@ -91,35 +105,36 @@ type Clickhouse struct {
 
 // Grafana is the grafana config definition
 type Grafana struct {
-	ContainerName string `yaml:"containerName"`
-	Nodes         []string
+	ContainerName string   `yaml:"containerName"`
+	Nodes         []string `yaml:"nodes"`
 	NodeGroups    []string `yaml:"nodeGroups"`
 	Port          int      `yaml:"port"`
 }
 
 // Monitor is the monitor config definition
 type Monitor struct {
-	ContainerName string `yaml:"containerName"`
-	Nodes         []string
+	ContainerName string   `yaml:"containerName"`
+	Nodes         []string `yaml:"nodes"`
 	NodeGroups    []string `yaml:"nodeGroups"`
 	Port          int      `yaml:"port"`
 }
 
 // Mgmtd is the 3fs mgmtd service config definition
 type Mgmtd struct {
-	ContainerName  string `yaml:"containerName"`
-	Nodes          []string
-	NodeGroups     []string `yaml:"nodeGroups"`
-	ChunkSize      int      `yaml:"chunkSize"`
-	StripeSize     int      `yaml:"stripeSize"`
-	RDMAListenPort int      `yaml:"rdmaListenPort,omitempty"`
-	TCPListenPort  int      `yaml:"tcpListenPort,omitempty"`
+	ContainerName           string        `yaml:"containerName"`
+	Nodes                   []string      `yaml:"nodes"`
+	NodeGroups              []string      `yaml:"nodeGroups"`
+	ChunkSize               int           `yaml:"chunkSize"`
+	StripeSize              int           `yaml:"stripeSize"`
+	RDMAListenPort          int           `yaml:"rdmaListenPort,omitempty"`
+	TCPListenPort           int           `yaml:"tcpListenPort,omitempty"`
+	WaitTargetOnlineTimeout time.Duration `yaml:"waitTargetOnlineTimeout,omitempty"`
 }
 
 // Meta is the 3fs meta service config definition
 type Meta struct {
-	ContainerName  string `yaml:"containerName"`
-	Nodes          []string
+	ContainerName  string   `yaml:"containerName"`
+	Nodes          []string `yaml:"nodes"`
 	NodeGroups     []string `yaml:"nodeGroups"`
 	RDMAListenPort int      `yaml:"rdmaListenPort,omitempty"`
 	TCPListenPort  int      `yaml:"tcpListenPort,omitempty"`
@@ -127,30 +142,32 @@ type Meta struct {
 
 // Storage is the 3fs storage config definition
 type Storage struct {
-	ContainerName     string `yaml:"containerName"`
-	Nodes             []string
-	NodeGroups        []string `yaml:"nodeGroups"`
-	DiskType          DiskType `yaml:"diskType,omitempty"`
-	SectorSize        int      `yaml:"sectorSize,omitempty"`
-	DiskNumPerNode    int      `yaml:"diskNumPerNode,omitempty"`
-	RDMAListenPort    int      `yaml:"rdmaListenPort,omitempty"`
-	TCPListenPort     int      `yaml:"tcpListenPort,omitempty"`
-	ReplicationFactor int      `yaml:"replicationFactor,omitempty"`
-	TargetNumPerDisk  int      `yaml:"targetNumPerDisk,omitempty"`
-	TargetIDPrefix    int      `yaml:"targetIDPrefix,omitempty"`
-	ChainIDPrefix     int      `yaml:"chainIDPrefix,omitempty"`
+	ContainerName            string        `yaml:"containerName"`
+	Nodes                    []string      `yaml:"nodes"`
+	NodeGroups               []string      `yaml:"nodeGroups"`
+	DiskType                 DiskType      `yaml:"diskType,omitempty"`
+	SectorSize               int           `yaml:"sectorSize,omitempty"`
+	DiskNumPerNode           int           `yaml:"diskNumPerNode,omitempty"`
+	RDMAListenPort           int           `yaml:"rdmaListenPort,omitempty"`
+	TCPListenPort            int           `yaml:"tcpListenPort,omitempty"`
+	ReplicationFactor        int           `yaml:"replicationFactor,omitempty"`
+	TargetNumPerDisk         int           `yaml:"targetNumPerDisk,omitempty"`
+	TargetIDPrefix           int64         `yaml:"targetIDPrefix,omitempty"`
+	ChainIDPrefix            int64         `yaml:"chainIDPrefix,omitempty"`
+	WaitChainsServingTimeout time.Duration `yaml:"waitChainsServingTimeout,omitempty"`
 }
 
 // Client is the 3fs client config definition
 type Client struct {
-	ContainerName  string `yaml:"containerName"`
-	Nodes          []string
+	ContainerName  string   `yaml:"containerName"`
+	Nodes          []string `yaml:"nodes"`
 	NodeGroups     []string `yaml:"nodeGroups"`
 	HostMountpoint string   `yaml:"hostMountpoint"`
 }
 
 // Services is the services config definition
 type Services struct {
+	Pg         Pg `yaml:"postgresql"`
 	Fdb        Fdb
 	Clickhouse Clickhouse
 	Grafana    Grafana
@@ -168,18 +185,20 @@ type UIConfig struct {
 
 // Config is the 3fs cluster config definition
 type Config struct {
-	Name                string
-	WorkDir             string      `yaml:"workDir"`
-	NetworkType         NetworkType `yaml:"networkType"`
-	LogLevel            string      `yaml:"logLevel"`
-	Nodes               []Node
-	NodeGroups          []NodeGroup    `yaml:"nodeGroups"`
-	Services            Services       `yaml:"services"`
-	Images              Images         `yaml:"images"`
-	UI                  UIConfig       `yaml:"ui,omitempty"`
-	CmdMaxExitTimeout   *time.Duration `yaml:",omitempty"`
-	CheckStatusTimeout  time.Duration
-	CheckStatusInterval time.Duration
+	Name                     string
+	WorkDir                  string      `yaml:"workDir"`
+	NetworkType              NetworkType `yaml:"networkType"`
+	LogLevel                 string      `yaml:"logLevel"`
+	Nodes                    []Node
+	NodeGroups               []NodeGroup    `yaml:"nodeGroups"`
+	Services                 Services       `yaml:"services"`
+	Images                   Images         `yaml:"images"`
+	UI                       UIConfig       `yaml:"ui,omitempty"`
+	WaitServiceOnlineTimeout time.Duration  `yaml:"waitServiceOnlineTimeout,omitempty"`
+	CmdMaxExitTimeout        *time.Duration `yaml:",omitempty"`
+	ServiceBasePath          string         `yaml:"serviceBasePath,omitempty"`
+	CheckStatusTimeout       time.Duration
+	CheckStatusInterval      time.Duration
 }
 
 func (c *Config) parseValidateNodeGroups(hostSet *utils.Set[string]) (map[string]*NodeGroup, error) {
@@ -238,6 +257,12 @@ func (c *Config) parseNodeGroupToNodes(nodeGroupMap map[string]*NodeGroup) {
 		c.Nodes = append(c.Nodes, nodeGroup.Nodes...)
 	}
 
+	for _, nodeGroupName := range c.Services.Pg.NodeGroups {
+		nodeGroup := nodeGroupMap[nodeGroupName]
+		for _, node := range nodeGroup.Nodes {
+			c.Services.Pg.Nodes = append(c.Services.Pg.Nodes, node.Name)
+		}
+	}
 	for _, nodeGroupName := range c.Services.Fdb.NodeGroups {
 		nodeGroup := nodeGroupMap[nodeGroupName]
 		for _, node := range nodeGroup.Nodes {
@@ -339,6 +364,16 @@ func (c *Config) SetValidate(workDir, registry string) error {
 		}
 	}
 
+	if len(c.Services.Pg.Nodes) > 1 {
+		return errors.New("Currently only supports one postgresql node")
+	}
+	if c.Services.Pg.Username == "" {
+		return errors.New("services.postgresql.username is required")
+	}
+	if c.Services.Pg.Password == "" {
+		return errors.New("services.postgresql.password is required")
+	}
+
 	nodeGroupMap, err := c.parseValidateNodeGroups(nodeHostSet)
 	if err != nil {
 		return errors.Trace(err)
@@ -350,6 +385,12 @@ func (c *Config) SetValidate(workDir, registry string) error {
 		nodeGroups []string
 		require    bool
 	}{
+		{
+			"postgresql",
+			c.Services.Pg.Nodes,
+			c.Services.Pg.NodeGroups,
+			true,
+		},
 		{
 			"fdb",
 			c.Services.Fdb.Nodes,
@@ -416,6 +457,17 @@ func (c *Config) SetValidate(workDir, registry string) error {
 	if c.Services.Client.HostMountpoint == "" {
 		return errors.New("services.client.hostMountpoint is required")
 	}
+	if c.Services.Storage.WaitChainsServingTimeout == 0 {
+		return errors.New("services.storage.waitChainsServingTimeout is required")
+	}
+
+	if c.ServiceBasePath == "" {
+		return errors.New("serviceBasePath is required")
+	}
+
+	if c.ServiceBasePath == "" {
+		return errors.New("serviceBasePath is required")
+	}
 
 	if err := c.validImages(); err != nil {
 		return errors.Trace(err)
@@ -470,6 +522,10 @@ func (c *Config) validImages() error {
 		image   Image
 	}{
 		{
+			imgName: "pg",
+			image:   c.Images.Pg,
+		},
+		{
 			imgName: "fdb",
 			image:   c.Images.Fdb,
 		},
@@ -505,6 +561,16 @@ func NewConfigWithDefaults() *Config {
 		NetworkType: NetworkTypeRDMA,
 		LogLevel:    "INFO",
 		Services: Services{
+			Pg: Pg{
+				ContainerName:    "3fs-postgres",
+				Port:             5432,
+				Username:         "postgres",
+				Password:         "pgpassword",
+				Database:         "open3fs",
+				ReadOnlyUsername: "postgres_readonly",
+				ReadOnlyPassword: "pgpassword_readonly",
+				WaitReadyTimeout: 30 * time.Second,
+			},
 			Fdb: Fdb{
 				ContainerName:      "3fs-fdb",
 				Port:               4500,
@@ -526,11 +592,12 @@ func NewConfigWithDefaults() *Config {
 				Port:          10000,
 			},
 			Mgmtd: Mgmtd{
-				ContainerName:  "3fs-mgmtd",
-				ChunkSize:      1048576,
-				StripeSize:     16,
-				RDMAListenPort: 8000,
-				TCPListenPort:  9000,
+				ContainerName:           "3fs-mgmtd",
+				ChunkSize:               1048576,
+				StripeSize:              16,
+				RDMAListenPort:          8000,
+				TCPListenPort:           9000,
+				WaitTargetOnlineTimeout: 10 * time.Minute,
 			},
 			Meta: Meta{
 				ContainerName:  "3fs-meta",
@@ -538,16 +605,17 @@ func NewConfigWithDefaults() *Config {
 				TCPListenPort:  9001,
 			},
 			Storage: Storage{
-				ContainerName:     "3fs-storage",
-				DiskType:          DiskTypeNvme,
-				SectorSize:        4096,
-				RDMAListenPort:    8002,
-				TCPListenPort:     9002,
-				ReplicationFactor: 2,
-				DiskNumPerNode:    1,
-				TargetNumPerDisk:  32,
-				TargetIDPrefix:    1,
-				ChainIDPrefix:     9,
+				ContainerName:            "3fs-storage",
+				DiskType:                 DiskTypeNvme,
+				SectorSize:               4096,
+				RDMAListenPort:           8002,
+				TCPListenPort:            9002,
+				ReplicationFactor:        2,
+				DiskNumPerNode:           1,
+				TargetNumPerDisk:         32,
+				TargetIDPrefix:           1,
+				ChainIDPrefix:            9,
+				WaitChainsServingTimeout: 10 * time.Minute,
 			},
 			Client: Client{
 				ContainerName:  "3fs-client",
@@ -560,6 +628,10 @@ func NewConfigWithDefaults() *Config {
 			FFFS: Image{
 				Repo: "open3fs/3fs",
 				Tag:  "20250410",
+			},
+			Pg: Image{
+				Repo: "open3fs/postgresql",
+				Tag:  "17.5.0",
 			},
 			Fdb: Image{
 				Repo: "open3fs/foundationdb",
@@ -574,7 +646,9 @@ func NewConfigWithDefaults() *Config {
 				Tag:  "12.0.0",
 			},
 		},
-		CheckStatusTimeout:  5 * time.Minute,
-		CheckStatusInterval: 5 * time.Second,
+		WaitServiceOnlineTimeout: 30 * time.Second,
+		ServiceBasePath:          "/lib/systemd/system/",
+		CheckStatusTimeout:       5 * time.Minute,
+		CheckStatusInterval:      5 * time.Second,
 	}
 }

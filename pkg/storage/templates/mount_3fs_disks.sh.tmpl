@@ -1,0 +1,16 @@
+#!/bin/bash
+set -e
+
+base_dir=$1
+
+while IFS= read -r line;do
+    disk_info=($line)
+    dev_name="/dev/${disk_info[0]}"
+    if (( ${#disk_info[@]} > 2));then
+        continue
+    fi
+    IFS="-" read -r -a label_info <<< "${disk_info[1]}" # label format: 3fs-data-{index}
+    mp=${base_dir}/data${label_info[2]}
+    echo mounting ${dev_name} to $mp
+    mount -t xfs "${dev_name}" "$mp"
+done < <(lsblk -o NAME,LABEL,MOUNTPOINT -l | grep -P "3fs-data-\d+" || true)

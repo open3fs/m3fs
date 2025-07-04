@@ -132,6 +132,20 @@ services:
     # port defaines the listen port of 3fs monitor service.
     # Default value is 10000.
     port: 10000
+  postgresql:
+    # containerName defines the container name of postgresql service.
+    # Default value is 3fs-postgres.
+    containerName: 3fs-postgres
+    # username defines the default username of postgresql db
+    # Default value is 3fs-postgres.
+    # Default value is postgres.
+    username: "postgres"
+    # password defines the default password of postgresql db
+    # Default value is pgpassword.
+    password: "pgpassword"
+    # port defines the listen port of postgresql db
+    # Default value is 5432.
+    password: 5432"
   fdb:
     # containerName defines the container name of foundation db service.
     # Default value is 3fs-fdb.
@@ -185,6 +199,9 @@ images:
     repo: "open3fs/3fs"
     # tag is the image tag.
     tag: "20250329"
+  postgresql:
+    repo: "open3fs/postgresql"
+    tag: "17.5.0"
   fdb: 
     repo: "open3fs/foundationdb"
     tag: "7.3.63"

@@ -24,6 +24,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
 	"github.com/open3fs/m3fs/pkg/external"
+	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/task"
 	ttask "github.com/open3fs/m3fs/tests/task"
 )
@@ -75,8 +76,12 @@ func (s *runContainerStepSuite) SetupTest() {
 	s.StepSuite.SetupTest()
 
 	s.step = &runContainerStep{}
+	s.Cfg.Nodes = append(s.Cfg.Nodes, config.Node{
+		Name: "test-node",
+		Host: "1.1.1.1",
+	})
 	s.SetupRuntime()
-	s.step.Init(s.Runtime, s.MockEm, config.Node{}, s.Logger)
+	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
 	s.Runtime.Store(task.RuntimeMonitorTmpDirKey, "/tmp/3f-monitor.xxx")
 }
 
@@ -90,11 +95,12 @@ func (s *runContainerStepSuite) Test() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageName3FS)
 	s.NoError(err)
 	args := &external.RunArgs{
-		Image:       img,
-		Name:        common.Pointer("3fs-monitor"),
-		HostNetwork: true,
-		Privileged:  common.Pointer(true),
-		Detach:      common.Pointer(true),
+		Image:         img,
+		Name:          common.Pointer("3fs-monitor"),
+		HostNetwork:   true,
+		RestartPolicy: external.ContainerRestartPolicyUnlessStopped,
+		Privileged:    common.Pointer(true),
+		Detach:        common.Pointer(true),
 		Volumes: []*external.VolumeArgs{
 			{
 				Source: "/dev",
@@ -121,6 +127,15 @@ func (s *runContainerStepSuite) Test() {
 	s.MockDocker.On("Run", args).Return("", nil)
 
 	s.NoError(s.step.Execute(s.Ctx()))
+
+	var monService model.MonService
+	s.NoError(s.NewDB().Model(new(model.MonService)).First(&monService).Error)
+	monServiceExp := model.MonService{
+		Model:  monService.Model,
+		Name:   s.Runtime.Services.Monitor.ContainerName,
+		NodeID: s.Runtime.LoadNodesMap()[s.step.Node.Name].ID,
+	}
+	s.Equal(monServiceExp, monService)
 
 	s.MockRunner.AssertExpectations(s.T())
 	s.MockFS.AssertExpectations(s.T())
