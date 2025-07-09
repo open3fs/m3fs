@@ -32,7 +32,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/task"
 )
 
-type createDisksStep struct {
+type syncNodeDisksStep struct {
 	task.BaseStep
 
 	db            *gorm.DB
@@ -40,7 +40,7 @@ type createDisksStep struct {
 	storServiceID uint
 }
 
-func (s *createDisksStep) Execute(ctx context.Context) error {
+func (s *syncNodeDisksStep) Execute(ctx context.Context) error {
 	s.db = s.Runtime.LoadDB()
 	var node model.Node
 	if err := s.db.First(&node, "name = ?", s.Node.Name).Error; err != nil {
@@ -70,7 +70,7 @@ func (s *createDisksStep) Execute(ctx context.Context) error {
 	return nil
 }
 
-func (s *createDisksStep) parseDiskIndex(label string) (int, error) {
+func (s *syncNodeDisksStep) parseDiskIndex(label string) (int, error) {
 	indexStr := strings.TrimSpace(strings.TrimPrefix(label, "3fs-data-"))
 	index, err := strconv.ParseInt(indexStr, 10, 64)
 	if err != nil {
@@ -80,12 +80,37 @@ func (s *createDisksStep) parseDiskIndex(label string) (int, error) {
 	return int(index), nil
 }
 
-func (s *createDisksStep) createDirDisks() error {
+func (s *syncNodeDisksStep) getExistsDisks() (map[string]model.Disk, error) {
+	var existsDisks []model.Disk
+	err := s.db.Model(new(model.Disk)).Find(&existsDisks, "node_id = ? AND stor_service_id = ?",
+		s.nodeID, s.storServiceID).Error
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	diskMap := make(map[string]model.Disk, len(existsDisks))
+	for _, disk := range existsDisks {
+		diskMap[disk.Name] = disk
+	}
+
+	return diskMap, nil
+}
+
+func (s *syncNodeDisksStep) createDirDisks() error {
 	storCfg := s.Runtime.Services.Storage
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	existDisks, err := s.getExistsDisks()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		for i := range storCfg.DiskNumPerNode {
+			name := path.Join(getServiceWorkDir(s.Runtime.WorkDir), "3fsdata", fmt.Sprintf("data%d", i))
+			_, ok := existDisks[name]
+			if ok {
+				s.Logger.Debugf("Disk %s already exists, skipping creation", name)
+				continue
+			}
 			disk := &model.Disk{
-				Name:          path.Join(getServiceWorkDir(s.Runtime.WorkDir), "3fsdata", fmt.Sprintf("data%d", i)),
+				Name:          name,
 				NodeID:        s.nodeID,
 				StorServiceID: s.storServiceID,
 				Index:         i,
@@ -102,8 +127,12 @@ func (s *createDisksStep) createDirDisks() error {
 	return errors.Trace(err)
 }
 
-func (s *createDisksStep) createFsDisks(devices []external.BlockDevice) error {
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+func (s *syncNodeDisksStep) createFsDisks(devices []external.BlockDevice) error {
+	existDisks, err := s.getExistsDisks()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return errors.Trace(s.db.Transaction(func(tx *gorm.DB) error {
 		for _, device := range devices {
 			if len(device.Children) > 0 {
 				if err := errors.Trace(s.createFsDisks(device.Children)); err != nil {
@@ -120,6 +149,11 @@ func (s *createDisksStep) createFsDisks(devices []external.BlockDevice) error {
 				return errors.Trace(err)
 			}
 
+			_, ok := existDisks[device.Name]
+			if ok {
+				s.Logger.Debugf("Disk %s already exists, skipping creation", device.Name)
+				continue
+			}
 			disk := &model.Disk{
 				Name:          device.Name,
 				NodeID:        s.nodeID,
@@ -135,8 +169,7 @@ func (s *createDisksStep) createFsDisks(devices []external.BlockDevice) error {
 				disk.Name, disk.Index, disk.SizeByte, disk.SerialNum)
 		}
 		return nil
-	})
-	return errors.Trace(err)
+	}))
 }
 
 type setupAutoMountDiskStep struct {

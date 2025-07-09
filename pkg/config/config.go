@@ -155,6 +155,7 @@ type Storage struct {
 	TargetIDPrefix           int64         `yaml:"targetIDPrefix,omitempty"`
 	ChainIDPrefix            int64         `yaml:"chainIDPrefix,omitempty"`
 	WaitChainsServingTimeout time.Duration `yaml:"waitChainsServingTimeout,omitempty"`
+	WaitTargetUpdateSleep    time.Duration `yaml:"waitTargetUpdateSleepTime,omitempty"`
 }
 
 // Client is the 3fs client config definition
@@ -616,6 +617,7 @@ func NewConfigWithDefaults() *Config {
 				TargetIDPrefix:           1,
 				ChainIDPrefix:            9,
 				WaitChainsServingTimeout: 10 * time.Minute,
+				WaitTargetUpdateSleep:    10 * time.Second,
 			},
 			Client: Client{
 				ContainerName:  "3fs-client",

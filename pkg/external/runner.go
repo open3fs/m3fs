@@ -245,7 +245,7 @@ func (r *RemoteRunner) copyFileToRemote(local, remote string) error {
 }
 
 func (r *RemoteRunner) copyDirToRemote(local, remote string) error {
-	if err := r.sftpClient.Mkdir(remote); err != nil && !os.IsExist(err) {
+	if err := r.sftpClient.MkdirAll(remote); err != nil {
 		return errors.Trace(err)
 	}
 

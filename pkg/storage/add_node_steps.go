@@ -209,8 +209,8 @@ func (s *prepareChangePlanStep) Execute(ctx context.Context) error {
 		newNodeIDs[i] = newNode.ID
 	}
 
-	planData := map[string][]uint{
-		"new_node_ids": newNodeIDs,
+	planData := &model.ChangePlanAddStorNodesData{
+		NewNodeIDs: newNodeIDs,
 	}
 	data, err := json.Marshal(planData)
 	if err != nil {
@@ -955,7 +955,7 @@ loop:
 			if val {
 				return nil
 			}
-			time.Sleep(time.Second * 5)
+			s.Em.Os.Sleep(s.Runtime.Cfg.CheckStatusInterval)
 		}
 	}
 
@@ -992,7 +992,7 @@ func (s *runChangePlanStep) checkRemoveTargetFromChain(ctx context.Context, step
 
 	// when we remove target from chain, storage service targe state update has a delay,
 	// so we need to wait for a while to ensure the target state is updated
-	time.Sleep(10 * time.Second)
+	s.Em.Os.Sleep(s.Runtime.Cfg.Services.Storage.WaitTargetUpdateSleep)
 
 	return nil
 }
@@ -1080,7 +1080,7 @@ loop:
 					return nil
 				}
 			}
-			time.Sleep(time.Second)
+			s.Em.Os.Sleep(s.Runtime.Cfg.CheckStatusInterval)
 		}
 	}
 
