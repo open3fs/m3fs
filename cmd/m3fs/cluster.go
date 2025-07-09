@@ -41,6 +41,7 @@ import (
 	"github.com/open3fs/m3fs/pkg/pg/model"
 	"github.com/open3fs/m3fs/pkg/storage"
 	"github.com/open3fs/m3fs/pkg/task"
+	"github.com/open3fs/m3fs/pkg/utils"
 )
 
 var clusterCmd = &cli.Command{
@@ -105,6 +106,26 @@ var clusterCmd = &cli.Command{
 			Name:   "add-storage-nodes",
 			Usage:  "Add 3fs cluster storage nodes",
 			Action: addStorageNodes,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:        "config",
+					Aliases:     []string{"c"},
+					Usage:       "Path to the cluster configuration file",
+					Destination: &configFilePath,
+					Required:    true,
+				},
+				&cli.StringFlag{
+					Name:        "workdir",
+					Aliases:     []string{"w"},
+					Usage:       "Path to the working directory (default is current directory)",
+					Destination: &workDir,
+				},
+			},
+		},
+		{
+			Name:   "add-client",
+			Usage:  "Add 3fs cluster clients",
+			Action: addClient,
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:        "config",
@@ -201,7 +222,9 @@ func createCluster(ctx *cli.Context) error {
 			BeginNodeID:  10001,
 		},
 		new(mgmtd.InitUserAndChainTask),
-		new(fsclient.Create3FSClientServiceTask),
+		&fsclient.Create3FSClientServiceTask{
+			ClientNodes: cfg.Services.Client.Nodes,
+		},
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -350,6 +373,56 @@ func syncNodeModels(cfg *config.Config, db *gorm.DB) error {
 	return nil
 }
 
+func syncClientModels(cfg *config.Config, db *gorm.DB) error {
+	var nodes []model.Node
+	err := db.Model(new(model.Node)).Find(&nodes).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	nodesMap := make(map[string]model.Node, len(nodes))
+	for _, node := range nodes {
+		nodesMap[node.Name] = node
+	}
+
+	var clients []model.FuseClient
+	err = db.Model(new(model.FuseClient)).Find(&clients).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	clientsMap := make(map[uint]model.FuseClient, len(clients))
+	for _, client := range clients {
+		clientsMap[client.NodeID] = client
+	}
+
+	clientNodes := cfg.Services.Client.Nodes
+	err = db.Transaction(func(tx *gorm.DB) error {
+		for _, clientNode := range clientNodes {
+			node, ok := nodesMap[clientNode]
+			if !ok {
+				return errors.Errorf("client node %s not found", clientNode)
+			}
+			_, ok = clientsMap[node.ID]
+			if ok {
+				continue
+			}
+			client := model.FuseClient{
+				Name:           cfg.Services.Client.ContainerName,
+				NodeID:         node.ID,
+				HostMountpoint: cfg.Services.Client.HostMountpoint,
+			}
+			if err = tx.Model(&client).Create(&client).Error; err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
 func addStorageNodes(ctx *cli.Context) error {
 	cfg, err := loadClusterConfig()
 	if err != nil {
@@ -448,10 +521,79 @@ func addStorageNodes(ctx *cli.Context) error {
 	runner.Runtime.Store(task.RuntimeNodesMapKey, nodesMap)
 
 	if err = runner.Run(ctx.Context); err != nil {
-		return errors.Annotate(err, "create cluster")
+		return errors.Annotate(err, "add storage nodes")
 	}
 
 	log.Logger.Infof("Add storage nodes success")
+
+	return nil
+}
+
+func addClient(ctx *cli.Context) error {
+	cfg, err := loadClusterConfig()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	db, err := setupDB(cfg)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	nodes := []*model.Node{}
+	err = db.Model(new(model.Node)).Find(&nodes).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	nodesMap := make(map[string]*model.Node, len(nodes))
+	for _, node := range nodes {
+		nodesMap[node.Name] = node
+	}
+
+	clientNodes := []string{}
+	err = db.Raw(
+		"SELECT nodes.name FROM fuse_clients INNER JOIN nodes ON fuse_clients.node_id = nodes.id",
+	).Scan(&clientNodes).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+	clientNodeSet := utils.NewSet(clientNodes...)
+	newClientNodes := []string{}
+	for _, clientNode := range cfg.Services.Client.Nodes {
+		if !clientNodeSet.Contains(clientNode) {
+			newClientNodes = append(newClientNodes, clientNode)
+		}
+	}
+
+	if err = syncNodeModels(cfg, db); err != nil {
+		return errors.Trace(err)
+	}
+	if len(newClientNodes) == 0 {
+		return errors.New("No new client nodes to add")
+	}
+
+	runner, err := task.NewRunner(cfg,
+		&fsclient.Create3FSClientServiceTask{
+			ClientNodes:             newClientNodes,
+			DeleteContainerIfExists: true,
+		},
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	runner.Init()
+	runner.Runtime.Store(task.RuntimeDbKey, db)
+	runner.Runtime.Store(task.RuntimeNodesMapKey, nodesMap)
+
+	if err = runner.Run(ctx.Context); err != nil {
+		return errors.Annotate(err, "add client")
+	}
+
+	if err = syncClientModels(cfg, db); err != nil {
+		return errors.Trace(err)
+	}
+
+	log.Logger.Infof("Add client success")
 
 	return nil
 }
