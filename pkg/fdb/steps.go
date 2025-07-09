@@ -21,7 +21,6 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/open3fs/m3fs/pkg/common"
 	"github.com/open3fs/m3fs/pkg/config"
@@ -163,7 +162,7 @@ func (s *initClusterStep) waitClusterInitialized(ctx context.Context) error {
 		if strings.Contains(out, "The database is available.") {
 			break
 		}
-		time.Sleep(time.Second)
+		s.Em.Os.Sleep(s.Runtime.Cfg.CheckStatusInterval)
 	}
 
 	s.Logger.Infof("Initialized fdb cluster")

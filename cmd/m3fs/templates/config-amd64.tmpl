@@ -40,6 +40,9 @@ services:
   fdb:
     nodes:
       - node1
+  postgresql:
+    nodes:
+      - node1
   clickhouse:
     nodes:
       - node1
@@ -72,3 +75,6 @@ images:
   grafana:
     repo: "open3fs/grafana"
     tag: "12.0.0"
+  postgresql:
+    repo: "open3fs/postgresql"
+    tag: "17.5.0"

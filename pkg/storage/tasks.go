@@ -104,6 +104,7 @@ func getServiceWorkDir(workDir string) string {
 type CreateStorageServiceTask struct {
 	task.BaseTask
 
+	DeleteContainerIfExists bool
 	// StorageNodes is the nodes name of new storage nodes
 	StorageNodes []string
 	// BeginNodeID is the begin node id  of new storage nodes
@@ -186,6 +187,7 @@ func (t *CreateStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 					ContainerName:  storage.ContainerName,
 					Service:        ServiceName,
 					WorkDir:        workDir,
+					DeleteIfExists: t.DeleteContainerIfExists,
 					UseRdmaNetwork: true,
 					ExtraVolumes: []*external.VolumeArgs{
 						{
@@ -210,7 +212,7 @@ func (t *CreateStorageServiceTask) Init(r *task.Runtime, logger log.Interface) {
 		},
 		{
 			Nodes:   nodes,
-			NewStep: func() task.Step { return new(createDisksStep) },
+			NewStep: func() task.Step { return new(syncNodeDisksStep) },
 		},
 	})
 }

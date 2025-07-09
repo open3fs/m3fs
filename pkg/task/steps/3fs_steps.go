@@ -382,6 +382,7 @@ type run3FSContainerStep struct {
 
 	imgName        string
 	containerName  string
+	deleteIfExists bool
 	service        string
 	serviceWorkDir string
 	extraVolumes   []*external.VolumeArgs
@@ -389,8 +390,36 @@ type run3FSContainerStep struct {
 	modelObjFunc   func(r *task.BaseStep) any
 }
 
+func (s *run3FSContainerStep) getContainerNames(ctx context.Context) (*utils.Set[string], error) {
+	ex, err := s.Em.Runner.Exec(ctx, "docker", "ps", "-a", "--format", "{{.Names}}")
+	if err != nil {
+		return nil, errors.Annotatef(err, "get container names")
+	}
+
+	ret := utils.NewSet[string]()
+	for _, name := range strings.Split(ex, "\n") {
+		ret.Add(strings.TrimSpace(name))
+	}
+	return ret, nil
+}
+
 func (s *run3FSContainerStep) Execute(ctx context.Context) error {
 	s.Logger.Infof("Starting %s container %s", s.service, s.containerName)
+
+	if s.deleteIfExists {
+		containerNames, err := s.getContainerNames(ctx)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if containerNames.Contains(s.containerName) {
+			s.Logger.Warnf("Container %s already exists, removing it", s.containerName)
+			_, err := s.Em.Docker.Rm(ctx, s.containerName, true)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+
 	img, err := s.Runtime.Cfg.Images.GetImage(s.imgName)
 	if err != nil {
 		return errors.Trace(err)
@@ -475,6 +504,7 @@ type Run3FSContainerStepSetup struct {
 	ExtraVolumes   []*external.VolumeArgs
 	UseRdmaNetwork bool
 	ModelObjFunc   func(r *task.BaseStep) any
+	DeleteIfExists bool
 }
 
 // NewRun3FSContainerStepFunc is run3FSContainer factory func.
@@ -488,6 +518,7 @@ func NewRun3FSContainerStepFunc(setup *Run3FSContainerStepSetup) func() task.Ste
 			extraVolumes:   setup.ExtraVolumes,
 			useRdmaNetwork: setup.UseRdmaNetwork,
 			modelObjFunc:   setup.ModelObjFunc,
+			deleteIfExists: setup.DeleteIfExists,
 		}
 	}
 }
@@ -563,7 +594,7 @@ func (s *upload3FSMainConfigStep) Execute(ctx context.Context) error {
 	}
 	args := &external.RunArgs{
 		Image:       img,
-		Name:        &s.containerName,
+		Name:        common.Pointer(fmt.Sprintf("%s-cfg-%s", s.containerName, s.Em.Os.RandomString(6))),
 		HostNetwork: true,
 		Privileged:  common.Pointer(true),
 		Rm:          common.Pointer(true),

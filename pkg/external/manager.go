@@ -71,6 +71,7 @@ func registerNewExternalFunc(f newExternalFunc) {
 type Manager struct {
 	Runner RunnerInterface
 
+	Os     OsInterface
 	Net    NetInterface
 	Docker DockerInterface
 	Disk   DiskInterface

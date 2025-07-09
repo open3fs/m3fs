@@ -587,11 +587,22 @@ func (s *run3FSContainerStepSuite) SetupTest() {
 }
 
 func (s *run3FSContainerStepSuite) testRunContainer(
-	useRdmaNetwork bool, networkType config.NetworkType) {
+	useRdmaNetwork, exists, deleteIfExists bool, networkType config.NetworkType) {
+
 	s.step.useRdmaNetwork = useRdmaNetwork
+	s.step.deleteIfExists = deleteIfExists
 	s.step.Runtime.Cfg.NetworkType = networkType
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageName3FS)
 	s.NoError(err)
+	if deleteIfExists {
+		call := s.MockRunner.On("Exec", "docker", []string{"ps", "-a", "--format", "{{.Names}}"})
+		if exists {
+			call.Return(fmt.Sprintf("%s\n", s.step.containerName), nil)
+			s.MockDocker.On("Rm", s.step.containerName, true).Return("", nil)
+		} else {
+			call.Return("", nil)
+		}
+	}
 	args := &external.RunArgs{
 		Image:         img,
 		Name:          &s.Cfg.Services.Mgmtd.ContainerName,
@@ -646,19 +657,27 @@ func (s *run3FSContainerStepSuite) testRunContainer(
 }
 
 func (s *run3FSContainerStepSuite) TestRunContainerWithRdmaNetwork() {
-	s.testRunContainer(true, config.NetworkTypeRDMA)
+	s.testRunContainer(true, false, false, config.NetworkTypeRDMA)
 }
 
 func (s *run3FSContainerStepSuite) TestRunContainerWithErdmaNetwork() {
-	s.testRunContainer(true, config.NetworkTypeERDMA)
+	s.testRunContainer(true, false, false, config.NetworkTypeERDMA)
 }
 
 func (s *run3FSContainerStepSuite) TestRunContainerWithRxeRdmaNetwork() {
-	s.testRunContainer(true, config.NetworkTypeRXE)
+	s.testRunContainer(true, false, false, config.NetworkTypeRXE)
 }
 
 func (s *run3FSContainerStepSuite) TestRunContainerWithoutRdmaNetwork() {
-	s.testRunContainer(false, config.NetworkTypeRDMA)
+	s.testRunContainer(false, false, false, config.NetworkTypeRDMA)
+}
+
+func (s *run3FSContainerStepSuite) TestRunContainerWithDeleteExistsOne() {
+	s.testRunContainer(false, true, true, config.NetworkTypeRDMA)
+}
+
+func (s *run3FSContainerStepSuite) TestRunContainerWithNotExistsNotDelete() {
+	s.testRunContainer(false, false, true, config.NetworkTypeRDMA)
 }
 
 func TestRm3FSContainerStepSuite(t *testing.T) {
@@ -738,9 +757,10 @@ func (s *upload3FSMainConfigStepSuite) SetupTest() {
 func (s *upload3FSMainConfigStepSuite) TestUploadConfig() {
 	img, err := s.Runtime.Cfg.Images.GetImage(config.ImageName3FS)
 	s.NoError(err)
+	s.MockOs.On("RandomString", 6).Return("rundom")
 	args := &external.RunArgs{
 		Image:       img,
-		Name:        &s.Cfg.Services.Meta.ContainerName,
+		Name:        common.Pointer(fmt.Sprintf("%s-cfg-rundom", s.step.containerName)),
 		HostNetwork: true,
 		Privileged:  common.Pointer(true),
 		Entrypoint:  common.Pointer("''"),
@@ -776,6 +796,7 @@ func (s *upload3FSMainConfigStepSuite) TestUploadConfig() {
 
 	s.MockRunner.AssertExpectations(s.T())
 	s.MockDocker.AssertExpectations(s.T())
+	s.MockOs.AssertExpectations(s.T())
 }
 
 func TestRemoteRunScriptStepSuite(t *testing.T) {

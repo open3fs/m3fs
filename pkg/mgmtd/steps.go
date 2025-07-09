@@ -471,7 +471,7 @@ func (s *createChainAndTargetModelStep) createChains(ctx context.Context) (map[s
 				return nil, errors.Trace(err)
 			}
 			if strings.Contains(output, "SERVING-OFFLINE") {
-				time.Sleep(time.Second)
+				s.Em.Os.Sleep(s.Runtime.Cfg.CheckStatusInterval)
 				continue
 			}
 		}

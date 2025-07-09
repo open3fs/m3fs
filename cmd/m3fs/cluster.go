@@ -15,6 +15,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -394,14 +395,34 @@ func addStorageNodes(ctx *cli.Context) error {
 	if len(storNodeIDs) != 0 {
 		query = query.Where("id NOT IN (?)", storNodeIDs)
 	}
-	err = query.Find(&newStorNodes, "name in (?)", cfg.Services.Storage.Nodes).Error
+	err = query.Find(&newStorNodes, "name IN (?)", cfg.Services.Storage.Nodes).Error
 	if err != nil {
 		return errors.Trace(err)
 	}
 	if len(newStorNodes) == 0 && changePlan == nil {
 		return errors.New("No new storage nodes to add")
 	}
-	if changePlan == nil {
+	storCreated := false
+	for _, step := range steps {
+		if step.OperationType == model.ChangePlanStepOpType.CreateStorService && step.FinishAt != nil {
+			storCreated = true
+			break
+		}
+	}
+	if !storCreated && changePlan != nil {
+		var data model.ChangePlanAddStorNodesData
+		if err = json.Unmarshal([]byte(changePlan.Data), &data); err != nil {
+			return errors.Annotate(err, "parse change plan data")
+		}
+		if err = db.Model(new(model.Node)).
+			Find(&newStorNodes, "id IN (?)", data.NewNodeIDs).Error; err != nil {
+
+			return errors.Trace(err)
+		}
+	}
+	// NOTE: if change plan is not created yet or create storage service step not finished, do create
+	//  storage service task again with new storage nodes.
+	if !storCreated {
 		newNodeNames := make([]string, len(newStorNodes))
 		for i, node := range newStorNodes {
 			newNodeNames[i] = node.Name
@@ -409,8 +430,9 @@ func addStorageNodes(ctx *cli.Context) error {
 		}
 		log.Logger.Infof("Add new storage nodes: %v", newNodeNames)
 		tasks = append(tasks, &storage.CreateStorageServiceTask{
-			StorageNodes: newNodeNames,
-			BeginNodeID:  10001 + len(storNodeIDs),
+			DeleteContainerIfExists: true,
+			StorageNodes:            newNodeNames,
+			BeginNodeID:             10001 + len(storNodeIDs),
 		})
 	}
 	tasks = append(tasks, new(storage.RunChangePlanTask))

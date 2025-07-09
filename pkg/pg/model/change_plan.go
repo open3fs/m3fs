@@ -29,6 +29,11 @@ const (
 	ChangePlanTypeAddFuseClients = "add_fuse_clients"
 )
 
+// ChangePlanAddStorNodesData is the data for adding storage nodes in a change plan.
+type ChangePlanAddStorNodesData struct {
+	NewNodeIDs []uint `json:"new_node_ids"`
+}
+
 // ChangePlan is the model of change plan.
 type ChangePlan struct {
 	gorm.Model

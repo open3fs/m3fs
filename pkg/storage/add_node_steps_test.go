@@ -443,9 +443,12 @@ func (s *runChangePlanSuite) initSteps() (*model.ChangePlan, []*model.ChangePlan
 	return plan, steps
 }
 
-func (s *runChangePlanSuite) mockAdminCli(cmd, ret string) {
-	s.MockDocker.On("Exec", s.Runtime.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli",
-		[]string{"-cfg", "/opt/3fs/etc/admin_cli.toml", fmt.Sprintf("%q", cmd)}).Return(ret, nil).Once()
+func (s *runChangePlanSuite) mockAdminCli(cmd, ret string, manyTime ...bool) {
+	call := s.MockDocker.On("Exec", s.Runtime.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli",
+		[]string{"-cfg", "/opt/3fs/etc/admin_cli.toml", fmt.Sprintf("%q", cmd)}).Return(ret, nil)
+	if len(manyTime) == 0 || !manyTime[0] {
+		call.Once()
+	}
 }
 
 func (s *runChangePlanSuite) assertPlanStepsFinished(plan *model.ChangePlan, steps ...*model.ChangePlanStep) {
@@ -512,6 +515,7 @@ func (s *runChangePlanSuite) TestRun() {
 	s.mockAdminCli("upload-chains output/generated_chains.csv", "")
 	s.mockAdminCli("list-chains", "")
 	s.mockAdminCli("upload-chain-table 1 output/generated_chain_table.csv", "")
+	s.MockOs.On("Sleep", s.Cfg.Services.Storage.WaitTargetUpdateSleep)
 
 	existsChain := &model.Chain{
 		Name: "900100015",
@@ -566,6 +570,7 @@ func (s *runChangePlanSuite) TestRun() {
 	s.assertPlanStepsFinished(plan, steps...)
 
 	s.MockDocker.AssertExpectations(s.T())
+	s.MockOs.AssertExpectations(s.T())
 }
 
 func (s *runChangePlanSuite) TestRunWithFinishedSteps() {
@@ -700,8 +705,9 @@ func (s *runChangePlanSuite) TestTimeoutWaitAfterAddTargetToChain() {
 		`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
 101000200102  900100016  HEAD  SERVING      UPTODATE    10001   0          0
 101000300101  900100002  TAIL  FAIL      UPTODATE    10002   0          0
-`)
+`, true)
 	s.mockAdminCli("update-chain --mode add 900100002 101000300101", "")
+	s.MockOs.On("Sleep", s.Cfg.CheckStatusInterval)
 
 	s.Error(s.step.Execute(s.Ctx()), "timeout to wait target 101000300101 SERVING-UPTODATE")
 
@@ -713,6 +719,7 @@ func (s *runChangePlanSuite) TestTimeoutWaitAfterAddTargetToChain() {
 	s.Nil(plan.FinishAt)
 
 	s.MockDocker.AssertExpectations(s.T())
+	s.MockOs.AssertExpectations(s.T())
 }
 
 func (s *runChangePlanSuite) TestTimeoutWaitBeforeOfflineTarget() {

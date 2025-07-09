@@ -36,7 +36,7 @@ func TestCreateDisksStepSuite(t *testing.T) {
 type createDisksStepSuite struct {
 	ttask.StepSuite
 
-	step        *createDisksStep
+	step        *syncNodeDisksStep
 	storService model.StorService
 	node        model.Node
 }
@@ -46,7 +46,7 @@ func (s *createDisksStepSuite) SetupTest() {
 
 	s.Cfg.Nodes = []config.Node{{Name: "name", Host: "host"}}
 	s.Cfg.Services.Storage.Nodes = []string{s.Cfg.Nodes[0].Name}
-	s.step = &createDisksStep{}
+	s.step = &syncNodeDisksStep{}
 	s.SetupRuntime()
 	s.step.Init(s.Runtime, s.MockEm, s.Cfg.Nodes[0], s.Logger)
 	db := s.NewDB()

@@ -65,7 +65,7 @@ func main() {
 		},
 		ExitErrHandler: func(cCtx *cli.Context, err error) {
 			if err != nil {
-				logrus.Debugf("Command failed stacktrace: %s", errors.StackTrace(err))
+				mlog.Logger.Debugf("Command failed stacktrace: %s", errors.StackTrace(err))
 			}
 			cli.HandleExitCoder(err)
 		},
