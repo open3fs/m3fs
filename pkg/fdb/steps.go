@@ -142,6 +142,11 @@ func (s *initClusterStep) initCluster(ctx context.Context) error {
 	_, err := s.Em.Docker.Exec(ctx, s.Runtime.Services.Fdb.ContainerName,
 		"fdbcli", "--exec", "'configure new single ssd'")
 	if err != nil {
+		// NOTE: for step retrying, db may already configured and we only need to waiting for it initialized
+		if strings.Contains(err.Error(), "Database already exists") {
+			s.Logger.Infof("Fdb already configured...")
+			return nil
+		}
 		return errors.Annotate(err, "initialize fdb cluster")
 	}
 

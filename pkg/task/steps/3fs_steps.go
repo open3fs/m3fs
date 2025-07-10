@@ -478,13 +478,15 @@ func (s *run3FSContainerStep) Execute(ctx context.Context) error {
 
 	checkStateServices := utils.NewSet("storage_main", "meta_main")
 	if checkStateServices.Contains(s.service) {
+		s.Logger.Infof("Waiting for service %s active...", s.service)
 		nodeID, _ := s.Runtime.LoadInt(GetNodeIDKey(s.service, s.Node.Name))
 		nodeIDStr := strconv.Itoa(nodeID)
 		err = WaitServiceState(ctx, s.listNodes, nodeIDStr,
-			"HEARTBEAT_CONNECTED", s.Runtime.Cfg.WaitServiceOnlineTimeout)
+			"HEARTBEAT_CONNECTED", s.Runtime.Cfg.CheckStatusTimeout)
 		if err != nil {
 			return errors.Trace(err)
 		}
+		s.Logger.Infof("Service %s is not active", s.service)
 	}
 
 	s.Logger.Infof("Started %s container %s successfully", s.service, s.containerName)

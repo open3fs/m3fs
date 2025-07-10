@@ -217,6 +217,19 @@ func (s *initClusterStepSuite) TestInit() {
 	s.MockDocker.AssertExpectations(s.T())
 }
 
+func (s *initClusterStepSuite) TestInitWithAlreadyConfigured() {
+	s.MockDocker.On("Exec", s.Runtime.Services.Fdb.ContainerName,
+		"fdbcli", []string{"--exec", "'configure new single ssd'"}).
+		Return("", errors.New("ERROR: Database already exists! To change configuration, don't say `new'"))
+	s.MockDocker.On("Exec", s.Runtime.Services.Fdb.ContainerName,
+		"fdbcli", []string{"--exec", "'status minimal'"}).
+		Return("The database is available.", nil)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	s.MockDocker.AssertExpectations(s.T())
+}
+
 func (s *initClusterStepSuite) TestInitClusterFailed() {
 	s.MockDocker.On("Exec", s.Runtime.Services.Fdb.ContainerName,
 		"fdbcli", []string{"--exec", "'configure new single ssd'"}).
