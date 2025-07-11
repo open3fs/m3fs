@@ -40,9 +40,7 @@ if [ -z "${ARCH}" ]; then
   esac
 fi
 
-VERSION=$(basename $(curl -s -L -I -o /dev/null -w '%{url_effective}' "https://github.com/open3fs/m3fs/releases/latest"))
-echo "The latest version of m3fs is ${VERSION}"
-
+VERSION=latest
 DOWNLOAD_URL="https://artifactory.open3fs.com/m3fs/m3fs_${VERSION}_${ARCH}.tar.gz"
 echo ""
 echo "Downloading m3fs ${VERSION} from ${DOWNLOAD_URL} ..."
