@@ -1,5 +1,8 @@
 name: Release
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
@@ -17,19 +20,39 @@ jobs:
     - uses: actions/setup-go@v5
       with:
         go-version-file: go.mod
+    - name: Set-up s5cmd
+      uses: peak/action-setup-s5cmd@main
+      with:
+        version: v2.3.0
     - name: Build
       run: |
         GOARCH=${{ matrix.arch }} make build
     - name: Package binaries
       run: |
         M3FS_VER=m3fs_${{ github.ref_name }}_${{ matrix.arch }}
+        M3FS_LAT=m3fs_latest_${{ matrix.arch }}
         cd bin
         tar -zcf $M3FS_VER.tar.gz m3fs
         sha256sum $M3FS_VER.tar.gz > $M3FS_VER.tar.gz.sha256sum
+        cp $M3FS_VER.tar.gz $M3FS_LAT.tar.gz
+        sha256sum $M3FS_LAT.tar.gz > $M3FS_LAT.tar.gz.sha256sum
     - uses: softprops/action-gh-release@v2
       with:
         draft: true
         generate_release_notes: true
+        make_latest: true
         files: |
           bin/m3fs_${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
           bin/m3fs_${{ github.ref_name }}_${{ matrix.arch }}.tar.gz.sha256sum
+    - name: Upload artifacts to S3
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        ENDPOINT: ${{ vars.ARTIFACT_ENDPOINT }}
+        BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+      run: |
+        cd bin
+        s5cmd --endpoint-url ${{ env.ENDPOINT }} cp m3fs_${{ github.ref_name }}_${{ matrix.arch }}.tar.gz s3://${{ env.BUCKET }}/m3fs/
+        s5cmd --endpoint-url ${{ env.ENDPOINT }} cp m3fs_${{ github.ref_name }}_${{ matrix.arch }}.tar.gz.sha256sum s3://${{ env.BUCKET }}/m3fs/
+        s5cmd --endpoint-url ${{ env.ENDPOINT }} cp m3fs_latest_${{ matrix.arch }}.tar.gz s3://${{ env.BUCKET }}/m3fs/
+        s5cmd --endpoint-url ${{ env.ENDPOINT }} cp m3fs_latest_${{ matrix.arch }}.tar.gz.sha256sum s3://${{ env.BUCKET }}/m3fs/
