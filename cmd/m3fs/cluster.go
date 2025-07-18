@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -143,6 +144,26 @@ var clusterCmd = &cli.Command{
 			},
 		},
 		{
+			Name:   "delete-client",
+			Usage:  "Delete 3fs cluster clients",
+			Action: deleteClient,
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:        "config",
+					Aliases:     []string{"c"},
+					Usage:       "Path to the cluster configuration file",
+					Destination: &configFilePath,
+					Required:    true,
+				},
+				&cli.StringFlag{
+					Name:        "workdir",
+					Aliases:     []string{"w"},
+					Usage:       "Path to the working directory (default is current directory)",
+					Destination: &workDir,
+				},
+			},
+		},
+		{
 			Name:   "prepare",
 			Usage:  "Prepare to deploy a 3fs cluster",
 			Action: prepareCluster,
@@ -246,7 +267,9 @@ func deleteCluster(ctx *cli.Context) error {
 	}
 
 	runnerTasks := []task.Interface{
-		new(fsclient.Delete3FSClientServiceTask),
+		&fsclient.Delete3FSClientServiceTask{
+			ClientNodes: cfg.Services.Client.Nodes,
+		},
 		new(storage.DeleteStorageServiceTask),
 		new(meta.DeleteMetaServiceTask),
 		new(mgmtd.DeleteMgmtdServiceTask),
@@ -475,6 +498,17 @@ func addStorageNodes(ctx *cli.Context) error {
 	if len(newStorNodes) == 0 && changePlan == nil {
 		return errors.New("No new storage nodes to add")
 	}
+
+	newStorNodeNames := make([]string, len(newStorNodes))
+	for i, node := range newStorNodes {
+		newStorNodeNames[i] = node.Name
+	}
+	log.Logger.Infof("New storage nodes to add: %v", newStorNodeNames)
+	if !waitUserConfirm() {
+		log.Logger.Infof("Operation cancelled by user")
+		return nil
+	}
+
 	storCreated := false
 	for _, step := range steps {
 		if step.OperationType == model.ChangePlanStepOpType.CreateStorService && step.FinishAt != nil {
@@ -530,6 +564,14 @@ func addStorageNodes(ctx *cli.Context) error {
 }
 
 func addClient(ctx *cli.Context) error {
+	return syncClient(ctx, true, false)
+}
+
+func deleteClient(ctx *cli.Context) error {
+	return syncClient(ctx, false, true)
+}
+
+func syncClient(ctx *cli.Context, allowAdd, allowDelete bool) error {
 	cfg, err := loadClusterConfig()
 	if err != nil {
 		return errors.Trace(err)
@@ -537,6 +579,56 @@ func addClient(ctx *cli.Context) error {
 
 	db, err := setupDB(cfg)
 	if err != nil {
+		return errors.Trace(err)
+	}
+
+	currentClientNodes := []string{}
+	err = db.Model(&model.FuseClient{}).
+		Joins("INNER JOIN nodes ON fuse_clients.node_id = nodes.id").
+		Pluck("nodes.name", &currentClientNodes).Error
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	desiredClientNodes := cfg.Services.Client.Nodes
+	currentSet := utils.NewSet(currentClientNodes...)
+	desiredSet := utils.NewSet(desiredClientNodes...)
+
+	nodesToAdd := []string{}
+	for _, node := range desiredClientNodes {
+		if !currentSet.Contains(node) {
+			nodesToAdd = append(nodesToAdd, node)
+		}
+	}
+
+	nodesToDelete := []string{}
+	for _, node := range currentClientNodes {
+		if !desiredSet.Contains(node) {
+			nodesToDelete = append(nodesToDelete, node)
+		}
+	}
+
+	hasNodesToAdd := len(nodesToAdd) > 0 && allowAdd
+	hasNodesToDelete := len(nodesToDelete) > 0 && allowDelete
+	if !hasNodesToAdd && !hasNodesToDelete {
+		log.Logger.Infof("No client nodes need to add or delete")
+		return nil
+	}
+
+	log.Logger.Infof("Current client nodes: %v", currentClientNodes)
+	if hasNodesToAdd {
+		log.Logger.Infof("Client nodes to add: %v", nodesToAdd)
+	}
+	if hasNodesToDelete {
+		log.Logger.Infof("Client nodes to delete: %v", nodesToDelete)
+	}
+
+	if !waitUserConfirm() {
+		log.Logger.Infof("Operation cancelled by user")
+		return nil
+	}
+
+	if err = syncNodeModels(cfg, db); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -550,50 +642,81 @@ func addClient(ctx *cli.Context) error {
 		nodesMap[node.Name] = node
 	}
 
-	clientNodes := []string{}
-	err = db.Raw(
-		"SELECT nodes.name FROM fuse_clients INNER JOIN nodes ON fuse_clients.node_id = nodes.id",
-	).Scan(&clientNodes).Error
-	if err != nil {
-		return errors.Trace(err)
-	}
-	clientNodeSet := utils.NewSet(clientNodes...)
-	newClientNodes := []string{}
-	for _, clientNode := range cfg.Services.Client.Nodes {
-		if !clientNodeSet.Contains(clientNode) {
-			newClientNodes = append(newClientNodes, clientNode)
+	if hasNodesToDelete {
+		log.Logger.Infof("Deleting client nodes: %v", nodesToDelete)
+
+		tempCfg := *cfg
+		tempCfg.Services.Client.Nodes = nodesToDelete
+
+		runner, err := task.NewRunner(&tempCfg,
+			&fsclient.Delete3FSClientServiceTask{
+				ClientNodes: nodesToDelete,
+			},
+		)
+		if err != nil {
+			return errors.Trace(err)
 		}
+		runner.Init()
+
+		if err = runner.Run(ctx.Context); err != nil {
+			return errors.Annotate(err, "delete client")
+		}
+
+		err = db.Transaction(func(tx *gorm.DB) error {
+			for _, nodeName := range nodesToDelete {
+				var node model.Node
+				if err := tx.Where("name = ?", nodeName).First(&node).Error; err != nil {
+					return errors.Trace(err)
+				}
+				if err := tx.Delete(&model.FuseClient{}, "node_id = ?", node.ID).Error; err != nil {
+					return errors.Trace(err)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return errors.Annotate(err, "delete client records from database")
+		}
+
+		log.Logger.Infof("Delete client success")
 	}
 
-	if err = syncNodeModels(cfg, db); err != nil {
-		return errors.Trace(err)
-	}
-	if len(newClientNodes) == 0 {
-		return errors.New("No new client nodes to add")
-	}
+	if hasNodesToAdd {
+		log.Logger.Infof("Adding client nodes: %v", nodesToAdd)
 
-	runner, err := task.NewRunner(cfg,
-		&fsclient.Create3FSClientServiceTask{
-			ClientNodes:             newClientNodes,
-			DeleteContainerIfExists: true,
-		},
-	)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	runner.Init()
-	runner.Runtime.Store(task.RuntimeDbKey, db)
-	runner.Runtime.Store(task.RuntimeNodesMapKey, nodesMap)
+		runner, err := task.NewRunner(cfg,
+			&fsclient.Create3FSClientServiceTask{
+				ClientNodes:             nodesToAdd,
+				DeleteContainerIfExists: true,
+			},
+		)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		runner.Init()
+		runner.Runtime.Store(task.RuntimeDbKey, db)
+		runner.Runtime.Store(task.RuntimeNodesMapKey, nodesMap)
 
-	if err = runner.Run(ctx.Context); err != nil {
-		return errors.Annotate(err, "add client")
+		if err = runner.Run(ctx.Context); err != nil {
+			return errors.Annotate(err, "add client")
+		}
+
+		log.Logger.Infof("Add client success")
 	}
 
 	if err = syncClientModels(cfg, db); err != nil {
 		return errors.Trace(err)
 	}
 
-	log.Logger.Infof("Add client success")
-
 	return nil
+}
+
+func waitUserConfirm() bool {
+	fmt.Print("Do you want to continue with the operation? (Y/N): ")
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
+	return strings.ToUpper(strings.TrimSpace(input)) == "Y"
 }
