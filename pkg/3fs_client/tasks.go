@@ -63,15 +63,20 @@ func getServiceWorkDir(workDir string) string {
 // Create3FSClientServiceTask is a task for creating 3fs client services.
 type Create3FSClientServiceTask struct {
 	task.BaseTask
+
+	// ClientNodes is the nodes name of new client nodes
+	ClientNodes []string
+	// DeleteContainerIfExists is a flag to delete the container if it exists.
+	DeleteContainerIfExists bool
 }
 
 // Init initializes the task.
 func (t *Create3FSClientServiceTask) Init(r *task.Runtime, logger log.Interface) {
 	t.BaseTask.SetName("Create3FSClientServiceTask")
 	t.BaseTask.Init(r, logger)
-	nodes := make([]config.Node, len(r.Cfg.Services.Client.Nodes))
+	nodes := make([]config.Node, len(t.ClientNodes))
 	client := r.Cfg.Services.Client
-	for i, node := range client.Nodes {
+	for i, node := range t.ClientNodes {
 		nodes[i] = r.Nodes[node]
 	}
 	runContainerVolumes := []*external.VolumeArgs{}
@@ -84,6 +89,10 @@ func (t *Create3FSClientServiceTask) Init(r *task.Runtime, logger log.Interface)
 	}
 	workDir := getServiceWorkDir(r.WorkDir)
 	t.SetSteps([]task.StepConfig{
+		{
+			Nodes:   []config.Node{nodes[0]},
+			NewStep: steps.NewGenAdminCliConfigStep(),
+		},
 		{
 			Nodes:    nodes,
 			Parallel: true,
@@ -126,6 +135,7 @@ func (t *Create3FSClientServiceTask) Init(r *task.Runtime, logger log.Interface)
 					WorkDir:        workDir,
 					ExtraVolumes:   runContainerVolumes,
 					UseRdmaNetwork: true,
+					DeleteIfExists: t.DeleteContainerIfExists,
 					ModelObjFunc: func(s *task.BaseStep) any {
 						return &model.FuseClient{
 							Name:           r.Services.Client.ContainerName,
@@ -141,15 +151,17 @@ func (t *Create3FSClientServiceTask) Init(r *task.Runtime, logger log.Interface)
 // Delete3FSClientServiceTask is a task for deleting a 3fs client services.
 type Delete3FSClientServiceTask struct {
 	task.BaseTask
+
+	// ClientNodes is the nodes name of new client nodes
+	ClientNodes []string
 }
 
 // Init initializes the task.
 func (t *Delete3FSClientServiceTask) Init(r *task.Runtime, logger log.Interface) {
 	t.BaseTask.SetName("Delete3FSClientServiceTask")
 	t.BaseTask.Init(r, logger)
-	client := r.Services.Client
-	nodes := make([]config.Node, len(client.Nodes))
-	for i, node := range client.Nodes {
+	nodes := make([]config.Node, len(t.ClientNodes))
+	for i, node := range t.ClientNodes {
 		nodes[i] = r.Nodes[node]
 	}
 	workDir := getServiceWorkDir(r.WorkDir)
@@ -158,7 +170,7 @@ func (t *Delete3FSClientServiceTask) Init(r *task.Runtime, logger log.Interface)
 			Nodes:    nodes,
 			Parallel: true,
 			NewStep: steps.NewRm3FSContainerStepFunc(
-				client.ContainerName,
+				r.Services.Client.ContainerName,
 				ServiceName,
 				workDir),
 		},
