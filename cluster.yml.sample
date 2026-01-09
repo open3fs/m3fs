@@ -145,7 +145,7 @@ services:
     password: "pgpassword"
     # port defines the listen port of postgresql db
     # Default value is 5432.
-    password: 5432"
+    port: 5432
   fdb:
     # containerName defines the container name of foundation db service.
     # Default value is 3fs-fdb.
