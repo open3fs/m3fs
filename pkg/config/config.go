@@ -454,6 +454,9 @@ func (c *Config) SetValidate(workDir, registry string) error {
 	if !diskTypes.Contains(c.Services.Storage.DiskType) {
 		return errors.Errorf("invalid disk type of storage service: %s", c.Services.Storage.DiskType)
 	}
+	if err := c.validStorageReplication(); err != nil {
+		return errors.Trace(err)
+	}
 	if c.Services.Client.HostMountpoint == "" {
 		return errors.New("services.client.hostMountpoint is required")
 	}
@@ -473,6 +476,30 @@ func (c *Config) SetValidate(workDir, registry string) error {
 		return errors.Trace(err)
 	}
 
+	return nil
+}
+
+// validStorageReplication enforces placement-compatible topology:
+// - RF must be >= 1
+// - RF must be <= number of storage nodes
+// - RF=1 is only allowed for exactly one storage node (data_placement cannot solve multi-node RF=1)
+func (c *Config) validStorageReplication() error {
+	rf := c.Services.Storage.ReplicationFactor
+	numStorNodes := len(c.Services.Storage.Nodes)
+	if rf < 1 {
+		return errors.Errorf("services.storage.replicationFactor must be >= 1, got %d", rf)
+	}
+	if rf > numStorNodes {
+		return errors.Errorf(
+			"services.storage.replicationFactor (%d) cannot exceed storage node count (%d); "+
+				"for a single-node lab cluster set replicationFactor: 1",
+			rf, numStorNodes)
+	}
+	if rf == 1 && numStorNodes != 1 {
+		return errors.Errorf(
+			"services.storage.replicationFactor=1 requires exactly 1 storage node, got %d",
+			numStorNodes)
+	}
 	return nil
 }
 

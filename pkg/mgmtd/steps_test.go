@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/open3fs/m3fs/pkg/common"
@@ -208,6 +209,57 @@ SupplementaryGids`, nil)
 	s.NoError(s.step.Execute(s.Ctx()))
 }
 
+func (s *initUserAndChainStepSuite) TestSingleNodeSingleReplica() {
+	containerName := s.Runtime.Services.Mgmtd.ContainerName
+	s.Runtime.Services.Storage.Nodes = []string{"test-3fs-1"}
+	s.Runtime.Services.Storage.ReplicationFactor = 1
+	s.Runtime.Services.Storage.DiskNumPerNode = 1
+	s.Runtime.Services.Storage.TargetNumPerDisk = 2
+
+	s.MockDocker.On("Exec", containerName, "/opt/3fs/bin/admin_cli", []string{
+		"-cfg", "/opt/3fs/etc/admin_cli.toml",
+		"--config.mgmtd_client.mgmtd_server_addresses", `'["RDMA://10.16.28.58:8000"]'`,
+		`"user-add --root --admin 0 root"`,
+	}).Return(`Uid                0
+Name               root
+Token              AAA8WCoB8QAt8bFw2wBupzjA(Expired at N/A)
+IsRootUser         true
+IsAdmin            true
+Gid                0
+SupplementaryGids`, nil)
+	s.MockDocker.On("Exec", containerName, "bash", []string{
+		"-c",
+		`"echo AAA8WCoB8QAt8bFw2wBupzjA > /opt/3fs/etc/token.txt"`,
+	}).Return("", nil)
+
+	s.MockDocker.On("Exec", containerName, "mkdir", []string{"-p", "output"}).Return("", nil)
+	s.MockDocker.On("Cp", mock.AnythingOfType("string"), containerName, "output/generated_chains.csv").Return(nil)
+	s.MockDocker.On("Cp", mock.AnythingOfType("string"), containerName, "output/generated_chain_table.csv").Return(nil)
+	s.MockDocker.On("Cp", mock.AnythingOfType("string"), containerName, "output/create_target_cmd.txt").Return(nil)
+
+	s.MockDocker.On("Exec", containerName, "bash", []string{
+		"-c",
+		`"/opt/3fs/bin/admin_cli --cfg /opt/3fs/etc/admin_cli.toml ` +
+			`--config.mgmtd_client.mgmtd_server_addresses '[\"RDMA://10.16.28.58:8000\"]' ` +
+			`--config.user_info.token AAA8WCoB8QAt8bFw2wBupzjA < output/create_target_cmd.txt"`,
+	}).Return("", nil)
+	s.MockDocker.On("Exec", containerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		"--config.mgmtd_client.mgmtd_server_addresses", `'["RDMA://10.16.28.58:8000"]'`,
+		"--config.user_info.token", "AAA8WCoB8QAt8bFw2wBupzjA",
+		`"upload-chains output/generated_chains.csv"`,
+	}).Return("", nil)
+	s.MockDocker.On("Exec", containerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		"--config.mgmtd_client.mgmtd_server_addresses", `'["RDMA://10.16.28.58:8000"]'`,
+		"--config.user_info.token", "AAA8WCoB8QAt8bFw2wBupzjA",
+		`"upload-chain-table --desc stage 1 output/generated_chain_table.csv"`,
+	}).Return("", nil)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+	s.MockDocker.AssertNotCalled(s.T(), "Exec", containerName, "python3", mock.Anything)
+}
+
 func TestCreateChainAndTargetModelStepSuite(t *testing.T) {
 	suiteRun(t, &createChainAndTargetModelStepSuite{})
 }
@@ -333,6 +385,37 @@ func (s *createChainAndTargetModelStepSuite) TestCreate() {
 	s.Equal(target1Exp, &targets[0])
 	s.Equal(target2Exp, &targets[1])
 	s.Equal(target3Exp, &targets[2])
+
+	s.MockDocker.AssertExpectations(s.T())
+}
+
+func (s *createChainAndTargetModelStepSuite) TestCreateSingleReplica() {
+	// RF=1 list-chains has only one Target column (6 fields after Fields split).
+	s.MockDocker.On("Exec", s.Cfg.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		`list-chains`,
+	}).Return(`ChainId    ReferencedBy  ChainVersion  Status   PreferredOrder  Target
+900100001  1             1             SERVING  []              101000100101(SERVING-ONLINE)`, nil)
+	s.MockDocker.On("Exec", s.Cfg.Services.Mgmtd.ContainerName, "/opt/3fs/bin/admin_cli", []string{
+		"--cfg", "/opt/3fs/etc/admin_cli.toml",
+		`list-targets`,
+	}).Return(`TargetId      ChainId    Role  PublicState  LocalState  NodeId  DiskIndex  UsedSize
+101000100101  900100001  HEAD  SERVING      ONLINE      10001   0          0`, nil)
+
+	s.NoError(s.step.Execute(s.Ctx()))
+
+	var chains []model.Chain
+	db := s.NewDB()
+	s.NoError(db.Model(new(model.Chain)).Order("id ASC").Find(&chains).Error)
+	s.Len(chains, 1)
+	s.Equal("900100001", chains[0].Name)
+
+	var targets []model.Target
+	s.NoError(db.Model(new(model.Target)).Order("id ASC").Find(&targets).Error)
+	s.Len(targets, 1)
+	s.Equal("101000100101", targets[0].Name)
+	s.Equal(s.node1.ID, targets[0].NodeID)
+	s.Equal(chains[0].ID, targets[0].ChainID)
 
 	s.MockDocker.AssertExpectations(s.T())
 }

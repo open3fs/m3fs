@@ -314,6 +314,14 @@ func (s *prepareChangePlanStepSuite) TestRunGenerateStepFailed() {
 	s.MockDocker.AssertExpectations(s.T())
 }
 
+func (s *prepareChangePlanStepSuite) TestRejectSingleReplica() {
+	s.Runtime.Cfg.Services.Storage.ReplicationFactor = 1
+
+	err := s.step.Execute(s.Ctx())
+	s.Error(err)
+	s.Contains(err.Error(), "replicationFactor=1")
+}
+
 func TestRunChangePlanSuite(t *testing.T) {
 	suiteRun(t, &runChangePlanSuite{})
 }

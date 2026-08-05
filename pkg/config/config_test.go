@@ -57,6 +57,7 @@ func (s *configSuite) newConfig() *Config {
 	cfg.Services.Mgmtd.Nodes = []string{"node1"}
 	cfg.Services.Meta.Nodes = []string{"node1"}
 	cfg.Services.Storage.Nodes = []string{"node1"}
+	cfg.Services.Storage.ReplicationFactor = 1
 	cfg.Services.Client.Nodes = []string{"node1"}
 
 	return cfg
@@ -208,6 +209,42 @@ func (s *configSuite) TestValidWithInvalidStorageDiskType() {
 	cfg.Services.Storage.DiskType = "invalid"
 
 	s.Error(cfg.SetValidate("", ""), "invalid disk type of storage service: invalid")
+}
+
+func (s *configSuite) TestValidSingleNodeSingleReplica() {
+	cfg := s.newConfigWithDefaults()
+	cfg.Services.Storage.ReplicationFactor = 1
+	cfg.Services.Storage.Nodes = []string{"node1"}
+
+	s.NoError(cfg.SetValidate("", ""))
+}
+
+func (s *configSuite) TestValidRejectRFExceedsNodeCount() {
+	cfg := s.newConfigWithDefaults()
+	cfg.Services.Storage.ReplicationFactor = 2
+	cfg.Services.Storage.Nodes = []string{"node1"}
+
+	s.Error(cfg.SetValidate("", ""),
+		"services.storage.replicationFactor (2) cannot exceed storage node count (1)")
+}
+
+func (s *configSuite) TestValidRejectRF1WithMultipleNodes() {
+	cfg := s.newConfigWithDefaults()
+	cfg.Nodes = append(cfg.Nodes, Node{Name: "node2", Host: "127.0.0.2", Username: "node2"})
+	cfg.Services.Storage.Nodes = []string{"node1", "node2"}
+	cfg.Services.Storage.ReplicationFactor = 1
+
+	s.Error(cfg.SetValidate("", ""),
+		"services.storage.replicationFactor=1 requires exactly 1 storage node, got 2")
+}
+
+func (s *configSuite) TestValidMultiNodeRF2() {
+	cfg := s.newConfigWithDefaults()
+	cfg.Nodes = append(cfg.Nodes, Node{Name: "node2", Host: "127.0.0.2", Username: "node2"})
+	cfg.Services.Storage.Nodes = []string{"node1", "node2"}
+	cfg.Services.Storage.ReplicationFactor = 2
+
+	s.NoError(cfg.SetValidate("", ""))
 }
 
 func (s *configSuite) TestValidWithNoClientMountPoint() {

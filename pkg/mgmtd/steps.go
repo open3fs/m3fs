@@ -228,12 +228,18 @@ func (s *initUserAndChainStep) initUser(ctx context.Context) (token string, err 
 }
 
 func (s *initUserAndChainStep) initChainFiles(ctx context.Context) error {
+	stor := s.Runtime.Services.Storage
+	if isSingleNodeSingleReplica(stor) {
+		s.Logger.Infof("Single-node RF=1: generating chain files without data_placement.py")
+		return s.writeSingleReplicaChainFiles(ctx, stor)
+	}
+
 	output, err := s.Em.Docker.Exec(ctx, s.Runtime.Services.Mgmtd.ContainerName,
 		"python3", "/opt/3fs/data_placement/src/model/data_placement.py",
 		"-ql", "-relax", "-type", "CR",
-		"--num_nodes", strconv.Itoa(len(s.Runtime.Services.Storage.Nodes)),
-		"--replication_factor", strconv.Itoa(s.Runtime.Services.Storage.ReplicationFactor),
-		"--min_targets_per_disk", strconv.Itoa(s.Runtime.Services.Storage.TargetNumPerDisk),
+		"--num_nodes", strconv.Itoa(len(stor.Nodes)),
+		"--replication_factor", strconv.Itoa(stor.ReplicationFactor),
+		"--min_targets_per_disk", strconv.Itoa(stor.TargetNumPerDisk),
 	)
 	if err != nil {
 		return errors.Annotatef(err, "run data_placement.py")
@@ -254,17 +260,58 @@ func (s *initUserAndChainStep) initChainFiles(ctx context.Context) error {
 		"python3", "/opt/3fs/data_placement/src/setup/gen_chain_table.py",
 		"--chain_table_type", "CR",
 		"--node_id_begin", "10001",
-		"--node_id_end", strconv.Itoa(10000+len(s.Runtime.Services.Storage.Nodes)),
-		"--num_disks_per_node", strconv.Itoa(s.Runtime.Services.Storage.DiskNumPerNode),
-		"--num_targets_per_disk", strconv.Itoa(s.Runtime.Services.Storage.TargetNumPerDisk),
-		"--target_id_prefix", strconv.FormatInt(s.Runtime.Services.Storage.TargetIDPrefix, 10),
-		"--chain_id_prefix", strconv.FormatInt(s.Runtime.Services.Storage.ChainIDPrefix, 10),
+		"--node_id_end", strconv.Itoa(10000+len(stor.Nodes)),
+		"--num_disks_per_node", strconv.Itoa(stor.DiskNumPerNode),
+		"--num_targets_per_disk", strconv.Itoa(stor.TargetNumPerDisk),
+		"--target_id_prefix", strconv.FormatInt(stor.TargetIDPrefix, 10),
+		"--chain_id_prefix", strconv.FormatInt(stor.ChainIDPrefix, 10),
 		"--incidence_matrix_path", fmt.Sprintf("%s/incidence_matrix.pickle", dataPlacementDir),
 	)
 	if err != nil {
 		return errors.Annotatef(err, "run gen_chain_table.py")
 	}
 
+	return nil
+}
+
+func (s *initUserAndChainStep) writeSingleReplicaChainFiles(ctx context.Context, stor config.Storage) error {
+	files := generateSingleReplicaChainFiles(stor)
+	container := s.Runtime.Services.Mgmtd.ContainerName
+
+	tmpDir, err := os.MkdirTemp("", "m3fs-single-replica-chains-*")
+	if err != nil {
+		return errors.Annotate(err, "create temp dir for chain files")
+	}
+	defer os.RemoveAll(tmpDir)
+
+	type namedContent struct {
+		name    string
+		content string
+	}
+	outputs := []namedContent{
+		{"generated_chains.csv", files.ChainsCSV},
+		{"generated_chain_table.csv", files.ChainTableCSV},
+		{"create_target_cmd.txt", files.CreateTargetCmd},
+	}
+	for _, out := range outputs {
+		localPath := filepath.Join(tmpDir, out.name)
+		if err := os.WriteFile(localPath, []byte(out.content), 0644); err != nil {
+			return errors.Annotatef(err, "write %s", localPath)
+		}
+	}
+
+	if _, err := s.Em.Docker.Exec(ctx, container, "mkdir", "-p", "output"); err != nil {
+		return errors.Annotate(err, "mkdir output in mgmtd container")
+	}
+	for _, out := range outputs {
+		src := filepath.Join(tmpDir, out.name)
+		dst := path.Join("output", out.name)
+		if err := s.Em.Docker.Cp(ctx, src, container, dst); err != nil {
+			return errors.Annotatef(err, "copy %s into container", out.name)
+		}
+	}
+	s.Logger.Infof("Wrote single-replica chain files: %d chains",
+		stor.DiskNumPerNode*stor.TargetNumPerDisk)
 	return nil
 }
 
@@ -442,7 +489,9 @@ func (s *createChainAndTargetModelStep) createChains(ctx context.Context) (map[s
 	for scanner.Scan() {
 		line := scanner.Text()
 		fs := strings.Fields(line)
-		if len(fs) < 7 {
+		// RF>=2 has 7+ fields (two Target columns); RF=1 has 6 fields (one Target).
+		// Columns: ChainId ReferencedBy ChainVersion Status PreferredOrder Target...
+		if len(fs) < 6 {
 			return nil, errors.Errorf("unexpected output of list-chains: %s", line)
 		}
 		chain := &model.Chain{

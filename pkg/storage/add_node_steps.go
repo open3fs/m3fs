@@ -163,6 +163,12 @@ type prepareChangePlanStep struct {
 }
 
 func (s *prepareChangePlanStep) Execute(ctx context.Context) error {
+	if s.Runtime.Cfg.Services.Storage.ReplicationFactor == 1 {
+		return errors.New(
+			"add-storage-nodes is not supported when services.storage.replicationFactor=1; " +
+				"single-replica clusters cannot be expanded via data_placement")
+	}
+
 	db := s.Runtime.LoadDB()
 	var storServices []*model.StorService
 	err := db.Model(new(model.StorService)).Find(&storServices).Error
