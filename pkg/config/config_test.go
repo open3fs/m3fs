@@ -366,6 +366,8 @@ func (s *configSuite) TestParseNodeGroup() {
 	cfg.Services.Meta.NodeGroups = []string{"gp1"}
 	cfg.Services.Storage.NodeGroups = []string{"gp1"}
 	cfg.Services.Client.NodeGroups = []string{"gp1"}
+	// newConfig() uses RF=1 for single-node fixtures; nodeGroups expand storage to 4 nodes.
+	cfg.Services.Storage.ReplicationFactor = 2
 
 	s.NoError(cfg.SetValidate("", ""))
 
