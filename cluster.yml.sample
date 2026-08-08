@@ -83,6 +83,9 @@ services:
     # tcpListenPort is the RDMA listen port of meta service. Default value is 9002.
     tcpListenPort: 9002
     # replicationFactor defines the num of replicas for 3fs storage redundancy. Default value is 2.
+    # For a single-node lab/dev cluster, set replicationFactor: 1 (exactly one storage node required).
+    # Multi-node RF=1 is rejected by config validation (data_placement cannot solve it).
+    # add-storage-nodes is also unsupported when replicationFactor=1.
     replicationFactor: 2
     # targetNumPerDisk defines the minimum num of targets on each disk. Default value is 32.
     targetNumPerDisk: 32
